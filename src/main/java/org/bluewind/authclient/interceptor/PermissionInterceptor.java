@@ -1,7 +1,6 @@
 package org.bluewind.authclient.interceptor;
 
 import org.bluewind.authclient.exception.NoPermissionException;
-import org.bluewind.authclient.exception.UnAuthorizedException;
 import org.bluewind.authclient.interfaces.PermissionInfoInterface;
 import org.bluewind.authclient.util.AuthUtil;
 import org.slf4j.Logger;
@@ -14,7 +13,6 @@ import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
-import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -88,7 +86,7 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) {
-        // logger.info("AuthenticeInterceptor -- postHandle -- 执行了");
+        // logger.info("PermissionInterceptor -- postHandle -- 执行了");
     }
 
     /*
@@ -96,7 +94,7 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        // logger.info("AuthenticeInterceptor -- afterCompletion -- 执行了");
+        // logger.info("PermissionInterceptor -- afterCompletion -- 执行了");
     }
 
 }
