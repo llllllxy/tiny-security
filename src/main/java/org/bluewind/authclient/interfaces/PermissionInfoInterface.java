@@ -7,7 +7,7 @@ import java.util.Set;
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
-public interface AuthorizationInfoInterface {
+public interface PermissionInfoInterface {
 
     /**
      * 返回一个账号所拥有的权限码集合

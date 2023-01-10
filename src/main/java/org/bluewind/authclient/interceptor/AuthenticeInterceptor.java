@@ -8,18 +8,20 @@ import org.bluewind.authclient.util.AuthUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
+import java.lang.reflect.Method;
+import java.util.Objects;
 
 /**
  * 用户会话验证拦截器
  *
  * @author liuxingyu01
- * @version  2020-03-22-11:23
+ * @version 2020-03-22-11:23
  **/
 public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
     final static Logger logger = LoggerFactory.getLogger(AuthenticeInterceptor.class);
@@ -51,8 +53,8 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
     }
 
     public AuthenticeInterceptor(AuthStore authStore, AuthProperties authProperties) {
-        setAuthStore(authStore);
-        setAuthProperties(authProperties);
+        this.setAuthStore(authStore);
+        this.setAuthProperties(authProperties);
     }
 
 
@@ -63,12 +65,23 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        if (!(handler instanceof HandlerMethod)) {
+            return super.preHandle(request, response, handler);
+        }
+
         // 判断请求类型，如果是OPTIONS，直接返回
         String options = HttpMethod.OPTIONS.toString();
         if (options.equals(request.getMethod())) {
             response.setStatus(HttpServletResponse.SC_OK);
-            return true;
+            return super.preHandle(request, response, handler);
         }
+
+        // 检查是否忽略会话验证
+        Method method = ((HandlerMethod) handler).getMethod();
+        if (AuthUtil.checkIgnore(method)) {
+            return super.preHandle(request, response, handler);
+        }
+
         // 先判断token是否为空
         String token = AuthUtil.getToken(request, this.authProperties.getTokenName());
         if (logger.isInfoEnabled()) {
@@ -78,13 +91,15 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
             // 直接抛出异常的话，就不需要return false了
             throw new UnAuthorizedException();
         }
-        // 再判断token是否存在，存在的话则刷新会话时长
+        // 再判断token是否存在，存在的话说明会话有效，则刷新会话时长
         if (!authStore.checkToken(token)) {
             throw new UnAuthorizedException();
         } else {
             authStore.refreshToken(token);
+            // 存入LoginId，以方便后续使用
+            AuthenticeHolder.setLoginId(authStore.getLoginId(token));
             // 合格不需要拦截，放行
-            return true;
+            return super.preHandle(request, response, handler);
         }
     }
 
@@ -95,7 +110,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) {
-        //logger.info("TenantAuthenticeInterceptor -- postHandle -- 执行了");
+        // logger.info("AuthenticeInterceptor -- postHandle -- 执行了");
     }
 
     /*
@@ -103,6 +118,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        //logger.info("TenantAuthenticeInterceptor -- afterCompletion -- 执行了");
+        // logger.info("AuthenticeInterceptor -- afterCompletion -- 执行了");
+        AuthenticeHolder.clearLoginId();
     }
 }
