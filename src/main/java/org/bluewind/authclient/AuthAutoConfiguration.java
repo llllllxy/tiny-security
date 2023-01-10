@@ -1,7 +1,8 @@
 package org.bluewind.authclient;
 
-
 import org.bluewind.authclient.interceptor.AuthenticeInterceptor;
+import org.bluewind.authclient.interceptor.PermissionInterceptor;
+import org.bluewind.authclient.interfaces.PermissionInfoInterface;
 import org.bluewind.authclient.provider.AuthStore;
 import org.bluewind.authclient.provider.JdbcAuthStore;
 import org.bluewind.authclient.provider.RedisAuthStore;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -84,17 +86,33 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
 
 
     /**
-     * 添加拦截器
+     * 添加会话拦截器
      */
     @Bean
     public AuthenticeInterceptor authenticeInterceptor() {
         // 获取AuthStore（可能是redis的，也可能是jdbc的，根据配置来的）
         AuthStore authStore = getBean(AuthStore.class);
-        // 给TokenStore添加配置参数
         if (authStore != null) {
             return new AuthenticeInterceptor(authStore, authProperties);
         } else {
             logger.error("AuthAutoConfiguration: Unknown AuthStore");
+            return null;
+        }
+    }
+
+
+    /**
+     * 添加权限拦截器（当存在bean PermissionInfoInterface时，这个配置才生效）
+     */
+    @Bean
+    @ConditionalOnBean(PermissionInfoInterface.class)
+    public PermissionInterceptor permissionInterceptor() {
+        // 获取PermissionInfoInterface
+        PermissionInfoInterface permissionInfoInterface = getBean(PermissionInfoInterface.class);
+        if (permissionInfoInterface != null) {
+            return new PermissionInterceptor(permissionInfoInterface);
+        } else {
+            logger.error("AuthAutoConfiguration: Unknown PermissionInfoInterface");
             return null;
         }
     }
