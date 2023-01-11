@@ -3,9 +3,9 @@ package org.bluewind.authclient;
 import org.bluewind.authclient.interceptor.AuthenticeInterceptor;
 import org.bluewind.authclient.interceptor.PermissionInterceptor;
 import org.bluewind.authclient.interfaces.PermissionInfoInterface;
-import org.bluewind.authclient.provider.AuthStore;
-import org.bluewind.authclient.provider.JdbcAuthStore;
-import org.bluewind.authclient.provider.RedisAuthStore;
+import org.bluewind.authclient.provider.AuthProvider;
+import org.bluewind.authclient.provider.JdbcAuthProvider;
+import org.bluewind.authclient.provider.RedisAuthProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -21,7 +21,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import javax.sql.DataSource;
 import java.util.Collection;
 
 @Configuration
@@ -58,30 +57,29 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
     /**
      * 注入redisAuthStore
      */
-    @ConditionalOnMissingBean(AuthStore.class)
+    @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "authclient.store-type", havingValue = "redis")
     @Bean
-    public AuthStore redisAuthStore() {
-        DataSource dataSource = getBean(DataSource.class);
+    public AuthProvider redisAuthProvider() {
         StringRedisTemplate stringRedisTemplate = getBean(StringRedisTemplate.class);
         if (stringRedisTemplate == null) {
             logger.error("AuthAutoConfiguration: StringRedisTemplate is null");
         }
-        return new RedisAuthStore(stringRedisTemplate, authProperties);
+        return new RedisAuthProvider(stringRedisTemplate, authProperties);
     }
 
     /**
      * 注入jdbcAuthStore
      */
-    @ConditionalOnMissingBean(AuthStore.class)
+    @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "authclient.store-type", havingValue = "jdbc")
     @Bean
-    public AuthStore jdbcAuthStore() {
+    public AuthProvider jdbcAuthProvider() {
         JdbcTemplate jdbcTemplate = getBean(JdbcTemplate.class);
         if (jdbcTemplate == null) {
             logger.error("AuthAutoConfiguration: JdbcTemplate is null");
         }
-        return new JdbcAuthStore(jdbcTemplate, authProperties);
+        return new JdbcAuthProvider(jdbcTemplate, authProperties);
     }
 
 
@@ -91,9 +89,9 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
     @Bean
     public AuthenticeInterceptor authenticeInterceptor() {
         // 获取AuthStore（可能是redis的，也可能是jdbc的，根据配置来的）
-        AuthStore authStore = getBean(AuthStore.class);
-        if (authStore != null) {
-            return new AuthenticeInterceptor(authStore, authProperties);
+        AuthProvider authProvider = getBean(AuthProvider.class);
+        if (authProvider != null) {
+            return new AuthenticeInterceptor(authProvider, authProperties);
         } else {
             logger.error("AuthAutoConfiguration: Unknown AuthStore");
             return null;

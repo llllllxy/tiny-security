@@ -5,6 +5,7 @@ import org.bluewind.authclient.annotation.Ignore;
 import org.bluewind.authclient.annotation.RequiresPermissions;
 import org.bluewind.authclient.annotation.RequiresRoles;
 import org.bluewind.authclient.enums.Logical;
+import org.bluewind.authclient.interceptor.AuthenticeHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -165,6 +166,17 @@ public class AuthUtil {
         } else {
             return false;
         }
-
     }
+
+
+    /**
+     * 获取当前登录用户的LoginId
+     *
+     * @return Object
+     */
+    public static Object getLoginId() {
+        return AuthenticeHolder.getLoginId();
+    }
+
+
 }

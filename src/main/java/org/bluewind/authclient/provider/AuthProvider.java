@@ -1,17 +1,22 @@
 package org.bluewind.authclient.provider;
 
 
+import javax.servlet.http.HttpServletRequest;
+
 /**
- * 操作token的接口
+ * 操作token和会话的接口
+ *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
-public interface AuthStore {
+public interface AuthProvider {
 
     String TOKENSTYLE_UUID = "uuid";
 
     String TOKENSTYLE_SNOWFLAKE = "snowflake";
 
+
+    /*============================操作token开始=============================*/
     /**
      * 刷新token
      * @param token
@@ -34,7 +39,7 @@ public interface AuthStore {
     String createToken(Object loginId);
 
     /**
-     * 根据token，获取当前登录用户的loginId
+     * 根据token，获取loginId
      * @param token
      * @return
      */
@@ -53,4 +58,34 @@ public interface AuthStore {
      * @return
      */
     boolean deleteTokenByLoginId(Object loginId);
+
+    /*============================操作token结束=============================*/
+
+
+    /*============================操作会话开始=============================*/
+
+    /**
+     * 执行登录操作
+     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     */
+    String login(Object loginId);
+
+    /**
+     * 退出登录
+     */
+    void logout();
+
+    /**
+     * HttpServletRequest request
+     * @param request
+     */
+    void logout(HttpServletRequest request);
+
+    /**
+     * 获取当前登录用户的loginId
+     * @return
+     */
+    Object getLoginId();
+
+    /*============================操作会话结束=============================*/
 }

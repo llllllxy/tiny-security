@@ -3,7 +3,7 @@ package org.bluewind.authclient.interceptor;
 import org.apache.commons.lang3.StringUtils;
 import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.exception.UnAuthorizedException;
-import org.bluewind.authclient.provider.AuthStore;
+import org.bluewind.authclient.provider.AuthProvider;
 import org.bluewind.authclient.util.AuthUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,19 +28,19 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
     /**
      * 存储会话的接口
      */
-    private AuthStore authStore;
+    private AuthProvider authProvider;
 
     /**
      * 配置文件
      */
     private AuthProperties authProperties;
 
-    public AuthStore getAuthStore() {
-        return this.authStore;
+    public AuthProvider getAuthProvider() {
+        return authProvider;
     }
 
-    public void setAuthStore(AuthStore authStore) {
-        this.authStore = authStore;
+    public void setAuthProvider(AuthProvider authProvider) {
+        this.authProvider = authProvider;
     }
 
     public AuthProperties getAuthProperties() {
@@ -51,8 +51,8 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
         this.authProperties = authProperties;
     }
 
-    public AuthenticeInterceptor(AuthStore authStore, AuthProperties authProperties) {
-        this.setAuthStore(authStore);
+    public AuthenticeInterceptor(AuthProvider authProvider, AuthProperties authProperties) {
+        this.setAuthProvider(authProvider);
         this.setAuthProperties(authProperties);
     }
 
@@ -91,12 +91,12 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
             throw new UnAuthorizedException();
         }
         // 再判断token是否存在，存在的话说明会话有效，则刷新会话时长
-        if (!authStore.checkToken(token)) {
+        if (!authProvider.checkToken(token)) {
             throw new UnAuthorizedException();
         } else {
-            authStore.refreshToken(token);
+            authProvider.refreshToken(token);
             // 存入LoginId，以方便后续使用
-            AuthenticeHolder.setLoginId(authStore.getLoginId(token));
+            AuthenticeHolder.setLoginId(authProvider.getLoginId(token));
             // 合格不需要拦截，放行
             return super.preHandle(request, response, handler);
         }
