@@ -28,7 +28,7 @@
 authclient:
   # 启用authclient
   enable: true
-  # 存储类型，目前支持jdbc和redis和单机session三种(redis,jdbc,session)
+  # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)
   store-type: redis
   # token名称 (同时也是cookie名称，适配前后端不分离的模式)
   token-name: token
