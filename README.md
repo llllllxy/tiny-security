@@ -1,11 +1,9 @@
 # bluewind-auth-client
 
 
-
 ## 1、简介
 
 基于token验证的Java Web权限控制框架，支持redis、jdbc和单机session多种存储方式，前后端分离项目、不分离项目均可使用，功能完善、使用简单、易于扩展。
-
 
 ---
 
@@ -13,7 +11,7 @@
 
 ### 2.1、SpringBoot集成
 
-#### 2.1.1、导入
+#### 2.1.1、引入依赖
 ```xml
 <dependency>
     <groupId>org.bluewind.authclient</groupId>
@@ -22,7 +20,7 @@
 </dependency>
 ```
 
-#### 2.1.2、配置
+#### 2.1.2、添加yml配置
 
 ```yaml
 authclient:
@@ -40,55 +38,148 @@ authclient:
   table-name: b_auth_token
 ```
 
-> 如果使用jdbcAuthStore需要导入框架提供的sql脚本并且集成好jdbcTemplate；
+> 注：如果使用jdbcAuthStore需要导入框架提供的sql脚本并且集成好jdbcTemplate；
 > 如果使用redisAuthStore，需要集成好redisTemplate
 
----
-
-### 2.2、登录签发token
-
+#### 2.1.3、其他配置
+1. 配置会话拦截器和权限角色拦截器，以`SpringBoot2.0`为例, 新建配置类`WebMvcConfig.java`，两个拦截器的拦截路由规则可自行配置
 ```java
-@RestController
-public class LoginController {
+@Configuration
+public class WebMvcConfig implements WebMvcConfigurer {
+
     @Autowired
-    private TokenStore tokenStore;
-    
-    @PostMapping("/token")
-    public Map token(String account, String password) {
-        // 你的验证逻辑
-        // ......
-        // 签发token
-        Token token = tokenStore.createNewToken(userId, permissions, roles, expire);
-        System.out.println("access_token：" + token.getAccessToken());
+    private AuthenticeInterceptor authenticeInterceptor;
+
+    // 按需要来，如果不需要角色权限控制，可以不配置此拦截器
+    @Autowired
+    private PermissionInterceptor permissionInterceptor;
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        
+        // 注册会话拦截器
+        registry.addInterceptor(authenticeInterceptor)
+                .addPathPatterns("/**")
+                .excludePathPatterns("/login");
+
+        // 注册权限拦截器
+        registry.addInterceptor(permissionInterceptor)
+                .addPathPatterns("/**");
+    }
+}
+```
+2. 如需权限角色拦截器进行权限控制的话，则需要实现`PermissionInfoInterface`接口，重写权限和角色编码列表获取的业务逻辑（框架没有对权限和角色编码进行缓存，如需缓存请自行处理），例如以下代码：
+```java
+@Component
+public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
+    private final static Logger logger = LoggerFactory.getLogger(PermissionInfoInterfaceImpl.class);
+
+
+    /**
+     * 返回一个账号所拥有的权限码集合
+     * @param loginId，账号id，即你在调用 authProvider.login(id) 时写入的标识值。
+     */
+    @Override
+    public Set<String> getPermissionSet(Object loginId) {
+        if (logger.isInfoEnabled()) {
+            logger.info("PermissionInfoInterfaceImpl -- getPermissionSet -- loginId = {}", loginId);
+        }
+        Set<String> permissionSet = new HashSet<String>() {{
+            add("权限1");
+            add("权限2");
+        }};
+
+        return permissionSet;
+    }
+
+    /**
+     * 返回一个账号所拥有的角色标识集合 (权限与角色可分开校验)
+     * @param loginId，账号id，即你在调用 authProvider.login(id) 时写入的标识值。
+     */
+    @Override
+    public Set<String> getRoleSet(Object loginId) {
+        if (logger.isInfoEnabled()) {
+            logger.info("PermissionInfoInterfaceImpl -- getRoleSet -- loginId = {}", loginId);
+        }
+        Set<String> roleSet = new HashSet<String>() {{
+            add("角色1");
+            add("角色2");
+        }};
+        return roleSet;
     }
 }
 ```
 
-createNewToken方法参数说明：
+---
 
-- userId   &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;   token载体，建议为用户id
-- permissions   &emsp;&emsp;&emsp;&emsp;   权限列表
-- roles   &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;   角色列表
-- expire   &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp;   token过期时间(单位秒)
+### 2.2、登录签发token，创建会话
 
-> 关于createNewToken方法的详细介绍以及refresh_token机制的用法请在详细文档中查看
+```java
+@Controller
+public class IndexController {
+    final static Logger logger = LoggerFactory.getLogger(IndexController.class);
+    @Autowired
+    private AuthProvider authProvider;
 
+    @ResponseBody
+    @PostMapping("/login")
+    public Result<Object> login(@ApiParam(name = "username", required = true, value = "用户名")
+                                @RequestParam("username") String username,
+                                @ApiParam(name = "password", required = true, value = "用户密码")
+                                @RequestParam("password") String password) {
+        // 你的登录验证逻辑
+        // ......
+        // 签发token
+        String token = authProvider.login(username);
+
+        return Result.ok("登录成功！", token);
+    }
+}
+```
+login方法参数说明：
+- loginId  登录的账号id，建议的数据类型：long | int | String，建议为用户id，不可以传入复杂类型，如：User、Admin 等等
 
 ---
 
-### 2.3、使用注解或代码限制权限
 
-**1.使用注解的方式：**
+### 2.3、退出登录，注销会话
+```java
+@Controller
+public class IndexController {
+    final static Logger logger = LoggerFactory.getLogger(IndexController.class);
+    @Autowired
+    private AuthProvider authProvider;
+
+    @ResponseBody
+    @GetMapping("/logout")
+    public Result<Object> logout(HttpServletRequest request) {
+        // 退出登录，注销会话
+        authProvider.logout(request);
+
+        return Result.ok("退出登录成功！");
+    }
+}
+```
+
+### 2.4、使用注解控制权限
+
+**1.注解解释：**
 
 ```text
 // 需要有system权限才能访问
 @RequiresPermissions("system")
 
-// 需要有system和front权限才能访问,logical可以不写,默认是AND
+// 需要有system和front权限才能访问, logical可以不写,默认是AND
 @RequiresPermissions(value={"system","front"}, logical=Logical.AND)
 
 // 需要有system或front权限才能访问
 @RequiresPermissions(value={"system","front"}, logical=Logical.OR)
+
+// 需要有user角色才能访问
+@RequiresRoles(value="user")
+
+// 需要有admin和user角色才能访问
+@RequiresRoles(value={"admin","user"}, logical=Logical.AND)
 
 // 需要有admin或user角色才能访问
 @RequiresRoles(value={"admin","user"}, logical=Logical.OR)
@@ -98,22 +189,47 @@ createNewToken方法参数说明：
 
 <br/>
 
-**2.使用代码的方式：**
+**2.代码示例：**
 
-```text
-//是否有system权限
-SubjectUtil.hasPermission(request, "system");
+```java
+@Controller
+public class IndexController {
+    final static Logger logger = LoggerFactory.getLogger(IndexController.class);
+    @Autowired
+    private AuthProvider authProvider;
 
-//是否有system或者front权限
-SubjectUtil.hasPermission(request, new String[]{"system","front"}, Logical.OR);
+    @RequiresPermissions("权限3")
+    @ResponseBody
+    @GetMapping("/testPermission3")
+    public Result<Object> testPermission3() {
 
-//是否有admin或者user角色
-SubjectUtil.hasRole(request, new String[]{"admin","user"}, Logical.OR)
+        return Result.ok("testPermission3测试成功！");
+    }
+
+    @RequiresPermissions("权限2")
+    @ResponseBody
+    @GetMapping("/testPermission2")
+    public Result<Object> testPermission2() {
+        logger.info("IndexController - testPermission3 - authProvider.getLoginId() = {}", authProvider.getLoginId());
+        logger.info("IndexController - testPermission3 - AuthUtil.getLoginId() = {}", AuthUtil.getLoginId());
+
+        return Result.ok("testPermission2测试成功！", authProvider.getLoginId());
+    }
+}
 ```
 
 ---
 
-## 2.4、异常处理
+### 2.5、获取当前登录用户编码
+```text
+authProvider.getLoginId()
+或者
+AuthUtil.getLoginId()
+```
+
+---
+
+### 2.6、异常处理
 bluewind-auth-client在token验证失败和没有权限的时候会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
@@ -153,95 +269,40 @@ public class GlobalExceptionHandler {
 
 ---
 
-## 2.5、更多用法
+### 2.5、更多用法
 
-### 2.5.1、使用注解忽略验证
-在Controller的方法或类上面添加`@Ignore`注解可排除框架拦截，即表示调用接口不用传递access_token了。
-
-
-### 2.5.2、自定义查询角色和权限的sql
-
-如果是在签发token的时候指定权限和角色，不重新获取token，不主动更新权限，权限和角色不会实时更新，
-可以配置自定义查询角色和权限的sql来实时查询用户的权限和角色：
-
-```text
-## 自定义查询用户权限的sql
-jwtp.find-permissions-sql=SELECT authority FROM sys_user_authorities WHERE user_id = ?
-
-## 自定义查询用户角色的sql
-jwtp.find-roles-sql=SELECT role_id FROM sys_user_role WHERE user_id = ?
-```
+#### 2.5.1、使用注解忽略验证`@Ignore`
+在Controller的方法或类上面添加`@Ignore`注解可排除框架拦截，即表示调用接口不用传递token了。
 
 
-### 2.5.3、url自动匹配权限
-如果不想每个接口都加@RequiresPermissions注解来控制权限，可以配置url自动匹配权限：
-
-```text
-## url自动对应权限方式，0 简易模式，1 RESTful模式
-jwtp.url-perm-type=0
-```
-
-RESTful模式(请求方式:url)：post:/api/login
-
-简易模式(url)：/api/login
-
-> 配置了自动匹配也可以同时使用注解，注解优先级高于自动匹配，你还可以借助Swagger自动扫描所有接口生成权限到数据库权限表中
-
-
-### 2.5.4、获取当前的用户信息
-```text
-// 正常可以这样获取
-Token token = SubjectUtil.getToken(request);
-
-// 对于排除拦截的接口可以这样获取
-Token token = SubjectUtil.parseToken(request);
-```   
-
-
-### 2.5.5、主动让token失效：
+### 2.5.2、主动让token失效
 ```text
 // 移除用户的某个token
-tokenStore.removeToken(userId, access_token);
+tokenStore.deleteToken(token);
 
 // 移除用户的全部token
-tokenStore.removeTokensByUserId(userId);
-```
-
-
-### 2.5.6、更新角色和权限列表
-修改了用户的角色和权限需要同步更新框架中的角色和权限：
-```text
-// 更新用户的角色列表
-tokenStore.updateRolesByUserId(userId, roles);
-
-// 更新用户的权限列表
-tokenStore.updatePermissionsByUserId(userId, permissions);
+tokenStore.deleteTokenByLoginId(loginId);
 ```
 
 ---
 
-## 2.6、前端传递token
-放在参数里面用`access_token`传递：
+### 2.6、前端传递token
+1. 放在参数里面用`token`传递：
 ```javascript
-$.get("/xxx", { access_token: token }, function(data) {
+$.get("/xxx", { "token": token }, function(data) {
 
 });
 ```
-放在header里面用`Authorization`、`Bearer`传递：
+2. 放在header里面用`token`传递：
 ```javascript
 $.ajax({
    url: "/xxx", 
    beforeSend: function(xhr) {
-       xhr.setRequestHeader("Authorization", 'Bearer '+ token);
+       xhr.setRequestHeader("token", token);
    },
    success: function(data){ }
 });
 ```
 
 ---
-
-## 联系方式
-前后端分离技术交流群：
-
-![群二维码](https://s2.ax1x.com/2019/07/06/Zw83O1.jpg)
 
