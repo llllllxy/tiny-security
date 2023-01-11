@@ -11,9 +11,9 @@ import javax.servlet.http.HttpServletRequest;
  **/
 public interface AuthProvider {
 
-    String TOKENSTYLE_UUID = "uuid";
+    String TOKEN_STYLE_UUID = "uuid";
 
-    String TOKENSTYLE_SNOWFLAKE = "snowflake";
+    String TOKEN_STYLE_SNOWFLAKE = "snowflake";
 
 
     /*============================操作token开始=============================*/
@@ -53,7 +53,7 @@ public interface AuthProvider {
     boolean deleteToken(String token);
 
     /**
-     * 通过loginId删除token---------暂未实现，还没想好思路
+     * 通过loginId删除token---------暂未实现，还没想好思路，redis的话有性能问题
      * @param loginId
      * @return
      */

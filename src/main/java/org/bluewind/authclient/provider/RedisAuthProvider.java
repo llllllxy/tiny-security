@@ -8,8 +8,11 @@ import org.bluewind.authclient.util.Snowflake;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.util.StringUtils;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -74,7 +77,7 @@ public class RedisAuthProvider implements AuthProvider {
     public String createToken(Object loginId) {
         try {
             String token;
-            if (authProperties.getTokenStyle().equals(TOKENSTYLE_SNOWFLAKE)) {
+            if (TOKEN_STYLE_SNOWFLAKE.equals(authProperties.getTokenStyle())) {
                 token = Snowflake.nextId();
             } else {
                 token = UUID.randomUUID().toString().replaceAll("-", "");
@@ -104,24 +107,6 @@ public class RedisAuthProvider implements AuthProvider {
         }
     }
 
-
-    /**
-     * 获取当前登录用户的loginId
-     *
-     * @return
-     */
-    @Override
-    public Object getLoginId() {
-        try {
-            String token = AuthUtil.getToken(this.authProperties.getTokenName());
-            return redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
-        } catch (Exception e) {
-            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
-            return null;
-        }
-    }
-
-
     /**
      * 删除token
      *
@@ -146,7 +131,21 @@ public class RedisAuthProvider implements AuthProvider {
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
-        return false;
+        try {
+            Set<String> keys = redisTemplate.keys(AuthConsts.AUTH_TOKEN_KEY.concat("*"));
+            if (Objects.nonNull(keys) && !keys.isEmpty()) {
+                for (String key : keys) {
+                    String loginIdInRedis = redisTemplate.opsForValue().get(key);
+                    if (!StringUtils.isEmpty(loginIdInRedis) && loginIdInRedis.equals(loginId)) {
+                        redisTemplate.delete(key);
+                    }
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
+            return false;
+        }
     }
 
     /**
@@ -175,5 +174,21 @@ public class RedisAuthProvider implements AuthProvider {
     public void logout() {
         String token = AuthUtil.getToken(this.authProperties.getTokenName());
         this.deleteToken(token);
+    }
+
+    /**
+     * 获取当前登录用户的loginId
+     *
+     * @return
+     */
+    @Override
+    public Object getLoginId() {
+        try {
+            String token = AuthUtil.getToken(this.authProperties.getTokenName());
+            return redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
+        } catch (Exception e) {
+            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
+            return null;
+        }
     }
 }

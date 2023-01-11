@@ -1,20 +1,52 @@
 package org.bluewind.authclient.util;
 
-import org.apache.commons.lang3.StringUtils;
 import org.bluewind.authclient.annotation.Ignore;
 import org.bluewind.authclient.annotation.RequiresPermissions;
 import org.bluewind.authclient.annotation.RequiresRoles;
 import org.bluewind.authclient.enums.Logical;
 import org.bluewind.authclient.interceptor.AuthenticeHolder;
+
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.util.StringUtils;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Set;
 
 public class AuthUtil {
+
+    /**
+     * 获取当前请求对象
+     *
+     * @return
+     */
+    public static HttpServletRequest getRequest() {
+        HttpServletRequest request = null;
+        try {
+            request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+            return request;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 获取当前响应对象
+     *
+     * @return
+     */
+    public static HttpServletResponse getResponse() {
+        HttpServletResponse response = null;
+        try {
+            response = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getResponse();
+            return response;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
 
     /**
@@ -28,7 +60,7 @@ public class AuthUtil {
             request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
             // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
             String token = request.getHeader(tokenName);
-            if (StringUtils.isBlank(token)) {
+            if (StringUtils.isEmpty(token)) {
                 token = CookieUtil.getCookie(request, tokenName);
             }
             return token;
@@ -47,7 +79,7 @@ public class AuthUtil {
         try {
             // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
             String token = request.getHeader(tokenName);
-            if (StringUtils.isBlank(token)) {
+            if (StringUtils.isEmpty(token)) {
                 token = CookieUtil.getCookie(request, tokenName);
             }
             return token;

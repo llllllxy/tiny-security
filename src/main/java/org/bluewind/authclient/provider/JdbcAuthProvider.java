@@ -80,7 +80,7 @@ public class JdbcAuthProvider implements AuthProvider {
     public String createToken(Object loginId) {
         try {
             String token;
-            if (authProperties.getTokenStyle().equals(TOKENSTYLE_SNOWFLAKE)) {
+            if (TOKEN_STYLE_SNOWFLAKE.equals(authProperties.getTokenStyle())) {
                 token = Snowflake.nextId();
             } else {
                 token = UUID.randomUUID().toString().replaceAll("-", "");
@@ -103,24 +103,6 @@ public class JdbcAuthProvider implements AuthProvider {
     @Override
     public Object getLoginId(String token) {
         try {
-            String sql = "select token_str,login_id,token_expire_time from " + authProperties.getTableName() + " where token_str=?";
-            Map<String, Object> resulMap = jdbcTemplate.queryForMap(sql, token);
-            return resulMap.get("login_id");
-        } catch (Exception e) {
-            log.error("JdbcAuthProvider - getLoginId - 失败，Exception：{e}", e);
-            return null;
-        }
-    }
-
-    /**
-     * 获取当前登录用户的loginId
-     *
-     * @return
-     */
-    @Override
-    public Object getLoginId() {
-        try {
-            String token = AuthUtil.getToken(this.authProperties.getTokenName());
             String sql = "select token_str,login_id,token_expire_time from " + authProperties.getTableName() + " where token_str=?";
             Map<String, Object> resulMap = jdbcTemplate.queryForMap(sql, token);
             return resulMap.get("login_id");
@@ -156,7 +138,14 @@ public class JdbcAuthProvider implements AuthProvider {
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
-        return true;
+        try {
+            String sql = "delete from " + authProperties.getTableName() + " where login_id = ?";
+            int num = jdbcTemplate.update(sql, loginId);
+            return num > 0;
+        } catch (Exception e) {
+            log.error("JdbcAuthProvider - deleteTokenByLoginId - 失败，Exception：{e}", e);
+            return false;
+        }
     }
 
     /**
@@ -185,5 +174,23 @@ public class JdbcAuthProvider implements AuthProvider {
     public void logout() {
         String token = AuthUtil.getToken(this.authProperties.getTokenName());
         this.deleteToken(token);
+    }
+
+    /**
+     * 获取当前登录用户的loginId
+     *
+     * @return
+     */
+    @Override
+    public Object getLoginId() {
+        try {
+            String token = AuthUtil.getToken(this.authProperties.getTokenName());
+            String sql = "select token_str,login_id,token_expire_time from " + authProperties.getTableName() + " where token_str=?";
+            Map<String, Object> resulMap = jdbcTemplate.queryForMap(sql, token);
+            return resulMap.get("login_id");
+        } catch (Exception e) {
+            log.error("JdbcAuthProvider - getLoginId - 失败，Exception：{e}", e);
+            return null;
+        }
     }
 }
