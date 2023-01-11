@@ -124,7 +124,7 @@ public class RedisAuthProvider implements AuthProvider {
     }
 
     /**
-     * 通过loginId删除token
+     * 通过loginId删除token（通过keys命令模糊查询的，数据量大时会有性能问题，后续优化）
      *
      * @param loginId
      * @return
