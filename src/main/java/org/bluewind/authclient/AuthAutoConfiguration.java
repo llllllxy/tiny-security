@@ -6,6 +6,7 @@ import org.bluewind.authclient.interfaces.PermissionInfoInterface;
 import org.bluewind.authclient.provider.AuthProvider;
 import org.bluewind.authclient.provider.JdbcAuthProvider;
 import org.bluewind.authclient.provider.RedisAuthProvider;
+import org.bluewind.authclient.provider.SingleAuthProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -55,7 +56,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
 
 
     /**
-     * 注入redisAuthStore
+     * 注入redisAuthProvider
      */
     @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "authclient.store-type", havingValue = "redis")
@@ -69,7 +70,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
     }
 
     /**
-     * 注入jdbcAuthStore
+     * 注入jdbcAuthProvider
      */
     @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "authclient.store-type", havingValue = "jdbc")
@@ -80,6 +81,16 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
             logger.error("AuthAutoConfiguration: JdbcTemplate is null");
         }
         return new JdbcAuthProvider(jdbcTemplate, authProperties);
+    }
+
+    /**
+     * 注入singleAuthProvider
+     */
+    @ConditionalOnMissingBean(AuthProvider.class)
+    @ConditionalOnProperty(name = "authclient.store-type", havingValue = "single")
+    @Bean
+    public AuthProvider singleAuthProvider() {
+        return new SingleAuthProvider(authProperties);
     }
 
 
@@ -93,7 +104,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         if (authProvider != null) {
             return new AuthenticeInterceptor(authProvider, authProperties);
         } else {
-            logger.error("AuthAutoConfiguration: Unknown AuthStore");
+            logger.error("AuthAutoConfiguration: Unknown AuthProvider");
             return null;
         }
     }
