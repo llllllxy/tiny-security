@@ -1,6 +1,5 @@
 package org.bluewind.authclient.interceptor;
 
-import org.apache.commons.lang3.StringUtils;
 import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.exception.UnAuthorizedException;
 import org.bluewind.authclient.provider.AuthProvider;
@@ -10,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.ModelAndView;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
 
 import javax.servlet.http.HttpServletRequest;
@@ -86,7 +86,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
         if (logger.isInfoEnabled()) {
             logger.info("AuthenticeInterceptor -- preHandle -- token = {}", token);
         }
-        if (StringUtils.isBlank(token)) {
+        if (StringUtils.isEmpty(token)) {
             // 直接抛出异常的话，就不需要return false了
             throw new UnAuthorizedException();
         }
