@@ -3,27 +3,30 @@ package org.bluewind.authclient.provider;
 
 import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.consts.AuthConsts;
+import org.bluewind.authclient.util.AuthUtil;
 import org.bluewind.authclient.util.Snowflake;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 
 /**
- * 操作token的接口（通过redis实现）
+ * 操作token和会话的接口（通过redis实现）
+ *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
-public class RedisAuthStore implements AuthStore {
-    final static Logger log = LoggerFactory.getLogger(RedisAuthStore.class);
+public class RedisAuthProvider implements AuthProvider {
+    final static Logger log = LoggerFactory.getLogger(RedisAuthProvider.class);
 
     private final StringRedisTemplate redisTemplate;
     private final AuthProperties authProperties;
 
-    public RedisAuthStore(StringRedisTemplate redisTemplate, AuthProperties authProperties) {
+    public RedisAuthProvider(StringRedisTemplate redisTemplate, AuthProperties authProperties) {
         this.redisTemplate = redisTemplate;
         this.authProperties = authProperties;
     }
@@ -39,13 +42,14 @@ public class RedisAuthStore implements AuthStore {
         try {
             return redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, authProperties.getTimeout(), TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.error("RedisAuthStore - refreshToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider - refreshToken - 失败，Exception：{e}", e);
             return false;
         }
     }
 
     /**
      * 检查token是否失效
+     *
      * @param token
      * @return
      */
@@ -54,15 +58,15 @@ public class RedisAuthStore implements AuthStore {
         try {
             return redisTemplate.hasKey(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthStore - checkToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider - checkToken - 失败，Exception：{e}", e);
             return false;
         }
     }
 
 
-
     /**
      * 创建一个新的token
+     *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
      * @return
      */
@@ -78,14 +82,15 @@ public class RedisAuthStore implements AuthStore {
             redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), authProperties.getTimeout(), TimeUnit.SECONDS);
             return token;
         } catch (Exception e) {
-            log.error("RedisAuthStore - createToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider - createToken - 失败，Exception：{e}", e);
             return null;
         }
     }
 
 
     /**
-     * 根据token，获取当前登录用户的loginId
+     * 根据token，获取loginId
+     *
      * @param token
      * @return
      */
@@ -94,7 +99,24 @@ public class RedisAuthStore implements AuthStore {
         try {
             return redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthStore - getLoginId - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
+            return null;
+        }
+    }
+
+
+    /**
+     * 获取当前登录用户的loginId
+     *
+     * @return
+     */
+    @Override
+    public Object getLoginId() {
+        try {
+            String token = AuthUtil.getToken(this.authProperties.getTokenName());
+            return redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
+        } catch (Exception e) {
+            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
             return null;
         }
     }
@@ -102,6 +124,7 @@ public class RedisAuthStore implements AuthStore {
 
     /**
      * 删除token
+     *
      * @param token
      * @return
      */
@@ -110,14 +133,14 @@ public class RedisAuthStore implements AuthStore {
         try {
             return redisTemplate.delete(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthStore - deleteToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
             return false;
         }
     }
 
-
     /**
      * 通过loginId删除token
+     *
      * @param loginId
      * @return
      */
@@ -126,5 +149,31 @@ public class RedisAuthStore implements AuthStore {
         return false;
     }
 
+    /**
+     * 执行登录操作
+     *
+     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     */
+    @Override
+    public String login(Object loginId) {
+        return this.createToken(loginId);
+    }
 
+    /**
+     * 退出登录
+     */
+    @Override
+    public void logout(HttpServletRequest request) {
+        String token = AuthUtil.getToken(request, this.authProperties.getTokenName());
+        this.deleteToken(token);
+    }
+
+    /**
+     * 退出登录
+     */
+    @Override
+    public void logout() {
+        String token = AuthUtil.getToken(this.authProperties.getTokenName());
+        this.deleteToken(token);
+    }
 }
