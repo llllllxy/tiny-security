@@ -64,7 +64,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
     public AuthProvider redisAuthProvider() {
         StringRedisTemplate stringRedisTemplate = getBean(StringRedisTemplate.class);
         if (stringRedisTemplate == null) {
-            logger.error("AuthAutoConfiguration: StringRedisTemplate is null");
+            logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null");
         }
         return new RedisAuthProvider(stringRedisTemplate, authProperties);
     }
@@ -78,7 +78,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
     public AuthProvider jdbcAuthProvider() {
         JdbcTemplate jdbcTemplate = getBean(JdbcTemplate.class);
         if (jdbcTemplate == null) {
-            logger.error("AuthAutoConfiguration: JdbcTemplate is null");
+            logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null");
         }
         return new JdbcAuthProvider(jdbcTemplate, authProperties);
     }
@@ -104,7 +104,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         if (authProvider != null) {
             return new AuthenticeInterceptor(authProvider, authProperties);
         } else {
-            logger.error("AuthAutoConfiguration: Unknown AuthProvider");
+            logger.error("AuthAutoConfiguration: Bean AuthProvider Not Defined");
             return null;
         }
     }
@@ -121,7 +121,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         if (permissionInfoInterface != null) {
             return new PermissionInterceptor(permissionInfoInterface);
         } else {
-            logger.error("AuthAutoConfiguration: Unknown PermissionInfoInterface");
+            logger.error("AuthAutoConfiguration: Bean PermissionInfoInterface Not Defined");
             return null;
         }
     }
