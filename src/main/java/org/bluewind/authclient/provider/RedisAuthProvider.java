@@ -4,6 +4,7 @@ package org.bluewind.authclient.provider;
 import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.consts.AuthConsts;
 import org.bluewind.authclient.util.AuthUtil;
+import org.bluewind.authclient.util.CookieUtil;
 import org.bluewind.authclient.util.Snowflake;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -155,7 +156,10 @@ public class RedisAuthProvider implements AuthProvider {
      */
     @Override
     public String login(Object loginId) {
-        return this.createToken(loginId);
+        String token = this.createToken(loginId);
+        // 设置 Cookie，通过 Cookie 上下文返回给前端
+        CookieUtil.setCookie(AuthUtil.getResponse(), this.authProperties.getTokenName(), token);
+        return token;
     }
 
     /**
