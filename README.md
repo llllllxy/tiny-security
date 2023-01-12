@@ -230,14 +230,14 @@ AuthUtil.getLoginId()
 ---
 
 ### 2.6、异常处理
-bluewind-auth-client在token验证失败和没有权限的时候会抛出自定义异常：
+bluewind-auth-client在会话验证失败和权限验证失败的时候会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
 |:----------------------|:-------------|:----------------------------------|
 | UnAuthorizedException | 未登录或会话已失效 | 错误信息“未登录或会话已失效！”，错误码401 |
 | NoPermissionException | 无权限访问（角色或者资源不匹配）  | 错误信息“无权限访问！”，错误码403   |
 
-建议使用全部异常处理器来捕获异常并进行处理：
+建议使用全局异常处理器来捕获异常并进行处理：
 ```java
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -277,10 +277,10 @@ public class GlobalExceptionHandler {
 
 ### 2.5.2、主动让token失效
 ```text
-// 移除用户的某个token
+// 根据token，使token失效
 tokenStore.deleteToken(token);
 
-// 移除用户的全部token
+// 根据用户loginId，使该用户的全部token都失效
 tokenStore.deleteTokenByLoginId(loginId);
 ```
 
