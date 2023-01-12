@@ -20,7 +20,7 @@
 </dependency>
 ```
 
-#### 2.1.2、添加yml配置
+#### 2.1.2、yml参数配置项
 
 ```yaml
 authclient:
@@ -41,7 +41,7 @@ authclient:
 > 注：如果使用jdbcAuthStore需要导入框架提供的sql脚本并且集成好jdbcTemplate；
 > 如果使用redisAuthStore，需要集成好redisTemplate
 
-#### 2.1.3、其他配置
+#### 2.1.3、其他自定义配置
 1. 配置会话拦截器和权限角色拦截器，以`SpringBoot2.0`为例, 新建配置类`WebMvcConfig.java`，两个拦截器的拦截路由规则可自行配置
 ```java
 @Configuration

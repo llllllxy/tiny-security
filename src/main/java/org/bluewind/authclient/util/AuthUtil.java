@@ -63,6 +63,10 @@ public class AuthUtil {
             if (StringUtils.isEmpty(token)) {
                 token = CookieUtil.getCookie(request, tokenName);
             }
+            // cookie里取不到，再从请求参数里面取
+            if (StringUtils.isEmpty(token)) {
+                token = request.getParameter(tokenName);
+            }
             return token;
         } catch (Exception e) {
             return null;
@@ -81,6 +85,10 @@ public class AuthUtil {
             String token = request.getHeader(tokenName);
             if (StringUtils.isEmpty(token)) {
                 token = CookieUtil.getCookie(request, tokenName);
+            }
+            // cookie里取不到，再从请求参数里面取
+            if (StringUtils.isEmpty(token)) {
+                token = request.getParameter(tokenName);
             }
             return token;
         } catch (Exception e) {
