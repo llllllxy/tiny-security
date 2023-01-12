@@ -399,12 +399,20 @@ public class SingleAuthProvider implements AuthProvider {
     /**
      * 通过loginId删除token
      *
-     * @param loginId
+     * @param loginId 用户id
      * @return
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
         try {
+            Iterator<String> keys = expireMap.keySet().iterator();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (Objects.nonNull(loginId) && loginId.equals(dataMap.get(key))) {
+                    dataMap.remove(key);
+                    expireMap.remove(key);
+                }
+            }
             // 暂未实现
             return true;
         } catch (Exception e) {
