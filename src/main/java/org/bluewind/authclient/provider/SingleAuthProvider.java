@@ -231,7 +231,7 @@ public class SingleAuthProvider implements AuthProvider {
     /**
      * 线程池核心线程数最大值
      */
-    public static final int corePoolSize = 100;
+    public static final int corePoolSize = 10;
 
     /**
      * 执行数据清理线程池
