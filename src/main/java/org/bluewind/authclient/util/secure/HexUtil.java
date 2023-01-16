@@ -21,21 +21,21 @@ public class HexUtil {
     }
 
     /**
-     * hex字符串转byte数组
+     * hex字符串转byte字节数组
      *
      * @param inHex 待转换的Hex字符串
      * @return 转换后的byte数组结果
      */
-    public static byte[] hexToByteArray(String inHex) {
+    public static byte[] hexToBytes(String inHex) {
         int hexlen = inHex.length();
         byte[] result;
         if (hexlen % 2 == 1) {
-            //奇数
+            // 奇数
             hexlen++;
             result = new byte[(hexlen / 2)];
             inHex = "0" + inHex;
         } else {
-            //偶数
+            // 偶数
             result = new byte[(hexlen / 2)];
         }
         int j = 0;
