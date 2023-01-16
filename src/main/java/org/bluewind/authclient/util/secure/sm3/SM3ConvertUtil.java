@@ -60,8 +60,8 @@ public class SM3ConvertUtil {
     /**
      * 大数字转换字节流（字节数组）型数据
      *
-     * @param n
-     * @return
+     * @param n 大数字
+     * @return 字节数组
      */
     public static byte[] byteConvert32Bytes(BigInteger n) {
         byte tmpd[] = (byte[]) null;
@@ -87,8 +87,8 @@ public class SM3ConvertUtil {
     /**
      * 换字节流（字节数组）型数据转大数字
      *
-     * @param b
-     * @return
+     * @param b 字节数组
+     * @return 大数字
      */
     public static BigInteger byteConvertInteger(byte[] b) {
         if (b[0] < 0) {
@@ -103,7 +103,7 @@ public class SM3ConvertUtil {
     /**
      * 根据字节数组获得值(十六进制数字)
      *
-     * @param bytes
+     * @param bytes 字节数组
      * @return
      */
     public static String getHexString(byte[] bytes) {
@@ -113,9 +113,9 @@ public class SM3ConvertUtil {
     /**
      * 根据字节数组获得值(十六进制数字)
      *
-     * @param bytes
-     * @param upperCase
-     * @return
+     * @param bytes     字节数组
+     * @param upperCase 是否返回大写
+     * @return 十六进制数字-字符串
      */
     public static String getHexString(byte[] bytes, boolean upperCase) {
         String ret = "";
@@ -128,7 +128,7 @@ public class SM3ConvertUtil {
     /**
      * 打印十六进制字符串
      *
-     * @param bytes
+     * @param bytes 字节数组
      */
     public static void printHexString(byte[] bytes) {
         for (int i = 0; i < bytes.length; i++) {
@@ -335,7 +335,7 @@ public class SM3ConvertUtil {
     }
 
     /**
-     * 十六进制字符串装十进制
+     * 十六进制字符串 转 十进制
      *
      * @param hex 十六进制字符串
      * @return 十进制数值
@@ -478,7 +478,7 @@ public class SM3ConvertUtil {
     }
 
     /**
-     * 二进制字符串转十进制
+     * 二进制字符串 转 十进制
      *
      * @param binary 二进制字符串
      * @return 十进制数值
@@ -495,7 +495,7 @@ public class SM3ConvertUtil {
     }
 
     /**
-     * 十进制转换为十六进制字符串
+     * 十进制 转换为 十六进制字符串
      *
      * @param algorism int 十进制的数字
      * @return String 对应的十六进制字符串
