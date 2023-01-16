@@ -38,8 +38,22 @@ authclient:
   table-name: b_auth_token
 ```
 
-> 注：如果使用jdbcAuthStore需要导入框架提供的sql脚本并且集成好jdbcTemplate；
-> 如果使用redisAuthStore，需要集成好redisTemplate
+1. 如果使用jdbcAuthStore，需要导入框架提供的sql脚本并集成好jdbcTemplate，
+   导入依赖 `spring-boot-starter-jdbc`，在yml里进行相应配置即可
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-jdbc</artifactId>
+</dependency>
+```
+2. 如果使用redisAuthStore，需要集成好redisTemplate，
+   导入依赖 `spring-boot-starter-data-redis` ，在yml里进行相应配置即可
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+```
 
 #### 2.1.3、其他自定义配置
 1. 配置会话拦截器和权限角色拦截器，以`SpringBoot2.0`为例, 新建配置类`WebMvcConfig.java`，两个拦截器的拦截路由规则可自行配置
@@ -303,6 +317,7 @@ $.ajax({
    success: function(data){ }
 });
 ```
+3. 前后端不分离的项目会自动从cookie里获取`token`
 
 ---
 
