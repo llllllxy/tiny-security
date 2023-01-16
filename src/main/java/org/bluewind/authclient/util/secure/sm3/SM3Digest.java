@@ -1,7 +1,5 @@
 package org.bluewind.authclient.util.secure.sm3;
 
-import org.bluewind.authclient.util.secure.HexUtil;
-
 /**
  * 国密3加密算法工具类
  *
