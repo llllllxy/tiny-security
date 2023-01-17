@@ -4,6 +4,7 @@ package org.bluewind.authclient.provider;
 import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.consts.AuthConsts;
 import org.bluewind.authclient.util.AuthUtil;
+import org.bluewind.authclient.util.CommonUtil;
 import org.bluewind.authclient.util.CookieUtil;
 import org.bluewind.authclient.util.Snowflake;
 import org.slf4j.Logger;
@@ -80,6 +81,8 @@ public class RedisAuthProvider implements AuthProvider {
             String token;
             if (TOKEN_STYLE_SNOWFLAKE.equals(authProperties.getTokenStyle())) {
                 token = Snowflake.nextId();
+            } else if (TOKEN_STYLE_RANDOM128.equals(authProperties.getTokenStyle())) {
+                token = CommonUtil.getRandomString(128);
             } else {
                 token = UUID.randomUUID().toString().replaceAll("-", "");
             }

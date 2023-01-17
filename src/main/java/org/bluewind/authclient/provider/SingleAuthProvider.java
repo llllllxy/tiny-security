@@ -351,6 +351,8 @@ public class SingleAuthProvider implements AuthProvider {
             String token;
             if (TOKEN_STYLE_SNOWFLAKE.equals(authProperties.getTokenStyle())) {
                 token = Snowflake.nextId();
+            } else if (TOKEN_STYLE_RANDOM128.equals(authProperties.getTokenStyle())) {
+                token = CommonUtil.getRandomString(128);
             } else {
                 token = UUID.randomUUID().toString().replaceAll("-", "");
             }
