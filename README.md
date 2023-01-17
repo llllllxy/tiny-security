@@ -32,7 +32,7 @@ authclient:
   token-name: token
   # token有效期 (即会话时长)，单位秒 默认30分钟(1800秒)
   timeout: 1800
-  # token风格，uuid风格 (默认风格)，snowflake (纯数字风格)
+  # token风格，uuid风格 (默认风格)，snowflake (纯数字风格)，random128 (随机128位字符串)
   token-style: uuid
   # 当配置为jdbc时，存储token的表名字，默认为b_auth_token
   table-name: b_auth_token

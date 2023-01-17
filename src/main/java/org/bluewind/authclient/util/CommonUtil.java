@@ -2,6 +2,7 @@ package org.bluewind.authclient.util;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
 
 
 /**
@@ -38,6 +39,21 @@ public class CommonUtil {
         return dateTimeFormatter.format(newTime);
     }
 
+    /**
+     * 生成指定长度的随机字符串
+     *
+     * @param length 字符串的长度
+     * @return 一个随机字符串
+     */
+    public static String getRandomString(int length) {
+        String str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            int number = ThreadLocalRandom.current().nextInt(62);
+            sb.append(str.charAt(number));
+        }
+        return sb.toString();
+    }
 
     /**
      *
