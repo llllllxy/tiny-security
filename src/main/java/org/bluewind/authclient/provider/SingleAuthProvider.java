@@ -16,7 +16,7 @@ import java.util.concurrent.*;
 
 /**
  * 操作token和会话的接口（通过单机内存Map实现）
- *
+ * 部分代码实现参考自 https://gitee.com/dromara/sa-token/blob/dev/sa-token-core/src/main/java/cn/dev33/satoken/dao/SaTokenDaoDefaultImpl.java
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
