@@ -11,13 +11,6 @@ import javax.servlet.http.HttpServletRequest;
  **/
 public interface AuthProvider {
 
-    String TOKEN_STYLE_UUID = "uuid";
-
-    String TOKEN_STYLE_SNOWFLAKE = "snowflake";
-
-    String TOKEN_STYLE_RANDOM128 = "random128";
-
-
     /*============================操作token开始=============================*/
     /**
      * 刷新token
