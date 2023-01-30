@@ -4,7 +4,7 @@ import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.util.AuthUtil;
 import org.bluewind.authclient.util.CommonUtil;
 import org.bluewind.authclient.util.CookieUtil;
-import org.bluewind.authclient.util.Snowflake;
+import org.bluewind.authclient.util.TokenGenUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +12,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.Map;
-import java.util.UUID;
 
 
 /**
@@ -80,14 +79,7 @@ public class JdbcAuthProvider implements AuthProvider {
     @Override
     public String createToken(Object loginId) {
         try {
-            String token;
-            if (TOKEN_STYLE_SNOWFLAKE.equals(authProperties.getTokenStyle())) {
-                token = Snowflake.nextId();
-            } else if (TOKEN_STYLE_RANDOM128.equals(authProperties.getTokenStyle())) {
-                token = CommonUtil.getRandomString(128);
-            } else {
-                token = UUID.randomUUID().toString().replaceAll("-", "");
-            }
+            String token = TokenGenUtil.genTokenStr(authProperties.getTokenStyle());
             String sql = "insert into " + authProperties.getTableName() + " (token_str,login_id,token_expire_time) values (?,?,?)";
             int num = jdbcTemplate.update(sql, token, String.valueOf(loginId), CommonUtil.currentTimePlusSeconds(authProperties.getTimeout()));
             return num > 0 ? token : null;

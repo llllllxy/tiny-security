@@ -6,7 +6,7 @@ import org.bluewind.authclient.consts.AuthConsts;
 import org.bluewind.authclient.util.AuthUtil;
 import org.bluewind.authclient.util.CommonUtil;
 import org.bluewind.authclient.util.CookieUtil;
-import org.bluewind.authclient.util.Snowflake;
+import org.bluewind.authclient.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,12 +34,12 @@ public class SingleAuthProvider implements AuthProvider {
     final static long NOT_VALUE_EXPIRE = -1L;
 
     /**
-     * 数据集合
+     * 数据存储集合
      */
     public final static Map<String, Object> dataMap = new ConcurrentHashMap<String, Object>();
 
     /**
-     * 过期时间集合 (单位: 毫秒) , 记录所有key的到期时间 [注意不是剩余存活时间]
+     * 数据的过期时间存储集合 (单位: 毫秒) , 记录所有key的到期时间 [注意不是剩余存活时间]
      */
     public final static Map<String, Long> expireMap = new ConcurrentHashMap<String, Long>();
 
@@ -348,14 +348,7 @@ public class SingleAuthProvider implements AuthProvider {
     @Override
     public String createToken(Object loginId) {
         try {
-            String token;
-            if (TOKEN_STYLE_SNOWFLAKE.equals(authProperties.getTokenStyle())) {
-                token = Snowflake.nextId();
-            } else if (TOKEN_STYLE_RANDOM128.equals(authProperties.getTokenStyle())) {
-                token = CommonUtil.getRandomString(128);
-            } else {
-                token = UUID.randomUUID().toString().replaceAll("-", "");
-            }
+            String token = TokenGenUtil.genTokenStr(authProperties.getTokenStyle());
             this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), authProperties.getTimeout());
             return token;
         } catch (Exception e) {
