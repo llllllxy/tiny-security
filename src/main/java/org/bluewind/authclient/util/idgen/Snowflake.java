@@ -1,4 +1,4 @@
-package org.bluewind.authclient.util;
+package org.bluewind.authclient.util.idgen;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -170,6 +170,5 @@ public class Snowflake {
         }
 
         System.out.println("10000耗时: " + (System.currentTimeMillis() - start) + "ms");
-
     }
 }
