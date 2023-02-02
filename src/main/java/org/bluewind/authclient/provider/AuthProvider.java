@@ -12,6 +12,20 @@ import javax.servlet.http.HttpServletRequest;
 public interface AuthProvider {
 
     /*============================操作token开始=============================*/
+
+    /**
+     * 获取token
+     * @return
+     */
+    String getToken();
+
+    /**
+     * 获取token
+     * @param request HttpServletRequest
+     * @return
+     */
+    String getToken(HttpServletRequest request);
+
     /**
      * 刷新token
      * @param token
@@ -57,7 +71,7 @@ public interface AuthProvider {
     /*============================操作token结束=============================*/
 
 
-    /*============================操作会话开始=============================*/
+    /*============================操作会话开始，此部分在AbstractAuthProvider里予以实现=============================*/
 
     /**
      * 执行登录操作

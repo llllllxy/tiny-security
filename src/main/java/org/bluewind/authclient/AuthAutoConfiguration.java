@@ -102,7 +102,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         // 获取AuthStore（可能是redis的，也可能是jdbc的，根据配置来的）
         AuthProvider authProvider = getBean(AuthProvider.class);
         if (authProvider != null) {
-            return new AuthenticeInterceptor(authProvider, authProperties);
+            return new AuthenticeInterceptor(authProvider);
         } else {
             logger.error("AuthAutoConfiguration: Bean AuthProvider Not Defined");
             return null;
