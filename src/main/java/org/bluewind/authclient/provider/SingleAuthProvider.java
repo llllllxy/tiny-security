@@ -17,10 +17,11 @@ import java.util.concurrent.*;
 /**
  * 操作token和会话的接口（通过单机内存Map实现）
  * 部分代码实现参考自 https://gitee.com/dromara/sa-token/blob/dev/sa-token-core/src/main/java/cn/dev33/satoken/dao/SaTokenDaoDefaultImpl.java
+ *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
-public class SingleAuthProvider implements AuthProvider {
+public class SingleAuthProvider extends AbstractAuthProvider implements AuthProvider {
     final static Logger log = LoggerFactory.getLogger(SingleAuthProvider.class);
 
     /**
@@ -306,6 +307,11 @@ public class SingleAuthProvider implements AuthProvider {
         this.initRefreshThread();
     }
 
+    @Override
+    protected AuthProperties getAuthProperties() {
+        return this.authProperties;
+    }
+
     /**
      * 刷新token
      *
@@ -315,7 +321,7 @@ public class SingleAuthProvider implements AuthProvider {
     @Override
     public boolean refreshToken(String token) {
         try {
-            this.updateTimeout(AuthConsts.AUTH_TOKEN_KEY + token, authProperties.getTimeout());
+            this.updateTimeout(AuthConsts.AUTH_TOKEN_KEY + token, this.getAuthProperties().getTimeout());
             return true;
         } catch (Exception e) {
             log.error("SingleAuthProvider - refreshToken - 失败，Exception：{e}", e);
@@ -349,8 +355,8 @@ public class SingleAuthProvider implements AuthProvider {
     @Override
     public String createToken(Object loginId) {
         try {
-            String token = TokenGenUtil.genTokenStr(authProperties.getTokenStyle());
-            this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), authProperties.getTimeout());
+            String token = TokenGenUtil.genTokenStr(this.getAuthProperties().getTokenStyle());
+            this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), this.getAuthProperties().getTimeout());
             return token;
         } catch (Exception e) {
             log.error("RedisAuthProvider - createToken - 失败，Exception：{e}", e);
@@ -414,54 +420,6 @@ public class SingleAuthProvider implements AuthProvider {
         } catch (Exception e) {
             log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
             return false;
-        }
-    }
-
-
-    /**
-     * 执行登录操作
-     *
-     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     */
-    @Override
-    public String login(Object loginId) {
-        String token = this.createToken(loginId);
-        // 设置 Cookie，通过 Cookie 上下文返回给前端
-        CookieUtil.setCookie(AuthUtil.getResponse(), this.authProperties.getTokenName(), token);
-        return token;
-    }
-
-    /**
-     * 退出登录
-     */
-    @Override
-    public void logout(HttpServletRequest request) {
-        String token = AuthUtil.getToken(request, this.authProperties.getTokenName());
-        this.deleteToken(token);
-    }
-
-    /**
-     * 退出登录
-     */
-    @Override
-    public void logout() {
-        String token = AuthUtil.getToken(this.authProperties.getTokenName());
-        this.deleteToken(token);
-    }
-
-    /**
-     * 获取当前登录用户的loginId
-     *
-     * @return
-     */
-    @Override
-    public Object getLoginId() {
-        try {
-            String token = AuthUtil.getToken(this.authProperties.getTokenName());
-            return this.get(AuthConsts.AUTH_TOKEN_KEY + token);
-        } catch (Exception e) {
-            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
-            return null;
         }
     }
 

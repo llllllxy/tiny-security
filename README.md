@@ -174,6 +174,7 @@ public class IndexController {
     }
 }
 ```
+---
 
 ### 2.4、使用注解控制权限
 
@@ -200,8 +201,6 @@ public class IndexController {
 ```
 
 > 注解加在Controller的方法或类上面。
-
-<br/>
 
 **2.代码示例：**
 
@@ -243,7 +242,15 @@ AuthUtil.getLoginId()
 
 ---
 
-### 2.6、异常处理
+### 2.6、获取当前登录用户token
+```text
+authProvider.getToken()
+或者
+authProvider.getToken(HttpServletRequest request);()
+```
+---
+
+### 2.7、异常处理
 bluewind-auth-client在会话验证失败和权限验证失败的时候会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
@@ -283,13 +290,13 @@ public class GlobalExceptionHandler {
 
 ---
 
-### 2.5、更多用法
+### 2.8、更多用法
 
-#### 2.5.1、使用注解忽略会话验证`@Ignore`
+#### 2.8.1、使用注解忽略会话验证`@Ignore`
 在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
 
 
-### 2.5.2、主动让token失效
+### 2.8.2、主动让token失效
 ```text
 // 根据token，使token失效
 tokenStore.deleteToken(token);
@@ -300,7 +307,7 @@ tokenStore.deleteTokenByLoginId(loginId);
 
 ---
 
-### 2.6、前端传递token
+### 2.9、前端传递token
 1. 放在参数里面用`token`传递：
 ```javascript
 $.get("/xxx", { "token": token }, function(data) {

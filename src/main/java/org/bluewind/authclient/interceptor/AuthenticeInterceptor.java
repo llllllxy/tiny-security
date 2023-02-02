@@ -1,6 +1,5 @@
 package org.bluewind.authclient.interceptor;
 
-import org.bluewind.authclient.AuthProperties;
 import org.bluewind.authclient.exception.UnAuthorizedException;
 import org.bluewind.authclient.provider.AuthProvider;
 import org.bluewind.authclient.util.AuthUtil;
@@ -30,11 +29,6 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
      */
     private AuthProvider authProvider;
 
-    /**
-     * 配置文件
-     */
-    private AuthProperties authProperties;
-
     public AuthProvider getAuthProvider() {
         return authProvider;
     }
@@ -43,17 +37,9 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
         this.authProvider = authProvider;
     }
 
-    public AuthProperties getAuthProperties() {
-        return this.authProperties;
-    }
 
-    public void setAuthProperties(AuthProperties authProperties) {
-        this.authProperties = authProperties;
-    }
-
-    public AuthenticeInterceptor(AuthProvider authProvider, AuthProperties authProperties) {
+    public AuthenticeInterceptor(AuthProvider authProvider) {
         this.setAuthProvider(authProvider);
-        this.setAuthProperties(authProperties);
     }
 
 
@@ -82,7 +68,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
         }
 
         // 先判断token是否为空
-        String token = AuthUtil.getToken(request, this.authProperties.getTokenName());
+        String token = authProvider.getToken(request);
         if (logger.isInfoEnabled()) {
             logger.info("AuthenticeInterceptor -- preHandle -- token = {}", token);
         }
