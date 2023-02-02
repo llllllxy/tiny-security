@@ -285,8 +285,8 @@ public class GlobalExceptionHandler {
 
 ### 2.5、更多用法
 
-#### 2.5.1、使用注解忽略验证`@Ignore`
-在Controller的方法或类上面添加`@Ignore`注解可排除框架拦截，即表示调用接口不用传递token了。
+#### 2.5.1、使用注解忽略会话验证`@Ignore`
+在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
 
 
 ### 2.5.2、主动让token失效
