@@ -235,7 +235,7 @@ public class SingleAuthProvider implements AuthProvider {
     public static final int corePoolSize = 10;
 
     /**
-     * 执行数据清理线程池
+     * 用于定时执行数据清理的线程池
      */
     public ScheduledExecutorService executorService;
 
@@ -266,7 +266,7 @@ public class SingleAuthProvider implements AuthProvider {
         this.refreshFlag = true;
         this.executorService = Executors.newScheduledThreadPool(corePoolSize);
         this.executorService.scheduleWithFixedDelay(() -> {
-            log.info("SingleAuthProvider - refreshThread - is running：{}", CommonUtil.getCurrentTime());
+            log.info("SingleAuthProvider - refreshThread - executed successfully at ：{}", CommonUtil.getCurrentTime());
             try {
                 try {
                     // 如果已经被标记为结束
@@ -282,6 +282,7 @@ public class SingleAuthProvider implements AuthProvider {
                 log.error("SingleAuthProvider - refreshThread - Exception：{e2}", e2);
             }
         }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
+        log.info("SingleAuthProvider - refreshThread - init successful!");
     }
 
 
