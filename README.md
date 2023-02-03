@@ -98,6 +98,7 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
         if (logger.isInfoEnabled()) {
             logger.info("PermissionInfoInterfaceImpl -- getPermissionSet -- loginId = {}", loginId);
         }
+        // 自定义权限编码列表获取逻辑，下面的只是示例
         Set<String> permissionSet = new HashSet<String>() {{
             add("权限1");
             add("权限2");
@@ -115,6 +116,7 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
         if (logger.isInfoEnabled()) {
             logger.info("PermissionInfoInterfaceImpl -- getRoleSet -- loginId = {}", loginId);
         }
+        // 自定义角色编码列表获取逻辑，下面的只是示例
         Set<String> roleSet = new HashSet<String>() {{
             add("角色1");
             add("角色2");
@@ -132,6 +134,7 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
 @Controller
 public class IndexController {
     final static Logger logger = LoggerFactory.getLogger(IndexController.class);
+    
     @Autowired
     private AuthProvider authProvider;
 
@@ -161,6 +164,7 @@ login方法参数说明：
 @Controller
 public class IndexController {
     final static Logger logger = LoggerFactory.getLogger(IndexController.class);
+   
     @Autowired
     private AuthProvider authProvider;
 
@@ -208,6 +212,7 @@ public class IndexController {
 @Controller
 public class IndexController {
     final static Logger logger = LoggerFactory.getLogger(IndexController.class);
+    
     @Autowired
     private AuthProvider authProvider;
 
@@ -225,7 +230,8 @@ public class IndexController {
     public Result<Object> testPermission2() {
         logger.info("IndexController - testPermission3 - authProvider.getLoginId() = {}", authProvider.getLoginId());
         logger.info("IndexController - testPermission3 - AuthUtil.getLoginId() = {}", AuthUtil.getLoginId());
-
+       logger.info("IndexController - testPermission3 - token = {}", authProvider.getToken());
+        
         return Result.ok("testPermission2测试成功！", authProvider.getLoginId());
     }
 }
@@ -234,19 +240,29 @@ public class IndexController {
 ---
 
 ### 2.5、获取当前登录用户编码
-```text
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
 authProvider.getLoginId()
-或者
+        
+或者直接调用静态方法
+        
 AuthUtil.getLoginId()
 ```
 
 ---
 
 ### 2.6、获取当前登录用户token
-```text
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
 authProvider.getToken()
 或者
-authProvider.getToken(HttpServletRequest request);()
+authProvider.getToken(HttpServletRequest request);
 ```
 ---
 
@@ -297,12 +313,16 @@ public class GlobalExceptionHandler {
 
 
 ### 2.8.2、主动让token失效
-```text
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
 // 根据token，使token失效
-tokenStore.deleteToken(token);
+authProvider.deleteToken(token);
 
 // 根据用户loginId，使该用户的全部token都失效
-tokenStore.deleteTokenByLoginId(loginId);
+authProvider.deleteTokenByLoginId(loginId);
 ```
 
 ---
