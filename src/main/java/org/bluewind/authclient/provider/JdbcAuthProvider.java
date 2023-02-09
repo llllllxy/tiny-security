@@ -138,7 +138,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     }
 
     /**
-     * 通过loginId删除token---------暂未实现，还没想好思路
+     * 通过loginId删除token
      *
      * @param loginId
      * @return
