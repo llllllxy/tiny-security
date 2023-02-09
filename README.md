@@ -30,7 +30,7 @@ authclient:
   store-type: redis
   # token名称 (同时也是cookie名称，适配前后端不分离的模式)
   token-name: token
-  # token有效期 (即会话时长)，单位秒 默认30分钟(1800秒)
+  # token有效期 (即会话时长)，单位秒 默认1800秒(30分钟)
   timeout: 1800
   # token风格，uuid风格 (默认风格)，snowflake (纯数字风格)，objectid (变种uuid)，random128 (随机128位字符串)
   token-style: uuid
