@@ -1,16 +1,13 @@
 package org.bluewind.authclient.provider;
 
 import org.bluewind.authclient.AuthProperties;
-import org.bluewind.authclient.util.AuthUtil;
 import org.bluewind.authclient.util.CommonUtil;
-import org.bluewind.authclient.util.CookieUtil;
 import org.bluewind.authclient.util.TokenGenUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
