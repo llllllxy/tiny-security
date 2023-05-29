@@ -312,7 +312,7 @@ public class GlobalExceptionHandler {
 在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
 
 
-### 2.8.2、主动让token失效
+#### 2.8.2、主动让token失效
 ```java
 // 注入authProvider
 @Autowired
@@ -348,3 +348,15 @@ $.ajax({
 
 ---
 
+### 2.10、自定义AuthProvider
+框架内置了JdbcAuthProvider、RedisAuthProvider和SingleAuthProvider三种会话实现，
+如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘、MongoDB中，只需以下三步即可：
+- 实现org.bluewind.authclient.provider.AuthProvider接口，或者继承org.bluewind.authclient.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，
+- 注入bean，如下
+```java
+   @Component
+   public class MongoAuthProvider extends AbstractAuthProvider {
+        // ...
+   }
+```
+- 删除store-type的配置
