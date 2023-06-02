@@ -12,7 +12,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 操作token和会话的接口（通过单机内存Map实现）
+ * 操作token和会话的接口（通过单机内存Map实现，系统重启后数据会丢失）
  * 部分代码实现参考自 https://gitee.com/dromara/sa-token/blob/dev/sa-token-core/src/main/java/cn/dev33/satoken/dao/SaTokenDaoDefaultImpl.java
  *
  * @author liuxingyu01
@@ -230,7 +230,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 线程池核心线程数最大值
      */
-    public static final int corePoolSize = 10;
+    public static final int corePoolSize = 5;
 
     /**
      * 用于定时执行数据清理的线程池
@@ -264,7 +264,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         this.refreshFlag = true;
         this.executorService = Executors.newScheduledThreadPool(corePoolSize);
         this.executorService.scheduleWithFixedDelay(() -> {
-            log.info("SingleAuthProvider - refreshThread - executed successfully at ：{}", CommonUtil.getCurrentTime());
+            log.info("SingleAuthProvider - refreshSession - successfully at ：{}", CommonUtil.getCurrentTime());
             try {
                 try {
                     // 如果已经被标记为结束
@@ -274,10 +274,10 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
                     // 执行清理方法
                     refreshDataMap();
                 } catch (Exception e1) {
-                    log.error("SingleAuthProvider - refreshThread - Exception：{e1}", e1);
+                    log.error("SingleAuthProvider - refreshSession - Exception：{e1}", e1);
                 }
             } catch (Exception e2) {
-                log.error("SingleAuthProvider - refreshThread - Exception：{e2}", e2);
+                log.error("SingleAuthProvider - refreshSession - Exception：{e2}", e2);
             }
         }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
         log.info("SingleAuthProvider - refreshThread - init successful!");
