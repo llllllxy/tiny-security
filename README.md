@@ -1,9 +1,23 @@
-# bluewind-auth-client
+<h1 align="center">tiny-security-boot-starter</h1>
 
+
+<p align="center">
+	<a target="_blank" href="https://www.apache.org/licenses/LICENSE-2.0">
+		<img src="https://img.shields.io/badge/license-Apache%202-green.svg" />
+	</a>
+	<a target="_blank" href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">
+		<img src="https://img.shields.io/badge/JDK-8+-blue.svg" />
+	</a>
+    <a href='https://gitee.com/leisureLXY/tiny-security-boot-starter'>
+        <img src='https://gitee.com/leisureLXY/tiny-security-boot-starter/badge/star.svg?theme=dark' alt='star' />
+    </a>
+    <br />
+</p>
 
 ## 1、简介
 
-基于token验证的Java Web权限控制框架，支持redis、jdbc和单机session多种存储方式，前后端分离项目、不分离项目均可使用，功能完善、使用简单、文档清晰，易于扩展。
+tiny-security-boot-starter是一个基于SpringBoot开发的轻量级权限控制框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
+支持redis、jdbc和单机session多种会话存储方式（亦可自行扩展存储方式）；前后端分离项目、不分离项目均可使用，功能完善、使用简单，文档清晰，让认证鉴权这件事变得更加简单！
 
 ---
 
@@ -14,8 +28,8 @@
 #### 2.1.1、引入依赖
 ```xml
 <dependency>
-    <groupId>org.bluewind.authclient</groupId>
-    <artifactId>bluewind-auth-client</artifactId>
+    <groupId>org.tinycloud</groupId>
+    <artifactId>tiny-security-boot-starter</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
 ```
