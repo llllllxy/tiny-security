@@ -1,2 +1,2 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-org.bluewind.authclient.AuthAutoConfiguration
+org.tinycloud.security.AuthAutoConfiguration

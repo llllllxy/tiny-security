@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.bluewind.authclient</groupId>
-    <artifactId>bluewind-auth-client</artifactId>
+    <groupId>org.tinycloud</groupId>
+    <artifactId>tiny-security-boot-starter</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
@@ -57,7 +57,7 @@
     </dependencies>
 
     <build>
-        <finalName>bluewind-auth-client</finalName>
+        <finalName>${project.artifactId}-${project.version}</finalName>
         <resources>
             <resource>
                 <directory>src/main/java</directory>
