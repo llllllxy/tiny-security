@@ -4,11 +4,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 
 /**
- * 映射配置类--映射yml里面的配置
+ * tiny-security映射配置类--映射yml里面的配置
  * @author liuxingyu01
- * @version 2023-01-06-9:33
+ * @since 2023-01-06-9:33
  **/
-@ConfigurationProperties(prefix = "authclient")
+@ConfigurationProperties(prefix = "tiny-security")
 public class AuthProperties {
 
     private Boolean enable;
