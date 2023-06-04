@@ -4,7 +4,7 @@ import org.tinycloud.security.annotation.Ignore;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.enums.Logical;
-import org.tinycloud.security.interceptor.AuthenticeHolder;
+import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;

@@ -1,6 +1,7 @@
 package org.tinycloud.security.interceptor;
 
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.util.AuthUtil;
 import org.slf4j.Logger;
