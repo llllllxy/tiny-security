@@ -37,7 +37,7 @@ tiny-security-boot-starter是一个基于SpringBoot开发的轻量级权限控�
 #### 2.1.2、yml参数配置项
 
 ```yaml
-authclient:
+tiny-security:
   # 启用authclient
   enable: true
   # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)

@@ -21,7 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * <p>
- *     自动配置类
+ *   tiny-security 自动配置类
  * </p>
  * @author liuxingyu01
  * @since  2022-12-13 11:45
