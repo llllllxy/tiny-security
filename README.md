@@ -253,7 +253,34 @@ public class IndexController {
 
 ---
 
-### 2.5、获取当前登录用户编码
+### 2.5、使用代码控制权限
+**1.代码示例：** 
+
+```java
+
+// 判断：当前账号是否含有指定角色, 返回 true 或 false
+AuthUtil.hasRole("role1");
+
+// 判断：当前账号是否含有指定角色 [指定多个，必须全部验证通过]
+AuthUtil.hasAllRole("role1", "role2");
+
+// 判断：当前账号是否含有指定角色 [指定多个，只要其一验证通过即可]
+AuthUtil.hasAnyRole("role1", "role2");
+
+// 判断：当前账号是否含有指定权限, 返回 true 或 false
+AuthUtil.hasPermission("permission1");
+
+// 判断：当前账号是否含有指定权限 [指定多个，必须全部验证通过]
+AuthUtil.hasAllPermission("permission1", "permission2");
+
+// 判断：当前账号是否含有指定权限 [指定多个，只要其一验证通过即可]
+AuthUtil.hasAnyPermission("permission1", "permission2");
+
+```
+
+---
+
+### 2.6、获取当前登录用户编码
 ```java
 // 注入authProvider
 @Autowired
@@ -268,7 +295,7 @@ AuthUtil.getLoginId()
 
 ---
 
-### 2.6、获取当前登录用户token
+### 2.7、获取当前登录用户token
 ```java
 // 注入authProvider
 @Autowired
@@ -280,7 +307,7 @@ authProvider.getToken(HttpServletRequest request);
 ```
 ---
 
-### 2.7、异常处理
+### 2.8、异常处理
 bluewind-auth-client在会话验证失败和权限验证失败的时候会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
@@ -320,13 +347,13 @@ public class GlobalExceptionHandler {
 
 ---
 
-### 2.8、更多用法
+### 2.9、更多用法
 
-#### 2.8.1、使用注解忽略会话验证`@Ignore`
+#### 2.9.1、使用注解忽略会话验证`@Ignore`
 在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
 
 
-#### 2.8.2、主动让token失效
+#### 2.9.2、主动让token失效
 ```java
 // 注入authProvider
 @Autowired
@@ -341,7 +368,7 @@ authProvider.deleteTokenByLoginId(loginId);
 
 ---
 
-### 2.9、前端传递token
+### 2.10、前端传递token
 1. 放在参数里面用`token`传递：
 ```javascript
 $.get("/xxx", { "token": token }, function(data) {
@@ -362,7 +389,7 @@ $.ajax({
 
 ---
 
-### 2.10、自定义AuthProvider
+### 2.11、自定义AuthProvider
 框架内置了JdbcAuthProvider、RedisAuthProvider和SingleAuthProvider三种会话实现，
 如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘、MongoDB中，只需以下三步即可：
 - 实现org.bluewind.authclient.provider.AuthProvider接口，或者继承org.bluewind.authclient.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，
