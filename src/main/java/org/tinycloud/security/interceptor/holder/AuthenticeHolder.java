@@ -1,9 +1,9 @@
-package org.tinycloud.security.interceptor;
+package org.tinycloud.security.interceptor.holder;
 
 import java.util.Objects;
 
 /**
- * 本地线程变量-缓存租户会话信息
+ * 本地线程变量-缓存用户会话信息
  *
  * @author liuxingyu01
  * @version 2022-06-14 13:58
