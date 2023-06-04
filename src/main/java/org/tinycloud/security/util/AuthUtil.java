@@ -9,6 +9,8 @@ import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.util.StringUtils;
+import org.tinycloud.security.interceptor.holder.PermissionHolder;
+import org.tinycloud.security.interceptor.holder.RoleHolder;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -218,5 +220,110 @@ public class AuthUtil {
         return AuthenticeHolder.getLoginId();
     }
 
+    /**
+     * 判断拥有角色：role1
+     *
+     * @return
+     */
+    public static boolean hasRole(String role) {
+        Set<String> roleSet = RoleHolder.getRoleSet();
+        if (roleSet == null || roleSet.isEmpty()) {
+            return false;
+        }
+        return roleSet.contains(role);
+    }
 
+    /**
+     * 判断拥有角色：role1 and role2
+     *
+     * @param roles
+     * @return
+     */
+    public static boolean hasAllRole(String... roles) {
+        Set<String> roleSet = RoleHolder.getRoleSet();
+        if (roleSet == null || roleSet.isEmpty()) {
+            return false;
+        }
+        // 只要有一个角色不是true的，就返回false（同时拥有）
+        for (String ro : roles) {
+            if (!roleSet.contains(ro)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断拥有角色：role1 or role2 or role3 有其一即可
+     *
+     * @param roles
+     * @return
+     */
+    public static boolean hasAnyRole(String... roles) {
+        Set<String> roleSet = RoleHolder.getRoleSet();
+        if (roleSet == null || roleSet.isEmpty()) {
+            return false;
+        }
+        // 如果有任何一个角色，返回true，否则返回false（拥有其一）
+        for (String ro : roles) {
+            if (roleSet.contains(ro)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    /**
+     * 判断拥有权限：permission1
+     *
+     * @return
+     */
+    public static boolean hasPermission(String permission) {
+        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        if (permissionSet == null || permissionSet.isEmpty()) {
+            return false;
+        }
+        return permissionSet.contains(permission);
+    }
+
+    /**
+     * 判断拥有角色：permission1 and permission2
+     *
+     * @param permissions
+     * @return
+     */
+    public static boolean hasAllPermission(String... permissions) {
+        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        if (permissionSet == null || permissionSet.isEmpty()) {
+            return false;
+        }
+        // 只要有一个权限不是true的，就返回false（同时拥有）
+        for (String pe : permissions) {
+            if (!permissionSet.contains(pe)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 判断拥有权限：permission1 or permission2 or permission3 有其一即可
+     *
+     * @param permissions
+     * @return
+     */
+    public static boolean hasAnyPermission(String... permissions) {
+        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        if (permissionSet == null || permissionSet.isEmpty()) {
+            return false;
+        }
+        // 如果有任何一个权限，返回true，否则返回false（拥有其一）
+        for (String pe : permissions) {
+            if (permissionSet.contains(pe)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

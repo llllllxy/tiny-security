@@ -28,7 +28,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  **/
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-@ConditionalOnProperty(name = "authclient.enable", havingValue = "true")
+@ConditionalOnProperty(name = "tiny-security.enable", havingValue = "true")
 public class AuthAutoConfiguration {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
@@ -40,7 +40,7 @@ public class AuthAutoConfiguration {
      * 注入redisAuthProvider
      */
     @ConditionalOnMissingBean(AuthProvider.class)
-    @ConditionalOnProperty(name = "authclient.store-type", havingValue = "redis")
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
     @Bean
     public AuthProvider redisAuthProvider(StringRedisTemplate stringRedisTemplate) {
         if (stringRedisTemplate == null) {
@@ -54,7 +54,7 @@ public class AuthAutoConfiguration {
      * 注入jdbcAuthProvider
      */
     @ConditionalOnMissingBean(AuthProvider.class)
-    @ConditionalOnProperty(name = "authclient.store-type", havingValue = "jdbc")
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
     @Bean
     public AuthProvider jdbcAuthProvider(JdbcTemplate jdbcTemplate) {
         if (jdbcTemplate == null) {
@@ -68,7 +68,7 @@ public class AuthAutoConfiguration {
      * 注入singleAuthProvider
      */
     @ConditionalOnMissingBean(AuthProvider.class)
-    @ConditionalOnProperty(name = "authclient.store-type", havingValue = "single")
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single")
     @Bean
     public AuthProvider singleAuthProvider() {
         logger.info("SingleAuthProvider is running");

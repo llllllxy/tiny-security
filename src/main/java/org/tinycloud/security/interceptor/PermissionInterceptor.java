@@ -1,6 +1,9 @@
 package org.tinycloud.security.interceptor;
 
 import org.tinycloud.security.exception.NoPermissionException;
+import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
+import org.tinycloud.security.interceptor.holder.PermissionHolder;
+import org.tinycloud.security.interceptor.holder.RoleHolder;
 import org.tinycloud.security.interfaces.PermissionInfoInterface;
 import org.tinycloud.security.util.AuthUtil;
 import org.slf4j.Logger;
@@ -64,11 +67,12 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
         Object loginId = AuthenticeHolder.getLoginId();
         Set<String> roleSet = permissionInfoInterface.getRoleSet(loginId);
         Set<String> permissionSet = permissionInfoInterface.getPermissionSet(loginId);
-
+        // 打印权限编码和角色编码，后续框架稳定后可以删除
         if (logger.isInfoEnabled()) {
-            logger.info("PermissionInterceptor -- preHandle -- permissionSet = {}", permissionSet);
-            logger.info("PermissionInterceptor -- preHandle -- roleSet = {}", roleSet);
+            logger.info("PermissionInterceptor -- preHandle -- permissionSet = {}， roleSet = {}", permissionSet, roleSet);
         }
+        RoleHolder.setRoleSet(roleSet);
+        PermissionHolder.setPermissionSet(permissionSet);
 
         if (AuthUtil.checkPermission(method, permissionSet) && AuthUtil.checkRole(method, roleSet)) {
             return super.preHandle(request, response, handler);
@@ -95,6 +99,8 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
         // logger.info("PermissionInterceptor -- afterCompletion -- 执行了");
+        RoleHolder.clearRoleSet();
+        PermissionHolder.clearPermissionSet();
     }
 
 }
