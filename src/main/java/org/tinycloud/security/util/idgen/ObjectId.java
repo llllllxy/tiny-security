@@ -1,12 +1,12 @@
 package org.tinycloud.security.util.idgen;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.lang.management.ManagementFactory;
+
+import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.util.concurrent.ThreadLocalRandom;
+import java.security.SecureRandom;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
+
 
 /**
  * MongoDb ObjectId java版实现
@@ -14,105 +14,283 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author liuxingyu01
  * @version 2022-05-21 9:53
  **/
-public final class ObjectId {
-    private final static int MAX_RANDOM_NUMBER = 16777215;
-    private static AtomicInteger numCount = new AtomicInteger(ThreadLocalRandom.current().nextInt(MAX_RANDOM_NUMBER));
-    private final static String OBJECT_LOCK = "object_lock";
+public final class ObjectId implements Comparable<ObjectId>, Serializable {
+    private static final long serialVersionUID = 3670079982654483072L;
 
-    private static byte[] getBytes() {
-        //定义一个12位的字节数组
+    private static final int RANDOM_VALUE1;
+    private static final short RANDOM_VALUE2;
+    private static final AtomicInteger NEXT_COUNTER = new AtomicInteger((new SecureRandom()).nextInt());
+    private static final char[] HEX_CHARS = new char[]{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    private final int timestamp;
+    private final int counter;
+    private final int randomValue1;
+    private final short randomValue2;
+
+    public static boolean isValid(String hexString) {
+        if (hexString == null) {
+            throw new IllegalArgumentException();
+        } else {
+            int len = hexString.length();
+            if (len != 24) {
+                return false;
+            } else {
+                for (int i = 0; i < len; ++i) {
+                    char c = hexString.charAt(i);
+                    if ((c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F')) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+    }
+
+    public ObjectId() {
+        this(new Date());
+    }
+
+    public ObjectId(Date date) {
+        this(dateToTimestampSeconds(date), NEXT_COUNTER.getAndIncrement() & 16777215, false);
+    }
+
+    public ObjectId(Date date, int counter) {
+        this(dateToTimestampSeconds(date), counter, true);
+    }
+
+    public ObjectId(int timestamp, int counter) {
+        this(timestamp, counter, true);
+    }
+
+    private ObjectId(int timestamp, int counter, boolean checkCounter) {
+        this(timestamp, RANDOM_VALUE1, RANDOM_VALUE2, counter, checkCounter);
+    }
+
+    private ObjectId(int timestamp, int randomValue1, short randomValue2, int counter, boolean checkCounter) {
+        if ((randomValue1 & -16777216) != 0) {
+            throw new IllegalArgumentException("The machine identifier must be between 0 and 16777215 (it must fit in three bytes).");
+        } else if (checkCounter && (counter & -16777216) != 0) {
+            throw new IllegalArgumentException("The counter must be between 0 and 16777215 (it must fit in three bytes).");
+        } else {
+            this.timestamp = timestamp;
+            this.counter = counter & 16777215;
+            this.randomValue1 = randomValue1;
+            this.randomValue2 = randomValue2;
+        }
+    }
+
+    public ObjectId(String hexString) {
+        this(parseHexString(hexString));
+    }
+
+    public ObjectId(byte[] bytes) {
+        this(ByteBuffer.wrap((byte[]) isTrueArgument("bytes has length of 12", bytes, ((byte[]) notNull("bytes", bytes)).length == 12)));
+    }
+
+    ObjectId(int timestamp, int machineAndProcessIdentifier, int counter) {
+        this(legacyToBytes(timestamp, machineAndProcessIdentifier, counter));
+    }
+
+    public ObjectId(ByteBuffer buffer) {
+        notNull("buffer", buffer);
+        isTrueArgument("buffer.remaining() >=12", buffer.remaining() >= 12);
+        this.timestamp = makeInt(buffer.get(), buffer.get(), buffer.get(), buffer.get());
+        this.randomValue1 = makeInt((byte) 0, buffer.get(), buffer.get(), buffer.get());
+        this.randomValue2 = makeShort(buffer.get(), buffer.get());
+        this.counter = makeInt((byte) 0, buffer.get(), buffer.get(), buffer.get());
+    }
+
+    private static byte[] legacyToBytes(int timestamp, int machineAndProcessIdentifier, int counter) {
+        byte[] bytes = new byte[]{int3(timestamp), int2(timestamp), int1(timestamp), int0(timestamp), int3(machineAndProcessIdentifier), int2(machineAndProcessIdentifier), int1(machineAndProcessIdentifier), int0(machineAndProcessIdentifier), int3(counter), int2(counter), int1(counter), int0(counter)};
+        return bytes;
+    }
+
+    public byte[] toByteArray() {
         ByteBuffer buffer = ByteBuffer.allocate(12);
-        final int currentTimeSecond = (int) (System.currentTimeMillis() / 1000);
-        //255->11111111->显示 补码变反码->11111111 - 1 = 11111110 反码变原码显示10000001
-        //4个位置，分别存储原码，但是java存取的是补码，所以显示就不一样了
-        buffer.putInt(currentTimeSecond);
-        buffer.put(hostNameBytes());
-        buffer.put(getPid());
-        buffer.put(number());
+        this.putToByteBuffer(buffer);
         return buffer.array();
     }
 
-    public static String nextId() {
-        StringBuilder sb = new StringBuilder();
-        final byte[] array = getBytes();
-        for (byte b : array) {
-            sb.append(String.format("%02x", b & 0xFF));
+    public void putToByteBuffer(ByteBuffer buffer) {
+        notNull("buffer", buffer);
+        isTrueArgument("buffer.remaining() >=12", buffer.remaining() >= 12);
+        buffer.put(int3(this.timestamp));
+        buffer.put(int2(this.timestamp));
+        buffer.put(int1(this.timestamp));
+        buffer.put(int0(this.timestamp));
+        buffer.put(int2(this.randomValue1));
+        buffer.put(int1(this.randomValue1));
+        buffer.put(int0(this.randomValue1));
+        buffer.put(short1(this.randomValue2));
+        buffer.put(short0(this.randomValue2));
+        buffer.put(int2(this.counter));
+        buffer.put(int1(this.counter));
+        buffer.put(int0(this.counter));
+    }
+
+    public int getTimestamp() {
+        return this.timestamp;
+    }
+
+    public Date getDate() {
+        return new Date(((long) this.timestamp & 4294967295L) * 1000L);
+    }
+
+    public String toHexString() {
+        char[] chars = new char[24];
+        int i = 0;
+        byte[] var3 = this.toByteArray();
+        int var4 = var3.length;
+
+        for (int var5 = 0; var5 < var4; ++var5) {
+            byte b = var3[var5];
+            chars[i++] = HEX_CHARS[b >> 4 & 15];
+            chars[i++] = HEX_CHARS[b & 15];
         }
-        return sb.toString();
+        return new String(chars);
     }
 
-    // 获取3个字节的int值，作为每一秒同一台电脑同一个进程的随机数，最大值为16777215
-    private static byte[] number() {
-        //计数器
-        int num = numCount.get();
-        //需要判断是否超过值，双重检查
-        if (num >= MAX_RANDOM_NUMBER) {
-            synchronized (OBJECT_LOCK) {
-                if (num >= MAX_RANDOM_NUMBER) {
-                    numCount = new AtomicInteger(ThreadLocalRandom.current().nextInt(16777215));
-                }
-            }
-        }
-        num = numCount.incrementAndGet();
-        return intBitToByte(num, 8, 0, 3);
-    }
-
-    //获取进程pid
-    private static byte[] getPid() {
-        String pidStr = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
-        int pid = Integer.parseInt(pidStr);
-        return intBitToByte(pid, 8, 0, 2);
-    }
-
-    //主机名3个字节
-    private static byte[] hostNameBytes() {
-        final String hostName = getHostName();
-        //左移，使低位的数据保留，一般来说高位可能多数是0
-        //至于8位，是因为，int是32位，而我只需要24位，所以保留低位的24位
-        int hashCode = hostName.hashCode() << 8;
-        //把int的hashCode的高位24位转成3个8位的byte
-        return intBitToByte(hashCode, 8, 8, 3);
-    }
-
-    //获取主机名
-    private static String getHostName() {
-        try {
-            return new BufferedReader(
-                    new InputStreamReader(Runtime.getRuntime().exec("hostname").getInputStream()))
-                    .readLine();
-        } catch (IOException ioException) {
-            if (System.getProperty("os.name").startsWith("Windows")) {
-                return System.getenv("COMPUTERNAME");
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        } else if (o != null && this.getClass() == o.getClass()) {
+            ObjectId objectId = (ObjectId) o;
+            if (this.counter != objectId.counter) {
+                return false;
+            } else if (this.timestamp != objectId.timestamp) {
+                return false;
+            } else if (this.randomValue1 != objectId.randomValue1) {
+                return false;
             } else {
-                String hostname = System.getenv("HOSTNAME");
-                if (hostname == null) {
-                    //找不到就随机一个
-                    hostname = String.valueOf((ThreadLocalRandom.current().nextInt()) << 16);
-                }
-                return hostname;
+                return this.randomValue2 == objectId.randomValue2;
             }
+        } else {
+            return false;
         }
+    }
+
+    public int hashCode() {
+        int result = this.timestamp;
+        result = 31 * result + this.counter;
+        result = 31 * result + this.randomValue1;
+        result = 31 * result + this.randomValue2;
+        return result;
+    }
+
+    public int compareTo(ObjectId other) {
+        if (other == null) {
+            throw new NullPointerException();
+        } else {
+            byte[] byteArray = this.toByteArray();
+            byte[] otherByteArray = other.toByteArray();
+
+            for (int i = 0; i < 12; ++i) {
+                if (byteArray[i] != otherByteArray[i]) {
+                    return (byteArray[i] & 255) < (otherByteArray[i] & 255) ? -1 : 1;
+                }
+            }
+
+            return 0;
+        }
+    }
+
+    public String toString() {
+        return this.toHexString();
+    }
+
+    private static byte[] parseHexString(String s) {
+        if (!isValid(s)) {
+            throw new IllegalArgumentException("invalid hexadecimal representation of an ObjectId: [" + s + "]");
+        } else {
+            byte[] b = new byte[12];
+
+            for (int i = 0; i < b.length; ++i) {
+                b[i] = (byte) Integer.parseInt(s.substring(i * 2, i * 2 + 2), 16);
+            }
+
+            return b;
+        }
+    }
+
+    private static int dateToTimestampSeconds(Date time) {
+        return (int) (time.getTime() / 1000L);
+    }
+
+    private static int makeInt(byte b3, byte b2, byte b1, byte b0) {
+        return b3 << 24 | (b2 & 255) << 16 | (b1 & 255) << 8 | b0 & 255;
+    }
+
+    private static short makeShort(byte b1, byte b0) {
+        return (short) ((b1 & 255) << 8 | b0 & 255);
+    }
+
+    private static byte int3(int x) {
+        return (byte) (x >> 24);
+    }
+
+    private static byte int2(int x) {
+        return (byte) (x >> 16);
+    }
+
+    private static byte int1(int x) {
+        return (byte) (x >> 8);
+    }
+
+    private static byte int0(int x) {
+        return (byte) x;
+    }
+
+    private static byte short1(short x) {
+        return (byte) (x >> 8);
+    }
+
+    private static byte short0(short x) {
+        return (byte) x;
+    }
+
+    static {
+        try {
+            SecureRandom secureRandom = new SecureRandom();
+            RANDOM_VALUE1 = secureRandom.nextInt(16777216);
+            RANDOM_VALUE2 = (short) secureRandom.nextInt(32768);
+        } catch (Exception var1) {
+            throw new RuntimeException(var1);
+        }
+    }
+
+    public static <T> T notNull(String name, T value) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " can not be null");
+        } else {
+            return value;
+        }
+    }
+
+    public static void isTrueArgument(String name, boolean condition) {
+        if (!condition) {
+            throw new IllegalArgumentException("state should be: " + name);
+        }
+    }
+
+    public static <T> T isTrueArgument(String name, T value, boolean condition) {
+        if (!condition) {
+            throw new IllegalArgumentException("state should be: " + name);
+        } else {
+            return value;
+        }
+    }
+
+    public static ObjectId get() {
+        return new ObjectId();
     }
 
     /**
-     * @param val    操作值
-     * @param shift  取的位数
-     * @param offset 偏移位数
-     * @param len    取多少个
-     * @return int位上指定数量的byte
+     * 生成 mongodb ObjectId
+     * @return 24长度的十六进制字符的字符串
      */
-    private static byte[] intBitToByte(int val, int shift, int offset, int len) {
-        byte[] buf = new byte[len];
-        int mask = 1 << shift;
-        mask = mask - 1;
-        val = val >>> offset;
-        for (int i = 0; i < len; i++) {
-            buf[len - 1 - i] = (byte) (val & mask);
-            val >>>= shift;
-        }
-        return buf;
+    public static String nextId() {
+        return ObjectId.get().toString();
     }
-
 
     /**
      * 测试
@@ -122,7 +300,9 @@ public final class ObjectId {
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
         try {
-            for (int i = 0, len = 10; i < len; i++) {
+            for (int i = 0, len = 100; i < len; i++) {
+                ObjectId object = new ObjectId();
+
                 System.out.println("nextId= " + nextId());
             }
         } catch (Exception e) {
