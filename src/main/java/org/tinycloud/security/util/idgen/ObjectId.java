@@ -292,23 +292,4 @@ public final class ObjectId implements Comparable<ObjectId>, Serializable {
         return ObjectId.get().toString();
     }
 
-    /**
-     * 测试
-     *
-     * @param args
-     */
-    public static void main(String[] args) {
-        long start = System.currentTimeMillis();
-        try {
-            for (int i = 0, len = 100; i < len; i++) {
-                ObjectId object = new ObjectId();
-
-                System.out.println("nextId= " + nextId());
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        System.out.println("nextId - 10耗时: " + (System.currentTimeMillis() - start) + "ms");
-    }
-
 }
