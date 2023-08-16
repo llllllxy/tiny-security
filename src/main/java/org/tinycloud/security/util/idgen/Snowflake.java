@@ -7,9 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
-import java.util.HashSet;
 import java.util.Random;
-import java.util.Set;
 
 /**
  * 雪花算法生成分布式ID
@@ -224,37 +222,5 @@ public class Snowflake {
         return Snowflake.getInstance().generateId();
     }
 
-
-
-    /**
-     * 测试调用
-     *
-     * @param args
-     */
-    public static void main(String[] args) {
-        // 测试万条耗时
-        long start = System.currentTimeMillis();
-        for (int i = 0, len = 10000; i < len; i++) {
-            System.out.println(nextId());
-        }
-        System.out.println("10000耗时: " + (System.currentTimeMillis() - start) + "ms");
-
-        // 测试ID生成是否重复验证
-        Set<String> set = new HashSet<>();
-        try {
-            for (int i = 0; i < 10000; i++) {
-                String id = String.valueOf(nextId());
-                if (set.contains(id)) {
-                    throw new Exception(id + " exists");
-                }
-                set.add(id);
-                System.out.println(id);
-                Thread.sleep(100);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-    }
 }
 
