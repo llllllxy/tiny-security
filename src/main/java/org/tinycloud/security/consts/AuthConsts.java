@@ -11,7 +11,7 @@ public class AuthConsts {
     /**
      * 登录用户 令牌 Redis Key 前缀
      */
-    public static final String AUTH_TOKEN_KEY = "bluewind:auth:token:";
+    public static final String AUTH_TOKEN_KEY = "tinysecurity:auth:token:";
 
     // 无权限访问
     public static int CODE_NO_PERMISSION = 403;
