@@ -68,7 +68,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
             return super.preHandle(request, response, handler);
         }
 
-        // 先判断token是否为空
+        // 第一步、先从请求的request里获取传来的token值，并且判断token值是否为空
         String token = authProvider.getToken(request);
         if (logger.isInfoEnabled()) {
             logger.info("AuthenticeInterceptor -- preHandle -- token = {}", token);
@@ -77,7 +77,8 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
             // 直接抛出异常的话，就不需要return false了
             throw new UnAuthorizedException();
         }
-        // 再判断token是否存在，存在的话说明会话有效，则刷新会话时长
+
+        // 第二步、再判断此token值在会话存储器中是否存在，存在的话说明会话有效，并刷新会话时长
         if (!authProvider.checkToken(token)) {
             throw new UnAuthorizedException();
         } else {
