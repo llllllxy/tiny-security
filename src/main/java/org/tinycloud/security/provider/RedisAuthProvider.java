@@ -39,8 +39,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     /**
      * 刷新token
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true成功，false失败
      */
     @Override
     public boolean refreshToken(String token) {
@@ -55,8 +55,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     /**
      * 检查token是否失效
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true未失效，false已失效
      */
     @Override
     public boolean checkToken(String token) {
@@ -73,7 +73,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      * 创建一个新的token
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @return
+     * @return token令牌
      */
     @Override
     public String createToken(Object loginId) {
@@ -91,8 +91,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     /**
      * 根据token，获取loginId
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return loginId
      */
     @Override
     public Object getLoginId(String token) {
@@ -107,8 +107,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     /**
      * 删除token
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true成功，false失败
      */
     @Override
     public boolean deleteToken(String token) {
@@ -121,10 +121,10 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     }
 
     /**
-     * 通过loginId删除token（目前是通过keys命令模糊查询的，数据量大时会有性能问题，后续优化）
+     * 通过loginId删除token（目前是通过keys命令模糊查询的，数据量特别大时会有性能问题，后续优化）
      *
-     * @param loginId
-     * @return
+     * @param loginId 身份唯一值
+     * @return true成功，false失败
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
