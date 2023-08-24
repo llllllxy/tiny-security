@@ -8,9 +8,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 操作token和会话的接口（通过jdbc实现）
@@ -28,6 +32,9 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public JdbcAuthProvider(JdbcTemplate jdbcTemplate, AuthProperties authProperties) {
         this.jdbcTemplate = jdbcTemplate;
         this.authProperties = authProperties;
+
+        // 同时初始化定时任务
+        this.initCleanThread();
     }
 
     @Override
@@ -37,10 +44,10 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
 
 
     /**
-     * 刷新token
+     * 刷新token有效时间
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true成功，false失败
      */
     @Override
     public boolean refreshToken(String token) {
@@ -57,13 +64,13 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     /**
      * 检查token是否失效
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true未失效，false已失效
      */
     @Override
     public boolean checkToken(String token) {
         try {
-            String sql = "select token_str,login_id,token_expire_time from " + this.getAuthProperties().getTableName() + " where token_str=?";
+            String sql = "select token_expire_time from " + this.getAuthProperties().getTableName() + " where token_str=?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
             if (Objects.nonNull(resultList) && !resultList.isEmpty()) {
                 String tokenExpireTime = resultList.get(0).get("token_expire_time").toString();
@@ -80,7 +87,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
      * 创建一个新的token
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @return
+     * @return token令牌
      */
     @Override
     public String createToken(Object loginId) {
@@ -98,13 +105,13 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     /**
      * 根据token，获取loginId
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return loginId
      */
     @Override
     public Object getLoginId(String token) {
         try {
-            String sql = "select token_str,login_id,token_expire_time from " + this.getAuthProperties().getTableName() + " where token_str=?";
+            String sql = "select login_id from " + this.getAuthProperties().getTableName() + " where token_str=?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
             if (Objects.nonNull(resultList) && !resultList.isEmpty()) {
                 return resultList.get(0).get("login_id");
@@ -119,8 +126,8 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     /**
      * 删除token
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true成功，false失败
      */
     @Override
     public boolean deleteToken(String token) {
@@ -137,8 +144,8 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     /**
      * 通过loginId删除token
      *
-     * @param loginId
-     * @return
+     * @param loginId 会话id
+     * @return true成功，false失败
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
@@ -152,4 +159,50 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         }
     }
 
+    /**
+     * 用于定时执行数据清理的线程池
+     */
+    public ScheduledExecutorService executorService;
+
+    /**
+     * 初始化清理任务，每天执行一次
+     */
+    private void initCleanThread() {
+        this.executorService = Executors.newScheduledThreadPool(1);
+
+        // 获取当前时间
+        Calendar now = Calendar.getInstance();
+        // 获取明天凌晨第一秒的时间，如2023-08-25 00:00:01:000
+        Calendar tomorrow = Calendar.getInstance();
+        tomorrow.add(Calendar.DATE, 1);
+        tomorrow.set(Calendar.HOUR_OF_DAY, 0);
+        tomorrow.set(Calendar.MINUTE, 0);
+        tomorrow.set(Calendar.SECOND, 1);
+        tomorrow.set(Calendar.MILLISECOND, 0);
+        // 计算初始延迟时间（单位-毫秒）
+        long initialDelay = tomorrow.getTimeInMillis() - now.getTimeInMillis();
+
+        this.executorService.scheduleAtFixedRate(() -> {
+            log.info("JdbcAuthProvider - clean - execute at ：{}", CommonUtil.getCurrentTime());
+            try {
+                // 执行清理方法
+                this.clean();
+            } catch (Exception e2) {
+                log.error("JdbcAuthProvider - cleanThread - Exception：{e2}", e2);
+            }
+        }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*间隔时间*/, TimeUnit.MILLISECONDS);
+        log.info("JdbcAuthProvider - cleanThread - init successful!");
+    }
+
+
+    private void clean() {
+        try {
+            String sql = "delete from " + this.getAuthProperties().getTableName() + " where token_expire_time < ?";
+            String criticalTime = CommonUtil.currentTimeMinusSeconds(24 * 60 * 60);
+            int num = jdbcTemplate.update(sql, criticalTime);
+            log.info("JdbcAuthProvider - clean - num ：{}", num);
+        } catch (Exception e) {
+            log.error("JdbcAuthProvider - deleteToken - 失败，Exception：{e}", e);
+        }
+    }
 }

@@ -41,6 +41,20 @@ public class CommonUtil {
     }
 
     /**
+     * 在当前时间上减少 若干秒
+     *
+     * @param secondsCount 要减少的秒数
+     * @return 固定格式 yyyyMMddHHmmss
+     */
+    public static String currentTimeMinusSeconds(int secondsCount) {
+        LocalDateTime time = LocalDateTime.now();
+        LocalDateTime newTime = time.minusSeconds(secondsCount); // 减少几秒
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern(TIME_FORMAT);
+        return dateTimeFormatter.format(newTime);
+    }
+
+
+    /**
      * 生成指定长度的随机字符串（包括大小写字母，数字和下划线）
      *
      * @param length 字符串的长度
@@ -67,16 +81,5 @@ public class CommonUtil {
         LocalDateTime localDateTime = LocalDateTime.parse(tempTime, dtf2);
         return localDateTime.isAfter(LocalDateTime.now());
     }
-
-
-    public static void main(String[] args) {
-
-        System.out.println(getCurrentTime());
-
-        System.out.println(currentTimePlusSeconds(30));
-
-        System.out.println(timeCompare("20230110160622"));
-    }
-
 
 }
