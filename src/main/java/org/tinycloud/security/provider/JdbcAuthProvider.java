@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -171,16 +173,11 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         this.executorService = Executors.newScheduledThreadPool(1);
 
         // 获取当前时间
-        Calendar now = Calendar.getInstance();
+        LocalDateTime now = LocalDateTime.now();
         // 获取明天凌晨第一秒的时间，如2023-08-25 00:00:01:000
-        Calendar tomorrow = Calendar.getInstance();
-        tomorrow.add(Calendar.DATE, 1);
-        tomorrow.set(Calendar.HOUR_OF_DAY, 0);
-        tomorrow.set(Calendar.MINUTE, 0);
-        tomorrow.set(Calendar.SECOND, 1);
-        tomorrow.set(Calendar.MILLISECOND, 0);
+        LocalDateTime tomorrow = now.plusDays(1).withHour(0).withMinute(0).withSecond(1).withNano(0);
         // 计算初始延迟时间（单位-毫秒）
-        long initialDelay = tomorrow.getTimeInMillis() - now.getTimeInMillis();
+        long initialDelay = ChronoUnit.MILLIS.between(now, tomorrow);
 
         this.executorService.scheduleAtFixedRate(() -> {
             log.info("JdbcAuthProvider - clean - execute at ：{}", CommonUtil.getCurrentTime());
