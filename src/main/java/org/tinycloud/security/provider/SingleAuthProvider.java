@@ -34,12 +34,12 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 数据存储集合
      */
-    public final static Map<String, Object> dataMap = new ConcurrentHashMap<String, Object>();
+    public final static Map<String, Object> dataMap = new ConcurrentHashMap<>();
 
     /**
      * 数据的过期时间存储集合 (单位: 毫秒) , 记录所有key的到期时间 [注意不是剩余存活时间]
      */
-    public final static Map<String, Long> expireMap = new ConcurrentHashMap<String, Long>();
+    public final static Map<String, Long> expireMap = new ConcurrentHashMap<>();
 
 
     // ------------------------ String 读写操作开始 ------------------------ //
@@ -266,16 +266,12 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         this.executorService.scheduleWithFixedDelay(() -> {
             log.info("SingleAuthProvider - refreshSession - successfully at ：{}", CommonUtil.getCurrentTime());
             try {
-                try {
-                    // 如果已经被标记为结束
-                    if (!refreshFlag) {
-                        return;
-                    }
-                    // 执行清理方法
-                    refreshDataMap();
-                } catch (Exception e1) {
-                    log.error("SingleAuthProvider - refreshSession - Exception：{e1}", e1);
+                // 如果已经被标记为结束
+                if (!refreshFlag) {
+                    return;
                 }
+                // 执行清理方法
+                refreshDataMap();
             } catch (Exception e2) {
                 log.error("SingleAuthProvider - refreshSession - Exception：{e2}", e2);
             }

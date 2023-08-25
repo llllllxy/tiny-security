@@ -44,9 +44,10 @@ public class AuthAutoConfiguration {
     @Bean
     public AuthProvider redisAuthProvider(StringRedisTemplate stringRedisTemplate) {
         if (stringRedisTemplate == null) {
-            logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null");
+            logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
+            return null;
         }
-        logger.info("RedisAuthProvider is running");
+        logger.info("RedisAuthProvider is running!");
         return new RedisAuthProvider(stringRedisTemplate, authProperties);
     }
 
@@ -58,9 +59,10 @@ public class AuthAutoConfiguration {
     @Bean
     public AuthProvider jdbcAuthProvider(JdbcTemplate jdbcTemplate) {
         if (jdbcTemplate == null) {
-            logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null");
+            logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null!");
+            return null;
         }
-        logger.info("JdbcAuthProvider is running");
+        logger.info("JdbcAuthProvider is running!");
         return new JdbcAuthProvider(jdbcTemplate, authProperties);
     }
 
@@ -71,7 +73,7 @@ public class AuthAutoConfiguration {
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single")
     @Bean
     public AuthProvider singleAuthProvider() {
-        logger.info("SingleAuthProvider is running");
+        logger.info("SingleAuthProvider is running!");
         return new SingleAuthProvider(authProperties);
     }
 
@@ -84,7 +86,7 @@ public class AuthAutoConfiguration {
         if (authProvider != null) {
             return new AuthenticeInterceptor(authProvider);
         } else {
-            logger.error("AuthAutoConfiguration: Bean AuthProvider Not Defined");
+            logger.error("AuthAutoConfiguration: Bean AuthProvider Not Defined!");
             return null;
         }
     }
@@ -100,7 +102,7 @@ public class AuthAutoConfiguration {
         if (permissionInfoInterface != null) {
             return new PermissionInterceptor(permissionInfoInterface);
         } else {
-            logger.error("AuthAutoConfiguration: Bean PermissionInfoInterface Not Defined");
+            logger.error("AuthAutoConfiguration: Bean PermissionInfoInterface Not Defined!");
             return null;
         }
     }
