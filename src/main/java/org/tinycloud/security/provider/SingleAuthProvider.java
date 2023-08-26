@@ -246,9 +246,8 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * 清理所有已经过期的key
      */
     public void refreshDataMap() {
-        Iterator<String> keys = expireMap.keySet().iterator();
-        while (keys.hasNext()) {
-            clearKeyByTimeout(keys.next());
+        for (String key : expireMap.keySet()) {
+            clearKeyByTimeout(key);
         }
     }
 
@@ -264,7 +263,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         this.refreshFlag = true;
         this.executorService = Executors.newScheduledThreadPool(corePoolSize);
         this.executorService.scheduleWithFixedDelay(() -> {
-            log.info("SingleAuthProvider - refreshSession - successfully at ：{}", CommonUtil.getCurrentTime());
+            log.info("SingleAuthProvider - refreshSession - at ：{}", CommonUtil.getCurrentTime());
             try {
                 // 如果已经被标记为结束
                 if (!refreshFlag) {
@@ -281,7 +280,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
 
 
     /**
-     * 结束定时任务
+     * 结束定时任务，不再定时清理过期数据
      */
     public void endRefreshThread() {
         this.refreshFlag = false;
@@ -308,8 +307,8 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 刷新token
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return  true成功，false失败
      */
     @Override
     public boolean refreshToken(String token) {
@@ -325,8 +324,8 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 检查token是否失效
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true有效，false已失效
      */
     @Override
     public boolean checkToken(String token) {
@@ -334,7 +333,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             long timeout = this.getTimeout(AuthConsts.AUTH_TOKEN_KEY + token);
             return timeout > 0;
         } catch (Exception e) {
-            log.error("RedisAuthProvider - checkToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - checkToken - 失败，Exception：{e}", e);
             return false;
         }
     }
@@ -343,7 +342,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * 创建一个新的token
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @return
+     * @return token
      */
     @Override
     public String createToken(Object loginId) {
@@ -352,7 +351,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), this.getAuthProperties().getTimeout());
             return token;
         } catch (Exception e) {
-            log.error("RedisAuthProvider - createToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - createToken - 失败，Exception：{e}", e);
             return null;
         }
     }
@@ -360,15 +359,15 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 根据token，获取loginId
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return loginId
      */
     @Override
     public Object getLoginId(String token) {
         try {
             return this.get(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - getLoginId - 失败，Exception：{e}", e);
             return null;
         }
     }
@@ -376,8 +375,8 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 删除token
      *
-     * @param token
-     * @return
+     * @param token 令牌
+     * @return true成功，false失败
      */
     @Override
     public boolean deleteToken(String token) {
@@ -385,7 +384,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             this.delete(AuthConsts.AUTH_TOKEN_KEY + token);
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - deleteToken - 失败，Exception：{e}", e);
             return false;
         }
     }
@@ -395,23 +394,20 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * 通过loginId删除token
      *
      * @param loginId 用户id
-     * @return
+     * @return true成功，false失败
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
         try {
-            Iterator<String> keys = expireMap.keySet().iterator();
-            while (keys.hasNext()) {
-                String key = keys.next();
+            for (String key : expireMap.keySet()) {
                 if (Objects.nonNull(loginId) && loginId.equals(dataMap.get(key))) {
                     dataMap.remove(key);
                     expireMap.remove(key);
                 }
             }
-            // 暂未实现
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - deleteTokenByLoginId - 失败，Exception：{e}", e);
             return false;
         }
     }

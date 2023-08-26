@@ -1,6 +1,6 @@
 package org.tinycloud.security.util.idgen;
 
-import org.tinycloud.security.util.LocalHostUtils;
+import org.tinycloud.security.util.LocalHostUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -141,7 +141,7 @@ public class Snowflake {
         if (snowflake == null) {
             synchronized (lock) {
                 if (snowflake == null) {
-                    snowflake = new Snowflake(LocalHostUtils.getInetAddress());
+                    snowflake = new Snowflake(LocalHostUtil.getInetAddress());
                 }
             }
         }

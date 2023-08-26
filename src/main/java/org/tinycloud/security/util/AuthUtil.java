@@ -23,7 +23,7 @@ public class AuthUtil {
     /**
      * 获取当前请求对象
      *
-     * @return
+     * @return HttpServletRequest
      */
     public static HttpServletRequest getRequest() {
         HttpServletRequest request = null;
@@ -38,7 +38,7 @@ public class AuthUtil {
     /**
      * 获取当前响应对象
      *
-     * @return
+     * @return HttpServletResponse
      */
     public static HttpServletResponse getResponse() {
         HttpServletResponse response = null;
@@ -54,7 +54,7 @@ public class AuthUtil {
     /**
      * 获取用户token
      *
-     * @return
+     * @return token
      */
     public static String getToken(String tokenName) {
         HttpServletRequest request = null;
@@ -79,23 +79,19 @@ public class AuthUtil {
     /**
      * 获取用户token
      *
-     * @return
+     * @return token
      */
     public static String getToken(HttpServletRequest request, String tokenName) {
-        try {
-            // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
-            String token = request.getHeader(tokenName);
-            if (StringUtils.isEmpty(token)) {
-                token = CookieUtil.getCookie(request, tokenName);
-            }
-            // cookie里取不到，再从请求参数里面取
-            if (StringUtils.isEmpty(token)) {
-                token = request.getParameter(tokenName);
-            }
-            return token;
-        } catch (Exception e) {
-            return null;
+        // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
+        String token = request.getHeader(tokenName);
+        if (StringUtils.isEmpty(token)) {
+            token = CookieUtil.getCookie(request, tokenName);
         }
+        // cookie里取不到，再从请求参数里面取
+        if (StringUtils.isEmpty(token)) {
+            token = request.getParameter(tokenName);
+        }
+        return token;
     }
 
 
