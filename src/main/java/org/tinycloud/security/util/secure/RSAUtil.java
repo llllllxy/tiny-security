@@ -7,6 +7,8 @@ import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * RSA 加密工具类 用于前后端密码密文传输
@@ -88,7 +90,7 @@ public class RSAUtil {
      *
      * @return 生成后的公私钥信息
      */
-    public static RsaKeyPair generateKeyPair() throws NoSuchAlgorithmException {
+    public static Map<String, String> generateKeyPair() throws NoSuchAlgorithmException {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
         KeyPair keyPair = keyPairGenerator.generateKeyPair();
@@ -96,38 +98,11 @@ public class RSAUtil {
         RSAPrivateKey rsaPrivateKey = (RSAPrivateKey) keyPair.getPrivate();
         String publicKeyString = Base64.getEncoder().encodeToString(rsaPublicKey.getEncoded());
         String privateKeyString = Base64.getEncoder().encodeToString(rsaPrivateKey.getEncoded());
-        return new RsaKeyPair(publicKeyString, privateKeyString);
+        return new HashMap<String,String>(){{
+            put("publicKey", publicKeyString);
+            put("privateKey", privateKeyString);
+        }};
     }
-
-    /**
-     * RSA密钥对对象
-     */
-    public static class RsaKeyPair {
-        private final String publicKey;
-        private final String privateKey;
-
-        public RsaKeyPair(String publicKey, String privateKey) {
-            this.publicKey = publicKey;
-            this.privateKey = privateKey;
-        }
-
-        public String getPublicKey() {
-            return publicKey;
-        }
-
-        public String getPrivateKey() {
-            return privateKey;
-        }
-
-        @Override
-        public String toString() {
-            return "RsaKeyPair{\n" +
-                    "publicKey = " + publicKey  + "\n" +
-                    "privateKey = " + privateKey + "\n" +
-                    "}";
-        }
-    }
-
 
 
     /**
@@ -136,9 +111,9 @@ public class RSAUtil {
      * @throws NoSuchAlgorithmException
      */
     public static void main(String[] args) throws Exception {
-        RsaKeyPair pair = generateKeyPair();
-        String publicKey = pair.getPublicKey();
-        String privateKey = pair.getPrivateKey();
+        Map<String, String> pair = generateKeyPair();
+        String publicKey = pair.get("publicKey");
+        String privateKey = pair.get("privateKey");
 
         // 使用公钥加密
         String encryptedValue = encryptByPublicKey(publicKey, "abcdefg");

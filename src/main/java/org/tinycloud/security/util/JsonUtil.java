@@ -34,7 +34,7 @@ public class JsonUtil {
                 return objectMapper.writeValueAsString(value);
             } catch (JsonProcessingException e) {
                 if (log.isErrorEnabled()) {
-                    log.error("JsonUtils -- writeValueAsString -- Exception=", e);
+                    log.error("JsonUtil -- writeValueAsString -- Exception=", e);
                 }
             }
         }
@@ -56,7 +56,7 @@ public class JsonUtil {
                 return objectMapper.readValue(content, valueType);
             } catch (IOException e) {
                 if (log.isErrorEnabled()) {
-                    log.error("JsonUtils -- readValue -- Exception=", e);
+                    log.error("JsonUtil -- readValue -- Exception=", e);
                 }
             }
         }
@@ -78,7 +78,7 @@ public class JsonUtil {
                 return objectMapper.readValue(content, valueTypeRef);
             } catch (IOException e) {
                 if (log.isErrorEnabled()) {
-                    log.error("JsonUtils -- readValue -- Exception=", e);
+                    log.error("JsonUtil -- readValue -- Exception=", e);
                 }
             }
         }
@@ -100,7 +100,7 @@ public class JsonUtil {
                 return objectMapper.readValue(src, valueType);
             } catch (IOException e) {
                 if (log.isErrorEnabled()) {
-                    log.error("JsonUtils -- readValue -- Exception=", e);
+                    log.error("JsonUtil -- readValue -- Exception=", e);
                 }
             }
         }
@@ -121,7 +121,7 @@ public class JsonUtil {
                 return objectMapper.readValue(content, objectMapper.getTypeFactory().constructParametricType(ArrayList.class, clazz));
             } catch (Exception e) {
                 if (log.isErrorEnabled()) {
-                    log.error("JsonUtils -- readArrayValue -- Exception=", e);
+                    log.error("JsonUtil -- readArrayValue -- Exception=", e);
                 }
             }
         }
