@@ -1,6 +1,7 @@
 package org.tinycloud.security.provider;
 
 
+import org.springframework.util.Assert;
 import org.tinycloud.security.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.CommonUtil;
@@ -308,15 +309,16 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * 刷新token
      *
      * @param token 令牌
-     * @return  true成功，false失败
+     * @return true成功，false失败
      */
     @Override
     public boolean refreshToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             this.updateTimeout(AuthConsts.AUTH_TOKEN_KEY + token, this.getAuthProperties().getTimeout());
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - refreshToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - refreshToken - failed，Exception：{e}", e);
             return false;
         }
     }
@@ -329,11 +331,12 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      */
     @Override
     public boolean checkToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             long timeout = this.getTimeout(AuthConsts.AUTH_TOKEN_KEY + token);
             return timeout > 0;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - checkToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - checkToken - failed，Exception：{e}", e);
             return false;
         }
     }
@@ -346,12 +349,13 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      */
     @Override
     public String createToken(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String token = TokenGenUtil.genTokenStr(this.getAuthProperties().getTokenStyle());
             this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), this.getAuthProperties().getTimeout());
             return token;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - createToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - createToken - failed，Exception：{e}", e);
             return null;
         }
     }
@@ -364,10 +368,11 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      */
     @Override
     public Object getLoginId(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             return this.get(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("SingleAuthProvider - getLoginId - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - getLoginId - failed，Exception：{e}", e);
             return null;
         }
     }
@@ -380,11 +385,12 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      */
     @Override
     public boolean deleteToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             this.delete(AuthConsts.AUTH_TOKEN_KEY + token);
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - deleteToken - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - deleteToken - failed，Exception：{e}", e);
             return false;
         }
     }
@@ -398,16 +404,17 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             for (String key : expireMap.keySet()) {
-                if (Objects.nonNull(loginId) && loginId.equals(dataMap.get(key))) {
+                if (loginId.equals(dataMap.get(key))) {
                     dataMap.remove(key);
                     expireMap.remove(key);
                 }
             }
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - deleteTokenByLoginId - 失败，Exception：{e}", e);
+            log.error("SingleAuthProvider - deleteTokenByLoginId - failed，Exception：{e}", e);
             return false;
         }
     }

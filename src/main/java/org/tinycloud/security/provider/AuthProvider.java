@@ -96,5 +96,10 @@ public interface AuthProvider {
      */
     Object getLoginId();
 
+    /**
+     * 校验当前会话是否登录
+     * @return true已登录，false未登录
+     */
+    boolean isLogin();
     /*============================操作会话结束=============================*/
 }
