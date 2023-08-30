@@ -1,6 +1,5 @@
 package org.tinycloud.security.provider;
 
-
 import org.tinycloud.security.AuthProperties;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
@@ -69,5 +68,14 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     @Override
     public Object getLoginId() {
         return this.getLoginId(this.getToken());
+    }
+
+    /**
+     * 校验当前会话是否登录
+     * @return true已登录，false未登录
+     */
+    @Override
+    public boolean isLogin() {
+        return this.checkToken(this.getToken());
     }
 }

@@ -1,6 +1,7 @@
 package org.tinycloud.security.provider;
 
 
+import org.springframework.util.Assert;
 import org.tinycloud.security.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.TokenGenUtil;
@@ -44,10 +45,11 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     @Override
     public boolean refreshToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             return redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, authProperties.getTimeout(), TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.error("RedisAuthProvider - refreshToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider refreshToken failed, Exception：{e}", e);
             return false;
         }
     }
@@ -60,10 +62,11 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     @Override
     public boolean checkToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             return redisTemplate.hasKey(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthProvider - checkToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider checkToken failed, Exception：{e}", e);
             return false;
         }
     }
@@ -77,12 +80,13 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     @Override
     public String createToken(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String token = TokenGenUtil.genTokenStr(getAuthProperties().getTokenStyle());
             redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), getAuthProperties().getTimeout(), TimeUnit.SECONDS);
             return token;
         } catch (Exception e) {
-            log.error("RedisAuthProvider - createToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider createToken failed, Exception：{e}", e);
             return null;
         }
     }
@@ -96,10 +100,11 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     @Override
     public Object getLoginId(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             return redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthProvider - getLoginId - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider getLoginId failed, Exception：{e}", e);
             return null;
         }
     }
@@ -112,10 +117,11 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     @Override
     public boolean deleteToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
         try {
             return redisTemplate.delete(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
-            log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider deleteToken failed, Exception：{e}", e);
             return false;
         }
     }
@@ -128,6 +134,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     @Override
     public boolean deleteTokenByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             Set<String> keys = redisTemplate.keys(AuthConsts.AUTH_TOKEN_KEY.concat("*"));
             if (Objects.nonNull(keys) && !keys.isEmpty()) {
@@ -140,7 +147,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             }
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider - deleteToken - 失败，Exception：{e}", e);
+            log.error("RedisAuthProvider deleteToken failed, Exception：{e}", e);
             return false;
         }
     }
