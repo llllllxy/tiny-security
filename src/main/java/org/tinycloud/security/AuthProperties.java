@@ -11,8 +11,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "tiny-security")
 public class AuthProperties {
 
-    private Boolean enable;
-
     private String storeType = "redis";
 
     private String tokenName = "token";
@@ -24,14 +22,6 @@ public class AuthProperties {
     private String tokenPrefix;
 
     private String tableName = "s_auth_token";
-
-    public Boolean getEnable() {
-        return enable;
-    }
-
-    public void setEnable(Boolean enable) {
-        this.enable = enable;
-    }
 
     public String getStoreType() {
         return storeType;
