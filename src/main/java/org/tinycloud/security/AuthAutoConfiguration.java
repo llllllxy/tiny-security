@@ -21,14 +21,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * <p>
- *   tiny-security 自动配置类
+ * tiny-security 自动配置类
  * </p>
+ *
  * @author liuxingyu01
- * @since  2022-12-13 11:45
+ * @since 2022-12-13 11:45
  **/
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-@ConditionalOnProperty(name = "tiny-security.enable", havingValue = "true")
 public class AuthAutoConfiguration {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
@@ -70,7 +70,7 @@ public class AuthAutoConfiguration {
      * 注入singleAuthProvider
      */
     @ConditionalOnMissingBean(AuthProvider.class)
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single")
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
     @Bean
     public AuthProvider singleAuthProvider() {
         logger.info("SingleAuthProvider is running!");
