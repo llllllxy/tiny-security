@@ -6,8 +6,6 @@ import org.tinycloud.security.interceptor.holder.PermissionHolder;
 import org.tinycloud.security.interceptor.holder.RoleHolder;
 import org.tinycloud.security.interfaces.PermissionInfoInterface;
 import org.tinycloud.security.util.AuthUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.ModelAndView;
@@ -25,7 +23,6 @@ import java.util.Set;
  * @version  2020-03-22-11:23
  **/
 public class PermissionInterceptor extends HandlerInterceptorAdapter {
-    final static Logger logger = LoggerFactory.getLogger(PermissionInterceptor.class);
 
     /**
      * 权限角色信息
@@ -67,10 +64,7 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
         Object loginId = AuthenticeHolder.getLoginId();
         Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(loginId);
         Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(loginId);
-        // 打印权限编码和角色编码，后续框架稳定后可以删除
-        if (logger.isInfoEnabled()) {
-            logger.info("PermissionInterceptor -- preHandle -- permissionSet = {}， roleSet = {}", permissionSet, roleSet);
-        }
+
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
 
