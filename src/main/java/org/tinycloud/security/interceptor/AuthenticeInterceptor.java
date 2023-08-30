@@ -4,8 +4,6 @@ import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.util.AuthUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.ModelAndView;
@@ -23,7 +21,6 @@ import java.lang.reflect.Method;
  * @version 2020-03-22-11:23
  **/
 public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
-    final static Logger logger = LoggerFactory.getLogger(AuthenticeInterceptor.class);
 
     /**
      * 存储会话的接口
@@ -31,7 +28,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
     private AuthProvider authProvider;
 
     public AuthProvider getAuthProvider() {
-        return authProvider;
+        return this.authProvider;
     }
 
     public void setAuthProvider(AuthProvider authProvider) {
@@ -69,22 +66,19 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
         }
 
         // 第一步、先从请求的request里获取传来的token值，并且判断token值是否为空
-        String token = authProvider.getToken(request);
-        if (logger.isInfoEnabled()) {
-            logger.info("AuthenticeInterceptor -- preHandle -- token = {}", token);
-        }
+        String token = this.getAuthProvider().getToken(request);
         if (StringUtils.isEmpty(token)) {
             // 直接抛出异常的话，就不需要return false了
             throw new UnAuthorizedException();
         }
 
         // 第二步、再判断此token值在会话存储器中是否存在，存在的话说明会话有效，并刷新会话时长
-        if (!authProvider.checkToken(token)) {
+        if (!this.getAuthProvider().checkToken(token)) {
             throw new UnAuthorizedException();
         } else {
-            authProvider.refreshToken(token);
+            this.getAuthProvider().refreshToken(token);
             // 存入LoginId，以方便后续使用
-            AuthenticeHolder.setLoginId(authProvider.getLoginId(token));
+            AuthenticeHolder.setLoginId(this.getAuthProvider().getLoginId(token));
             // 合格不需要拦截，放行
             return super.preHandle(request, response, handler);
         }
@@ -97,7 +91,6 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) {
-        // logger.info("AuthenticeInterceptor -- postHandle -- 执行了");
     }
 
     /*
@@ -105,7 +98,6 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        // logger.info("AuthenticeInterceptor -- afterCompletion -- 执行了");
         AuthenticeHolder.clearLoginId();
     }
 }

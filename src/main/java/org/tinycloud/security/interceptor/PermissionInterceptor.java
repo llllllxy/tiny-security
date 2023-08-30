@@ -65,8 +65,8 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
 
         Method method = ((HandlerMethod) handler).getMethod();
         Object loginId = AuthenticeHolder.getLoginId();
-        Set<String> roleSet = permissionInfoInterface.getRoleSet(loginId);
-        Set<String> permissionSet = permissionInfoInterface.getPermissionSet(loginId);
+        Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(loginId);
+        Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(loginId);
         // 打印权限编码和角色编码，后续框架稳定后可以删除
         if (logger.isInfoEnabled()) {
             logger.info("PermissionInterceptor -- preHandle -- permissionSet = {}， roleSet = {}", permissionSet, roleSet);
