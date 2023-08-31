@@ -1,5 +1,6 @@
 package org.tinycloud.security.util;
 
+import org.tinycloud.security.util.idgen.NanoId;
 import org.tinycloud.security.util.idgen.ObjectId;
 import org.tinycloud.security.util.idgen.Snowflake;
 
@@ -21,6 +22,8 @@ public class TokenGenUtil {
 
     final static String TOKEN_STYLE_RANDOM128 = "random128";
 
+    final static String TOKEN_STYLE_NANOID = "nanoid";
+
     /**
      * 根据参数生存不同风格的token字符串
      *
@@ -41,6 +44,9 @@ public class TokenGenUtil {
                 break;
             case TOKEN_STYLE_RANDOM128:
                 token = CommonUtil.getRandomString(128);
+                break;
+            case TOKEN_STYLE_NANOID:
+                token = NanoId.INSTANCE.randomNanoId();
                 break;
             default:
                 token = UUID.randomUUID().toString().replaceAll("-", "");
