@@ -28,7 +28,6 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     final static Logger log = LoggerFactory.getLogger(JdbcAuthProvider.class);
 
     private final JdbcTemplate jdbcTemplate;
-
     private final AuthProperties authProperties;
 
     public JdbcAuthProvider(JdbcTemplate jdbcTemplate, AuthProperties authProperties) {
@@ -193,7 +192,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             } catch (Exception e2) {
                 log.error("JdbcAuthProvider cleanThread Exception: {e2}", e2);
             }
-        }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*间隔时间*/, TimeUnit.MILLISECONDS);
+        }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
         log.info("JdbcAuthProvider cleanThread init successful!");
     }
 

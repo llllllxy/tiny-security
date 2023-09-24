@@ -1,6 +1,5 @@
 package org.tinycloud.security.provider;
 
-
 import org.springframework.util.Assert;
 import org.tinycloud.security.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
@@ -23,7 +22,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     final static Logger log = LoggerFactory.getLogger(SingleAuthProvider.class);
 
     /**
-     * 常量，每次清理过期数据间隔的时间 (单位: 秒) ，默认值30秒，设置为-1代表不启动定时清理------这里暂时先写死
+     * 常量，每次清理过期数据间隔的时间 (单位: 秒) ，默认值30秒
      */
     final static int DATA_REFRESH_PERIOD = 30;
 
@@ -256,10 +255,6 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * 初始化定时任务
      */
     public void initRefreshThread() {
-        // 如果配置了<=0的值，则不启动定时清理
-        if (SingleAuthProvider.DATA_REFRESH_PERIOD <= 0) {
-            return;
-        }
         // 启动定时刷新
         this.refreshFlag = true;
         this.executorService = Executors.newScheduledThreadPool(corePoolSize);
