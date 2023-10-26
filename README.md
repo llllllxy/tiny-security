@@ -30,7 +30,7 @@ tiny-security-boot-starter是一个基于SpringBoot开发的轻量级权限控�
 <dependency>
     <groupId>org.tinycloud</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0.4</version>
 </dependency>
 ```
 
