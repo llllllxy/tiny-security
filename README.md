@@ -8,6 +8,18 @@
 	<a target="_blank" href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">
 		<img src="https://img.shields.io/badge/JDK-8+-blue.svg" />
 	</a>
+    <a href="https://github.com/llllllxy/tiny-security-boot-starter/stargazers">
+       <img src="https://img.shields.io/github/stars/llllllxy/tiny-security-boot-starter?style=flat-square&logo=GitHub">
+    </a>
+    <a href="https://github.com/llllllxy/tiny-security-boot-starter/network/members">
+        <img src="https://img.shields.io/github/forks/llllllxy/tiny-security-boot-starter?style=flat-square&logo=GitHub">
+    </a>
+    <a href="https://github.com/llllllxy/tiny-security-boot-starter/watchers">
+        <img src="https://img.shields.io/github/watchers/llllllxy/tiny-security-boot-starter?style=flat-square&logo=GitHub">
+    </a>
+    <a href="https://github.com/llllllxy/tiny-security-boot-starter/issues">
+        <img src="https://img.shields.io/github/issues/llllllxy/tiny-security-boot-starter.svg?style=flat-square&logo=GitHub">
+    </a>
     <a href='https://gitee.com/leisureLXY/tiny-security-boot-starter'>
         <img src='https://gitee.com/leisureLXY/tiny-security-boot-starter/badge/star.svg?theme=dark' alt='star' />
     </a>
