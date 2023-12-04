@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 操作token和会话的接口（通过jdbc实现）
- *了
+ * 了
+ *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
@@ -169,30 +170,36 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     /**
      * 用于定时执行数据清理的线程池
      */
-    public ScheduledExecutorService executorService;
+    private volatile ScheduledExecutorService executorService;
 
     /**
      * 初始化清理任务，每天执行一次
      */
     private void initCleanThread() {
-        this.executorService = Executors.newScheduledThreadPool(1);
-
-        // 获取当前时间
-        LocalDateTime now = LocalDateTime.now();
-        // 获取明天凌晨第一秒的时间，如2023-08-25 00:00:01:000
-        LocalDateTime tomorrow = now.plusDays(1).withHour(0).withMinute(0).withSecond(1).withNano(0);
-        // 计算初始延迟时间（单位-毫秒）
-        long initialDelay = ChronoUnit.MILLIS.between(now, tomorrow);
-
-        this.executorService.scheduleAtFixedRate(() -> {
-            log.info("JdbcAuthProvider clean execute at: {}", CommonUtil.getCurrentTime());
-            try {
-                // 执行清理方法
-                this.clean();
-            } catch (Exception e2) {
-                log.error("JdbcAuthProvider cleanThread Exception: {e2}", e2);
+        // 双重校验构造一个单例的ScheduledThreadPool
+        if (this.executorService == null) {
+            synchronized (JdbcAuthProvider.class) {
+                if (this.executorService == null) {
+                    this.executorService = Executors.newScheduledThreadPool(1);
+                    // 获取当前时间
+                    LocalDateTime now = LocalDateTime.now();
+                    // 获取明天凌晨第一秒的时间，如2023-08-25 00:00:01:000
+                    LocalDateTime tomorrow = now.plusDays(1).withHour(0).withMinute(0).withSecond(1).withNano(0);
+                    // 计算初始延迟时间（单位-毫秒）
+                    long initialDelay = ChronoUnit.MILLIS.between(now, tomorrow);
+                    this.executorService.scheduleAtFixedRate(() -> {
+                        log.info("JdbcAuthProvider clean execute at: {}", CommonUtil.getCurrentTime());
+                        try {
+                            // 执行清理方法
+                            this.clean();
+                        } catch (Exception e2) {
+                            log.error("JdbcAuthProvider cleanThread Exception: {e2}", e2);
+                        }
+                    }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
+                }
             }
-        }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
+        }
+
         log.info("JdbcAuthProvider cleanThread init successful!");
     }
 

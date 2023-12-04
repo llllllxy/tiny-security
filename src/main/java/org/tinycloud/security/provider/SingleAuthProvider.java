@@ -230,17 +230,17 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 线程池核心线程数最大值
      */
-    public static final int corePoolSize = 5;
+    private static final int corePoolSize = 5;
 
     /**
      * 用于定时执行数据清理的线程池
      */
-    public ScheduledExecutorService executorService;
+    private volatile ScheduledExecutorService executorService;
 
     /**
      * 是否继续执行数据清理的线程标记
      */
-    public volatile boolean refreshFlag;
+    private volatile boolean refreshFlag;
 
     /**
      * 清理所有已经过期的key
@@ -257,20 +257,27 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public void initRefreshThread() {
         // 启动定时刷新
         this.refreshFlag = true;
-        this.executorService = Executors.newScheduledThreadPool(corePoolSize);
-        this.executorService.scheduleWithFixedDelay(() -> {
-            log.info("SingleAuthProvider - refreshSession - at ：{}", CommonUtil.getCurrentTime());
-            try {
-                // 如果已经被标记为结束
-                if (!refreshFlag) {
-                    return;
+        // 双重校验构造一个单例的ScheduledThreadPool
+        if (this.executorService == null) {
+            synchronized (SingleAuthProvider.class) {
+                if (this.executorService == null) {
+                    this.executorService = Executors.newScheduledThreadPool(corePoolSize);
+                    this.executorService.scheduleWithFixedDelay(() -> {
+                        log.info("SingleAuthProvider - refreshSession - at ：{}", CommonUtil.getCurrentTime());
+                        try {
+                            // 如果已经被标记为结束
+                            if (!refreshFlag) {
+                                return;
+                            }
+                            // 执行清理方法
+                            refreshDataMap();
+                        } catch (Exception e2) {
+                            log.error("SingleAuthProvider - refreshSession - Exception：{e2}", e2);
+                        }
+                    }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
                 }
-                // 执行清理方法
-                refreshDataMap();
-            } catch (Exception e2) {
-                log.error("SingleAuthProvider - refreshSession - Exception：{e2}", e2);
             }
-        }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
+        }
         log.info("SingleAuthProvider - refreshThread - init successful!");
     }
 
