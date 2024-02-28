@@ -42,7 +42,7 @@ tiny-security-boot-starter是一个基于SpringBoot开发的轻量级权限控�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
 </dependency>
 ```
 
