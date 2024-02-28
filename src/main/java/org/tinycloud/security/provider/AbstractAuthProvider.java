@@ -12,7 +12,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
 
     /**
      * 获取token
-     * @return
+     * @return token
      */
     @Override
     public String getToken() {
@@ -23,7 +23,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     /**
      * 获取token
      * @param request HttpServletRequest
-     * @return
+     * @return token
      */
     @Override
     public String getToken(HttpServletRequest request) {
@@ -63,7 +63,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     /**
      * 获取当前登录用户的loginId
      *
-     * @return
+     * @return loginId
      */
     @Override
     public Object getLoginId() {
