@@ -3,6 +3,7 @@ package org.tinycloud.security.util;
 import org.tinycloud.security.util.idgen.NanoId;
 import org.tinycloud.security.util.idgen.ObjectId;
 import org.tinycloud.security.util.idgen.Snowflake;
+import org.tinycloud.security.util.idgen.ulid.UlidCreator;
 
 import java.util.UUID;
 
@@ -15,6 +16,8 @@ import java.util.UUID;
 public class TokenGenUtil {
 
     final static String TOKEN_STYLE_UUID = "uuid";
+
+    final static String TOKEN_STYLE_ULID = "ulid";
 
     final static String TOKEN_STYLE_SNOWFLAKE = "snowflake";
 
@@ -35,6 +38,9 @@ public class TokenGenUtil {
         switch (tokenStyle) {
             case TOKEN_STYLE_UUID:
                 token = UUID.randomUUID().toString().replace("-", "");
+                break;
+            case TOKEN_STYLE_ULID:
+                token = UlidCreator.getUlid().toLowerCase();
                 break;
             case TOKEN_STYLE_SNOWFLAKE:
                 token = Snowflake.nextId();
