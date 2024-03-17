@@ -34,6 +34,9 @@ public class TokenGenUtil {
      * @return token字符串
      */
     public static String genTokenStr(String tokenStyle) {
+        if (tokenStyle == null || tokenStyle.isEmpty()) {
+            tokenStyle = TOKEN_STYLE_UUID;
+        }
         String token;
         switch (tokenStyle) {
             case TOKEN_STYLE_UUID:
