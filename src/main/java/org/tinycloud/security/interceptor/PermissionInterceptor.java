@@ -1,5 +1,6 @@
 package org.tinycloud.security.interceptor;
 
+import org.springframework.web.servlet.HandlerInterceptor;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
@@ -9,7 +10,6 @@ import org.tinycloud.security.util.AuthUtil;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.ModelAndView;
-import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -22,7 +22,7 @@ import java.util.Set;
  * @author liuxingyu01
  * @version  2020-03-22-11:23
  **/
-public class PermissionInterceptor extends HandlerInterceptorAdapter {
+public class PermissionInterceptor implements HandlerInterceptor {
 
     /**
      * 权限角色信息
@@ -50,14 +50,14 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if (!(handler instanceof HandlerMethod)) {
-            return super.preHandle(request, response, handler);
+            return true;
         }
 
         // 判断请求类型，如果是OPTIONS，直接返回
         String options = HttpMethod.OPTIONS.toString();
         if (options.equals(request.getMethod())) {
             response.setStatus(HttpServletResponse.SC_OK);
-            return super.preHandle(request, response, handler);
+            return true;
         }
 
         Method method = ((HandlerMethod) handler).getMethod();
@@ -69,7 +69,7 @@ public class PermissionInterceptor extends HandlerInterceptorAdapter {
         PermissionHolder.setPermissionSet(permissionSet);
 
         if (AuthUtil.checkPermission(method, permissionSet) && AuthUtil.checkRole(method, roleSet)) {
-            return super.preHandle(request, response, handler);
+            return true;
         } else {
             // 权限和角色校验不通过
             // 直接抛出异常的话，就不需要return false了

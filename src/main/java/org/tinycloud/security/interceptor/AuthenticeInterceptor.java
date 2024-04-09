@@ -1,5 +1,6 @@
 package org.tinycloud.security.interceptor;
 
+import org.springframework.web.servlet.HandlerInterceptor;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.provider.AuthProvider;
@@ -8,7 +9,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.util.StringUtils;
-import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -20,7 +20,7 @@ import java.lang.reflect.Method;
  * @author liuxingyu01
  * @version 2020-03-22-11:23
  **/
-public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
+public class AuthenticeInterceptor implements HandlerInterceptor {
 
     /**
      * 存储会话的接口
@@ -49,20 +49,20 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if (!(handler instanceof HandlerMethod)) {
-            return super.preHandle(request, response, handler);
+            return true;
         }
 
         // 判断请求类型，如果是OPTIONS，直接返回
         String options = HttpMethod.OPTIONS.toString();
         if (options.equals(request.getMethod())) {
             response.setStatus(HttpServletResponse.SC_OK);
-            return super.preHandle(request, response, handler);
+            return true;
         }
 
         // 检查是否忽略会话验证
         Method method = ((HandlerMethod) handler).getMethod();
         if (AuthUtil.checkIgnore(method)) {
-            return super.preHandle(request, response, handler);
+            return true;
         }
 
         // 第一步、先从请求的request里获取传来的token值，并且判断token值是否为空
@@ -80,7 +80,7 @@ public class AuthenticeInterceptor extends HandlerInterceptorAdapter {
             // 存入LoginId，以方便后续使用
             AuthenticeHolder.setLoginId(this.getAuthProvider().getLoginId(token));
             // 合格不需要拦截，放行
-            return super.preHandle(request, response, handler);
+            return true;
         }
     }
 
