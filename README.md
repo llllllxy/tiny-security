@@ -1,4 +1,4 @@
-<h1 align="center">tiny-security-boot-starter</h1>
+<h1 align="center">tiny-security</h1>
 
 
 <p align="center">
@@ -8,27 +8,27 @@
 	<a target="_blank" href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">
 		<img src="https://img.shields.io/badge/JDK-8+-blue.svg" />
 	</a>
-    <a href="https://github.com/llllllxy/tiny-security-boot-starter/stargazers">
-       <img src="https://img.shields.io/github/stars/llllllxy/tiny-security-boot-starter?style=flat-square&logo=GitHub">
+    <a href="https://github.com/llllllxy/tiny-security/stargazers">
+       <img src="https://img.shields.io/github/stars/llllllxy/tiny-security?style=flat-square&logo=GitHub">
     </a>
-    <a href="https://github.com/llllllxy/tiny-security-boot-starter/network/members">
-        <img src="https://img.shields.io/github/forks/llllllxy/tiny-security-boot-starter?style=flat-square&logo=GitHub">
+    <a href="https://github.com/llllllxy/tiny-security/network/members">
+        <img src="https://img.shields.io/github/forks/llllllxy/tiny-security?style=flat-square&logo=GitHub">
     </a>
-    <a href="https://github.com/llllllxy/tiny-security-boot-starter/watchers">
-        <img src="https://img.shields.io/github/watchers/llllllxy/tiny-security-boot-starter?style=flat-square&logo=GitHub">
+    <a href="https://github.com/llllllxy/tiny-security/watchers">
+        <img src="https://img.shields.io/github/watchers/llllllxy/tiny-security?style=flat-square&logo=GitHub">
     </a>
-    <a href="https://github.com/llllllxy/tiny-security-boot-starter/issues">
-        <img src="https://img.shields.io/github/issues/llllllxy/tiny-security-boot-starter.svg?style=flat-square&logo=GitHub">
+    <a href="https://github.com/llllllxy/tiny-security/issues">
+        <img src="https://img.shields.io/github/issues/llllllxy/tiny-security.svg?style=flat-square&logo=GitHub">
     </a>
-    <a href='https://gitee.com/leisureLXY/tiny-security-boot-starter'>
-        <img src='https://gitee.com/leisureLXY/tiny-security-boot-starter/badge/star.svg?theme=dark' alt='star' />
+    <a href='https://gitee.com/leisureLXY/tiny-security'>
+        <img src='https://gitee.com/leisureLXY/tiny-security/badge/star.svg?theme=dark' alt='star' />
     </a>
     <br />
 </p>
 
 ## 1、简介
 
-tiny-security-boot-starter是一个基于SpringBoot开发的轻量级权限控制框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
+tiny-security是一个基于SpringBoot开发的轻量级权限控制框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
 支持redis、jdbc和单机session多种会话存储方式（亦可自行扩展存储方式）；前后端分离项目、不分离项目均可使用，功能完善、使用简单，文档清晰，让认证鉴权这件事变得更加简单！
 
 ---
@@ -42,7 +42,7 @@ tiny-security-boot-starter是一个基于SpringBoot开发的轻量级权限控�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.0.6</version>
+    <version>1.0.7</version>
 </dependency>
 ```
 
@@ -80,7 +80,7 @@ tiny-security:
 ```
 
 #### 2.1.3、其他自定义配置
-1. 配置会话拦截器和权限角色拦截器，以`SpringBoot2.0`为例, 新建配置类`WebMvcConfig.java`，两个拦截器的拦截路由规则可自行配置
+1. 配置会话拦截器和权限角色拦截器，以`SpringBoot2.0`版本为例, 新建配置类`WebMvcConfig.java`，两个拦截器的拦截路由规则可自行配置
 ```java
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {

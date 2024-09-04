@@ -3,6 +3,7 @@ package org.tinycloud.security.provider;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.util.CommonUtil;
+import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.TokenGenUtil;
 
 import org.slf4j.Logger;
@@ -54,6 +55,19 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         }
     }
 
+    @Override
+    public boolean refreshToken(String token, LoginSubject subject) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set token_expire_time = ?, login_subject = ? where token_str = ?";
+            int num = jdbcTemplate.update(sql, CommonUtil.currentTimePlusSeconds(GlobalConfigUtils.getGlobalConfig().getTimeout()), JsonUtil.writeValueAsString(subject), token);
+            return num > 0;
+        } catch (Exception e) {
+            log.error("JdbcAuthProvider refreshToken failed, Exception: {e}", e);
+            return false;
+        }
+    }
+
     /**
      * 检查token是否失效
      *
@@ -77,6 +91,24 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         }
     }
 
+    @Override
+    public LoginSubject getSubject(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            String sql = "select login_subject from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str=?";
+            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
+            if (!resultList.isEmpty()) {
+                String content = resultList.get(0).get("login_subject").toString();
+                return JsonUtil.readValue(content, LoginSubject.class);
+            }
+            return null;
+
+        } catch (Exception e) {
+            log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
+            return null;
+        }
+    }
+
     /**
      * 创建一个新的token
      *
@@ -88,8 +120,13 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
-            String sql = "insert into " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (token_str,login_id,token_expire_time) values (?,?,?)";
-            int num = jdbcTemplate.update(sql, token, String.valueOf(loginId), CommonUtil.currentTimePlusSeconds(GlobalConfigUtils.getGlobalConfig().getTimeout()));
+            LoginSubject subject = new LoginSubject();
+            subject.setLoginId(loginId);
+            long currentTime = System.currentTimeMillis();
+            subject.setLoginTime(currentTime);
+            subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
+            String sql = "insert into " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (token_str,login_id,login_subject,token_expire_time) values (?,?,?,?)";
+            int num = jdbcTemplate.update(sql, token, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), CommonUtil.currentTimePlusSeconds(GlobalConfigUtils.getGlobalConfig().getTimeout()));
             return num > 0 ? token : null;
         } catch (Exception e) {
             log.error("JdbcAuthProvider createToken failed, Exception: {e}", e);
@@ -109,7 +146,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         try {
             String sql = "select login_id from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str=?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
-            if (Objects.nonNull(resultList) && !resultList.isEmpty()) {
+            if (!resultList.isEmpty()) {
                 return resultList.get(0).get("login_id");
             }
             return null;
@@ -189,7 +226,6 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
                 }
             }
         }
-
         log.info("JdbcAuthProvider cleanThread init successful!");
     }
 

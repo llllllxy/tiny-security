@@ -27,6 +27,7 @@ CREATE TABLE `s_auth_token`  (
   `updated_at` datetime(0) NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP(0) COMMENT '更新时间',
   `token_str` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'token',
   `login_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户id',
+  `login_subject` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户信息',
   `token_expire_time` char(14) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'token过期时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `s_auth_token_unique_token_str`(`token_str`) USING BTREE COMMENT 'token_str不可重复'

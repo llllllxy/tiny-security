@@ -4,6 +4,7 @@ import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.CommonUtil;
+import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -318,6 +319,18 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         }
     }
 
+    @Override
+    public boolean refreshToken(String token, LoginSubject subject) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            this.set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
+            return true;
+        } catch (Exception e) {
+            log.error("SingleAuthProvider - refreshToken - failed，Exception：{e}", e);
+            return false;
+        }
+    }
+
     /**
      * 检查token是否失效
      *
@@ -336,6 +349,18 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         }
     }
 
+    @Override
+    public LoginSubject getSubject(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            String content = this.get(AuthConsts.AUTH_TOKEN_KEY + token);
+            return JsonUtil.readValue(content, LoginSubject.class);
+        } catch (Exception e) {
+            log.error("SingleAuthProvider - getSubject - failed，Exception：{e}", e);
+            return null;
+        }
+    }
+
     /**
      * 创建一个新的token
      *
@@ -347,7 +372,12 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
-            this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), GlobalConfigUtils.getGlobalConfig().getTimeout());
+            LoginSubject subject = new LoginSubject();
+            subject.setLoginId(loginId);
+            long currentTime = System.currentTimeMillis();
+            subject.setLoginTime(currentTime);
+            subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
+            this.set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
             return token;
         } catch (Exception e) {
             log.error("SingleAuthProvider - createToken - failed，Exception：{e}", e);
@@ -365,7 +395,8 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public Object getLoginId(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return this.get(AuthConsts.AUTH_TOKEN_KEY + token);
+            String content = this.get(AuthConsts.AUTH_TOKEN_KEY + token);
+            return JsonUtil.readValue(content, LoginSubject.class).getLoginId();
         } catch (Exception e) {
             log.error("SingleAuthProvider - getLoginId - failed，Exception：{e}", e);
             return null;

@@ -34,11 +34,25 @@ public interface AuthProvider {
     boolean refreshToken(String token);
 
     /**
+     * 刷新token，并且重置用户
+     * @param token
+     * @return
+     */
+    boolean refreshToken(String token, LoginSubject subject);
+
+    /**
      * 检查token是否失效
      * @param token
      * @return
      */
     boolean checkToken(String token);
+
+    /**
+     * 获取登录用户
+     * @param token
+     * @return
+     */
+    LoginSubject getSubject(String token);
 
     /**
      * 创建一个新的token
