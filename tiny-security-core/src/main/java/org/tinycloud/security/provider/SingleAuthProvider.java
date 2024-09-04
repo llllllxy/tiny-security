@@ -1,7 +1,7 @@
 package org.tinycloud.security.provider;
 
 import org.springframework.util.Assert;
-import org.tinycloud.security.AuthProperties;
+import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.TokenGenUtil;
@@ -291,20 +291,13 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
 
 
     // ------------------------ 实现AuthProvider接口开始 ------------------------ //
-    private final AuthProperties authProperties;
 
     /**
      * 构造函数
      */
-    public SingleAuthProvider(AuthProperties authProperties) {
-        this.authProperties = authProperties;
+    public SingleAuthProvider() {
         // 同时初始化定时任务
         this.initRefreshThread();
-    }
-
-    @Override
-    protected AuthProperties getAuthProperties() {
-        return this.authProperties;
     }
 
     /**
@@ -317,7 +310,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public boolean refreshToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            this.updateTimeout(AuthConsts.AUTH_TOKEN_KEY + token, this.getAuthProperties().getTimeout());
+            this.updateTimeout(AuthConsts.AUTH_TOKEN_KEY + token, GlobalConfigUtils.getGlobalConfig().getTimeout());
             return true;
         } catch (Exception e) {
             log.error("SingleAuthProvider - refreshToken - failed，Exception：{e}", e);
@@ -353,8 +346,8 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public String createToken(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String token = TokenGenUtil.genTokenStr(this.getAuthProperties().getTokenStyle());
-            this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), this.getAuthProperties().getTimeout());
+            String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            this.set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), GlobalConfigUtils.getGlobalConfig().getTimeout());
             return token;
         } catch (Exception e) {
             log.error("SingleAuthProvider - createToken - failed，Exception：{e}", e);

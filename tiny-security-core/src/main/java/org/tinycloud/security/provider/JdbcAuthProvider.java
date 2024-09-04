@@ -1,7 +1,7 @@
 package org.tinycloud.security.provider;
 
 import org.springframework.util.Assert;
-import org.tinycloud.security.AuthProperties;
+import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.TokenGenUtil;
 
@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 操作token和会话的接口（通过jdbc实现）
- * 了
  *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
@@ -29,21 +28,12 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     final static Logger log = LoggerFactory.getLogger(JdbcAuthProvider.class);
 
     private final JdbcTemplate jdbcTemplate;
-    private final AuthProperties authProperties;
 
-    public JdbcAuthProvider(JdbcTemplate jdbcTemplate, AuthProperties authProperties) {
+    public JdbcAuthProvider(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.authProperties = authProperties;
-
         // 同时初始化定时任务
         this.initCleanThread();
     }
-
-    @Override
-    protected AuthProperties getAuthProperties() {
-        return this.authProperties;
-    }
-
 
     /**
      * 刷新token有效时间
@@ -55,8 +45,8 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean refreshToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            String sql = "update " + this.getAuthProperties().getTableName() + " set token_expire_time = ? where token_str = ?";
-            int num = jdbcTemplate.update(sql, CommonUtil.currentTimePlusSeconds(this.getAuthProperties().getTimeout()), token);
+            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set token_expire_time = ? where token_str = ?";
+            int num = jdbcTemplate.update(sql, CommonUtil.currentTimePlusSeconds(GlobalConfigUtils.getGlobalConfig().getTimeout()), token);
             return num > 0;
         } catch (Exception e) {
             log.error("JdbcAuthProvider refreshToken failed, Exception: {e}", e);
@@ -74,7 +64,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean checkToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            String sql = "select token_expire_time from " + this.getAuthProperties().getTableName() + " where token_str=?";
+            String sql = "select token_expire_time from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str=?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
             if (Objects.nonNull(resultList) && !resultList.isEmpty()) {
                 String tokenExpireTime = resultList.get(0).get("token_expire_time").toString();
@@ -97,9 +87,9 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public String createToken(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String token = TokenGenUtil.genTokenStr(this.getAuthProperties().getTokenStyle());
-            String sql = "insert into " + this.getAuthProperties().getTableName() + " (token_str,login_id,token_expire_time) values (?,?,?)";
-            int num = jdbcTemplate.update(sql, token, String.valueOf(loginId), CommonUtil.currentTimePlusSeconds(this.getAuthProperties().getTimeout()));
+            String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            String sql = "insert into " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (token_str,login_id,token_expire_time) values (?,?,?)";
+            int num = jdbcTemplate.update(sql, token, String.valueOf(loginId), CommonUtil.currentTimePlusSeconds(GlobalConfigUtils.getGlobalConfig().getTimeout()));
             return num > 0 ? token : null;
         } catch (Exception e) {
             log.error("JdbcAuthProvider createToken failed, Exception: {e}", e);
@@ -117,7 +107,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public Object getLoginId(String token) {
         Assert.hasText(token, "The token cannot be empty！");
         try {
-            String sql = "select login_id from " + this.getAuthProperties().getTableName() + " where token_str=?";
+            String sql = "select login_id from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str=?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
             if (Objects.nonNull(resultList) && !resultList.isEmpty()) {
                 return resultList.get(0).get("login_id");
@@ -139,7 +129,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean deleteToken(String token) {
         Assert.hasText(token, "The token cannot be empty！");
         try {
-            String sql = "delete from " + this.getAuthProperties().getTableName() + " where token_str = ?";
+            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str = ?";
             int num = jdbcTemplate.update(sql, token);
             return num > 0;
         } catch (Exception e) {
@@ -158,7 +148,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean deleteTokenByLoginId(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null！");
         try {
-            String sql = "delete from " + this.getAuthProperties().getTableName() + " where login_id = ?";
+            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where login_id = ?";
             int num = jdbcTemplate.update(sql, loginId);
             return num > 0;
         } catch (Exception e) {
@@ -206,7 +196,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
 
     private void clean() {
         try {
-            String sql = "delete from " + this.getAuthProperties().getTableName() + " where token_expire_time < ?";
+            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_expire_time < ?";
             String criticalTime = CommonUtil.currentTimeMinusSeconds(24 * 60 * 60);
             int num = jdbcTemplate.update(sql, criticalTime);
             log.info("JdbcAuthProvider clean num: {}", num);

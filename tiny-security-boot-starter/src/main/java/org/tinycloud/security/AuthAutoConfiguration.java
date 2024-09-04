@@ -1,12 +1,5 @@
 package org.tinycloud.security;
 
-import org.tinycloud.security.interceptor.AuthenticeInterceptor;
-import org.tinycloud.security.interceptor.PermissionInterceptor;
-import org.tinycloud.security.interfaces.PermissionInfoInterface;
-import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.provider.JdbcAuthProvider;
-import org.tinycloud.security.provider.RedisAuthProvider;
-import org.tinycloud.security.provider.SingleAuthProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +11,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.tinycloud.security.config.GlobalConfig;
+import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.interceptor.AuthenticeInterceptor;
+import org.tinycloud.security.interceptor.PermissionInterceptor;
+import org.tinycloud.security.interfaces.PermissionInfoInterface;
+import org.tinycloud.security.provider.AuthProvider;
+import org.tinycloud.security.provider.JdbcAuthProvider;
+import org.tinycloud.security.provider.RedisAuthProvider;
+import org.tinycloud.security.provider.SingleAuthProvider;
 
 /**
  * <p>
@@ -48,7 +50,8 @@ public class AuthAutoConfiguration {
             return null;
         }
         logger.info("RedisAuthProvider is running!");
-        return new RedisAuthProvider(stringRedisTemplate, authProperties);
+        this.setGlobalConfig(authProperties);
+        return new RedisAuthProvider(stringRedisTemplate);
     }
 
     /**
@@ -63,7 +66,8 @@ public class AuthAutoConfiguration {
             return null;
         }
         logger.info("JdbcAuthProvider is running!");
-        return new JdbcAuthProvider(jdbcTemplate, authProperties);
+        this.setGlobalConfig(authProperties);
+        return new JdbcAuthProvider(jdbcTemplate);
     }
 
     /**
@@ -74,7 +78,8 @@ public class AuthAutoConfiguration {
     @Bean
     public AuthProvider singleAuthProvider() {
         logger.info("SingleAuthProvider is running!");
-        return new SingleAuthProvider(authProperties);
+        this.setGlobalConfig(authProperties);
+        return new SingleAuthProvider();
     }
 
 
@@ -107,4 +112,14 @@ public class AuthAutoConfiguration {
         }
     }
 
+    private void setGlobalConfig(AuthProperties authProperties) {
+        GlobalConfig globalConfig = new GlobalConfig();
+        globalConfig.setStoreType(authProperties.getStoreType());
+        globalConfig.setTableName(authProperties.getTableName());
+        globalConfig.setTimeout(authProperties.getTimeout());
+        globalConfig.setTokenName(authProperties.getTokenName());
+        globalConfig.setTokenPrefix(authProperties.getTokenPrefix());
+        globalConfig.setTokenStyle(authProperties.getTokenStyle());
+        GlobalConfigUtils.setGlobalConfig(globalConfig);
+    }
 }

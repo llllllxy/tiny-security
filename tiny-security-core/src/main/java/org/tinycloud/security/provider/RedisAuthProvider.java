@@ -2,7 +2,7 @@ package org.tinycloud.security.provider;
 
 
 import org.springframework.util.Assert;
-import org.tinycloud.security.AuthProperties;
+import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
@@ -25,16 +25,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     final static Logger log = LoggerFactory.getLogger(RedisAuthProvider.class);
 
     private final StringRedisTemplate redisTemplate;
-    private final AuthProperties authProperties;
-
-    public RedisAuthProvider(StringRedisTemplate redisTemplate, AuthProperties authProperties) {
+    public RedisAuthProvider(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
-        this.authProperties = authProperties;
-    }
-
-    @Override
-    protected AuthProperties getAuthProperties() {
-        return this.authProperties;
     }
 
     /**
@@ -47,7 +39,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean refreshToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, authProperties.getTimeout(), TimeUnit.SECONDS);
+            return redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
         } catch (Exception e) {
             log.error("RedisAuthProvider refreshToken failed, Exception：{e}", e);
             return false;
@@ -82,8 +74,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public String createToken(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String token = TokenGenUtil.genTokenStr(getAuthProperties().getTokenStyle());
-            redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), getAuthProperties().getTimeout(), TimeUnit.SECONDS);
+            String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
             return token;
         } catch (Exception e) {
             log.error("RedisAuthProvider createToken failed, Exception：{e}", e);
