@@ -8,6 +8,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * A class that represents ULIDs.
+ * https://github.com/f4b6a3/ulid-creator
  * <p>
  * ULID is a 128-bit value that has two components:
  * <ul>
@@ -685,7 +686,7 @@ public final class Ulid implements Serializable, Comparable<Ulid> {
      *
      * @param that a ULID to be compared with
      * @return -1, 0 or 1 as {@code this} is less than, equal to, or greater than
-     *         {@code that}
+     * {@code that}
      */
     @Override
     public int compareTo(Ulid that) {
