@@ -1,6 +1,6 @@
 package org.tinycloud.security.provider;
 
-import org.tinycloud.security.AuthProperties;
+import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 
@@ -8,15 +8,13 @@ import javax.servlet.http.HttpServletRequest;
 
 public abstract class AbstractAuthProvider implements AuthProvider {
 
-    protected abstract AuthProperties getAuthProperties();
-
     /**
      * 获取token
      * @return token
      */
     @Override
     public String getToken() {
-        String token = AuthUtil.getToken(this.getAuthProperties().getTokenName());
+        String token = AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
         return token;
     }
 
@@ -27,7 +25,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public String getToken(HttpServletRequest request) {
-        String token = AuthUtil.getToken(request, this.getAuthProperties().getTokenName());
+        String token = AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
         return token;
     }
 
@@ -40,7 +38,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     public String login(Object loginId) {
         String token = this.createToken(loginId);
         // 设置 Cookie，通过 Cookie 上下文返回给前端
-        CookieUtil.setCookie(AuthUtil.getResponse(), this.getAuthProperties().getTokenName(), token);
+        CookieUtil.setCookie(AuthUtil.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
         return token;
     }
 
