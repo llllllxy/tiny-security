@@ -19,7 +19,8 @@ import java.util.List;
  **/
 public class JsonUtil {
 
-    final static Logger log = LoggerFactory.getLogger(JsonUtil.class);
+    private final static Logger log = LoggerFactory.getLogger(JsonUtil.class);
+    private final static ObjectMapper objectMapper = new ObjectMapper();
 
 
     /**
@@ -30,7 +31,6 @@ public class JsonUtil {
     public static String writeValueAsString(Object value) {
         if (value != null) {
             try {
-                ObjectMapper objectMapper = new ObjectMapper();
                 return objectMapper.writeValueAsString(value);
             } catch (JsonProcessingException e) {
                 if (log.isErrorEnabled()) {
@@ -52,7 +52,6 @@ public class JsonUtil {
     public static <T> T readValue(String content, Class<T> valueType) {
         if (content != null && !content.trim().isEmpty()) {
             try {
-                ObjectMapper objectMapper = new ObjectMapper();
                 return objectMapper.readValue(content, valueType);
             } catch (IOException e) {
                 if (log.isErrorEnabled()) {
@@ -74,7 +73,6 @@ public class JsonUtil {
     public static <T> T readValue(String content, TypeReference<T> valueTypeRef) {
         if (content != null && !content.trim().isEmpty()) {
             try {
-                ObjectMapper objectMapper = new ObjectMapper();
                 return objectMapper.readValue(content, valueTypeRef);
             } catch (IOException e) {
                 if (log.isErrorEnabled()) {
@@ -96,7 +94,6 @@ public class JsonUtil {
     public static <T> T readValue(InputStream src, Class<T> valueType) {
         if (src != null) {
             try {
-                ObjectMapper objectMapper = new ObjectMapper();
                 return objectMapper.readValue(src, valueType);
             } catch (IOException e) {
                 if (log.isErrorEnabled()) {
@@ -117,7 +114,6 @@ public class JsonUtil {
     public static <T> List<T> readArrayValue(String content, Class<T> clazz) {
         if (content != null && !content.trim().isEmpty()) {
             try {
-                ObjectMapper objectMapper = new ObjectMapper();
                 return objectMapper.readValue(content, objectMapper.getTypeFactory().constructParametricType(ArrayList.class, clazz));
             } catch (Exception e) {
                 if (log.isErrorEnabled()) {
@@ -136,7 +132,6 @@ public class JsonUtil {
      * @return
      */
     public static <T> T convertValue(Object fromValue, Class<T> toValueType) {
-        ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.convertValue(fromValue, toValueType);
     }
 

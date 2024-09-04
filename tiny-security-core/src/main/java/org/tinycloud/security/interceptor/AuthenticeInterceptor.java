@@ -1,9 +1,11 @@
 package org.tinycloud.security.interceptor;
 
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.provider.AuthProvider;
+import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
@@ -13,6 +15,7 @@ import org.springframework.util.StringUtils;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
+import java.util.Objects;
 
 /**
  * 用户会话验证拦截器
@@ -73,12 +76,21 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
         }
 
         // 第二步、再判断此token值在会话存储器中是否存在，存在的话说明会话有效，并刷新会话时长
-        if (!this.getAuthProvider().checkToken(token)) {
+        LoginSubject subject = this.getAuthProvider().getSubject(token);
+        if (Objects.isNull(subject)) {
             throw new UnAuthorizedException();
         } else {
-            this.getAuthProvider().refreshToken(token);
+            long expireTime = subject.getLoginExpireTime();
+            long currentTime = System.currentTimeMillis();
+            int timeout = GlobalConfigUtils.getGlobalConfig().getTimeout();
+            long millsCritical = (long) Math.floor(timeout * 1000L * 0.6);
+            if (expireTime - currentTime <= millsCritical) {
+                // 刷新会话缓存时长
+                subject.setLoginExpireTime(currentTime + timeout * 1000L);
+                boolean result = this.getAuthProvider().refreshToken(token, subject);
+            }
             // 存入LoginId，以方便后续使用
-            AuthenticeHolder.setLoginId(this.getAuthProvider().getLoginId(token));
+            AuthenticeHolder.setLoginId(subject.getLoginId());
             // 合格不需要拦截，放行
             return true;
         }

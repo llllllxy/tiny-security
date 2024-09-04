@@ -14,8 +14,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public String getToken() {
-        String token = AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
-        return token;
+        return AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
     }
 
     /**
@@ -25,8 +24,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public String getToken(HttpServletRequest request) {
-        String token = AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
-        return token;
+        return AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
     }
 
     /**

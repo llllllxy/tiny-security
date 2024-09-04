@@ -4,11 +4,11 @@ package org.tinycloud.security.provider;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.util.StringUtils;
 
 import java.util.Objects;
 import java.util.Set;
@@ -25,6 +25,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     final static Logger log = LoggerFactory.getLogger(RedisAuthProvider.class);
 
     private final StringRedisTemplate redisTemplate;
+
     public RedisAuthProvider(StringRedisTemplate redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
@@ -39,7 +40,26 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean refreshToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            return this.redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.error("RedisAuthProvider refreshToken failed, Exception：{e}", e);
+            return false;
+        }
+    }
+
+    /**
+     * 刷新token
+     *
+     * @param token   令牌
+     * @param subject 登录用户
+     * @return true成功，false失败
+     */
+    @Override
+    public boolean refreshToken(String token, LoginSubject subject) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            this.redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            return true;
         } catch (Exception e) {
             log.error("RedisAuthProvider refreshToken failed, Exception：{e}", e);
             return false;
@@ -56,10 +76,28 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean checkToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return redisTemplate.hasKey(AuthConsts.AUTH_TOKEN_KEY + token);
+            return this.redisTemplate.hasKey(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
             log.error("RedisAuthProvider checkToken failed, Exception：{e}", e);
             return false;
+        }
+    }
+
+    /**
+     * 根据令牌获取登录用户
+     *
+     * @param token 令牌
+     * @return LoginSubject
+     */
+    @Override
+    public LoginSubject getSubject(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
+            return JsonUtil.readValue(content, LoginSubject.class);
+        } catch (Exception e) {
+            log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
+            return null;
         }
     }
 
@@ -75,7 +113,12 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
-            redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, String.valueOf(loginId), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            LoginSubject subject = new LoginSubject();
+            subject.setLoginId(loginId);
+            long currentTime = System.currentTimeMillis();
+            subject.setLoginTime(currentTime);
+            subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
+            this.redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
             return token;
         } catch (Exception e) {
             log.error("RedisAuthProvider createToken failed, Exception：{e}", e);
@@ -94,7 +137,8 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public Object getLoginId(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
+            String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
+            return JsonUtil.readValue(content, LoginSubject.class).getLoginId();
         } catch (Exception e) {
             log.error("RedisAuthProvider getLoginId failed, Exception：{e}", e);
             return null;
@@ -111,7 +155,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean deleteToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return redisTemplate.delete(AuthConsts.AUTH_TOKEN_KEY + token);
+            return this.redisTemplate.delete(AuthConsts.AUTH_TOKEN_KEY + token);
         } catch (Exception e) {
             log.error("RedisAuthProvider deleteToken failed, Exception：{e}", e);
             return false;
@@ -131,9 +175,13 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             Set<String> keys = redisTemplate.keys(AuthConsts.AUTH_TOKEN_KEY.concat("*"));
             if (Objects.nonNull(keys) && !keys.isEmpty()) {
                 for (String key : keys) {
-                    String loginIdInRedis = redisTemplate.opsForValue().get(key);
-                    if (!StringUtils.isEmpty(loginIdInRedis) && loginIdInRedis.equals(loginId)) {
-                        redisTemplate.delete(key);
+                    String content = redisTemplate.opsForValue().get(key);
+                    LoginSubject subject = JsonUtil.readValue(content, LoginSubject.class);
+                    if (Objects.nonNull(subject)) {
+                        Object loginIdInRedis = subject.getLoginId();
+                        if (Objects.nonNull(loginIdInRedis) && loginIdInRedis.equals(loginId)) {
+                            redisTemplate.delete(key);
+                        }
                     }
                 }
             }
