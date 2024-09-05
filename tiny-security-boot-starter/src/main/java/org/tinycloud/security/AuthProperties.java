@@ -15,7 +15,7 @@ public class AuthProperties {
 
     private String tokenName = "token";
 
-    private Integer timeout = 3600;
+    private Integer timeout = 1800;
 
     private String tokenStyle = "uuid";
 
