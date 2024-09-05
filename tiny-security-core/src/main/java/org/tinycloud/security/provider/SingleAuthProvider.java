@@ -231,7 +231,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     /**
      * 线程池核心线程数最大值
      */
-    private static final int corePoolSize = 5;
+    private static final int corePoolSize = 2;
 
     /**
      * 用于定时执行数据清理的线程池
