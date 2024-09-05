@@ -18,17 +18,17 @@ public class GlobalConfig implements Serializable {
 
     private String version;
 
-    private String storeType = "redis";
+    private String storeType;
 
-    private String tokenName = "token";
+    private String tokenName;
 
-    private Integer timeout = 3600;
+    private Integer timeout;
 
-    private String tokenStyle = "uuid";
+    private String tokenStyle;
 
     private String tokenPrefix;
 
-    private String tableName = "s_auth_token";
+    private String tableName;
 
     public boolean isBanner() {
         return banner;
