@@ -228,10 +228,6 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
 
 
     // ------------------------ 定时清理过期数据 ------------------------ //
-    /**
-     * 线程池核心线程数最大值
-     */
-    private static final int corePoolSize = 2;
 
     /**
      * 用于定时执行数据清理的线程池
@@ -262,7 +258,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         if (this.executorService == null) {
             synchronized (SingleAuthProvider.class) {
                 if (this.executorService == null) {
-                    this.executorService = Executors.newScheduledThreadPool(corePoolSize);
+                    this.executorService = Executors.newScheduledThreadPool(1);
                     this.executorService.scheduleWithFixedDelay(() -> {
                         log.info("SingleAuthProvider - refreshSession - at ：{}", CommonUtil.getCurrentTime());
                         try {
