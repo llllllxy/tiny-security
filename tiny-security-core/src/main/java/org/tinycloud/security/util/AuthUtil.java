@@ -1,5 +1,7 @@
 package org.tinycloud.security.util;
 
+import org.springframework.util.CollectionUtils;
+import org.springframework.util.ObjectUtils;
 import org.tinycloud.security.annotation.Ignore;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
@@ -15,7 +17,6 @@ import org.tinycloud.security.interceptor.holder.RoleHolder;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
-import java.util.HashSet;
 import java.util.Set;
 
 public class AuthUtil {
@@ -120,11 +121,6 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean checkPermission(Method method, Set<String> permissionSet) {
-        // 当permissionSet为空时，赋初值，防止空指针错误
-        if (permissionSet == null) {
-            permissionSet = new HashSet<>();
-        }
-
         RequiresPermissions annotation = method.getAnnotation(RequiresPermissions.class);
         // 方法上没有注解再检查类上面有没有注解
         if (annotation == null) {
@@ -134,8 +130,15 @@ public class AuthUtil {
         if (annotation == null) {
             return true;
         }
-
+        // 当permissionSet为空时，说明无任何权限，直接返回false
+        if (CollectionUtils.isEmpty(permissionSet)) {
+            return false;
+        }
+        // 当roles为空时，说明不需要任何权限，直接返回true
         String[] permissions = annotation.value();
+        if (ObjectUtils.isEmpty(permissions)) {
+            return true;
+        }
         Logical logical = annotation.logical();
         if (logical == Logical.OR) {
             // 如果有任何一个权限，返回true，否则返回false（拥有其一）
@@ -160,18 +163,13 @@ public class AuthUtil {
 
 
     /**
-     * 检查Method上是否有@RequiresPermissions注解，并检验其值，通过返回true，拒绝返回false
+     * 检查Method上是否有@RequiresRoles注解，并检验其值，通过返回true，拒绝返回false
      *
      * @param method  Method
      * @param roleSet 角色列表
      * @return true or false
      */
     public static boolean checkRole(Method method, Set<String> roleSet) {
-        // 当roleSet为空时，赋初值，防止空指针错误
-        if (roleSet == null) {
-            roleSet = new HashSet<>();
-        }
-
         RequiresRoles annotation = method.getAnnotation(RequiresRoles.class);
         // 方法上没有注解再检查类上面有没有注解
         if (annotation == null) {
@@ -181,10 +179,16 @@ public class AuthUtil {
         if (annotation == null) {
             return true;
         }
-
+        // 当roleSet为空时，说明无任何权限，直接返回false
+        if (CollectionUtils.isEmpty(roleSet)) {
+            return false;
+        }
+        // 当roles为空时，说明不需要任何权限，直接返回true
         String[] roles = annotation.value();
+        if (ObjectUtils.isEmpty(roles)) {
+            return true;
+        }
         Logical logical = annotation.logical();
-
         if (logical == Logical.OR) {
             // 如果有任何一个角色，返回true，否则返回false（拥有其一）
             for (String ro : roles) {
