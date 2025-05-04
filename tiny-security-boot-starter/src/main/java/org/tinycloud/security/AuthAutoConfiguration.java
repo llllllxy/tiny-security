@@ -2,15 +2,19 @@ package org.tinycloud.security;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.jdbc.core.JdbcTemplate;
+
+
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.interceptor.AuthenticeInterceptor;
@@ -20,6 +24,9 @@ import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.provider.JdbcAuthProvider;
 import org.tinycloud.security.provider.RedisAuthProvider;
 import org.tinycloud.security.provider.SingleAuthProvider;
+import org.tinycloud.security.util.VersionUtil;
+
+import java.util.Collection;
 
 /**
  * <p>
@@ -31,20 +38,25 @@ import org.tinycloud.security.provider.SingleAuthProvider;
  **/
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-public class AuthAutoConfiguration {
+public class AuthAutoConfiguration implements ApplicationContextAware {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
     @Autowired
     private AuthProperties authProperties;
+    private ApplicationContext applicationContext;
 
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
+    }
 
     /**
      * 注入redisAuthProvider
      */
-    @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
     @Bean
-    public AuthProvider redisAuthProvider(StringRedisTemplate stringRedisTemplate) {
+    public AuthProvider redisAuthProvider() {
+        org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate = getBean(org.springframework.data.redis.core.StringRedisTemplate.class);
         if (stringRedisTemplate == null) {
             logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
             return null;
@@ -57,10 +69,10 @@ public class AuthAutoConfiguration {
     /**
      * 注入jdbcAuthProvider
      */
-    @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
     @Bean
-    public AuthProvider jdbcAuthProvider(JdbcTemplate jdbcTemplate) {
+    public AuthProvider jdbcAuthProvider() {
+        org.springframework.jdbc.core.JdbcTemplate jdbcTemplate = getBean(org.springframework.jdbc.core.JdbcTemplate.class);
         if (jdbcTemplate == null) {
             logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null!");
             return null;
@@ -73,7 +85,6 @@ public class AuthAutoConfiguration {
     /**
      * 注入singleAuthProvider
      */
-    @ConditionalOnMissingBean(AuthProvider.class)
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
     @Bean
     public AuthProvider singleAuthProvider() {
@@ -87,7 +98,7 @@ public class AuthAutoConfiguration {
      * 添加会话拦截器( 注入AuthStore（可能是redis的，也可能是jdbc的，根据配置来的）)
      */
     @Bean
-    public AuthenticeInterceptor authenticeInterceptor(AuthProvider authProvider) {
+    public AuthenticeInterceptor authenticeInterceptor(@Autowired AuthProvider authProvider) {
         if (authProvider != null) {
             return new AuthenticeInterceptor(authProvider);
         } else {
@@ -101,9 +112,9 @@ public class AuthAutoConfiguration {
      * 添加权限拦截器（当存在bean PermissionInfoInterface时，这个配置才生效）
      * 注入PermissionInfoInterface
      */
-    @Bean
     @ConditionalOnBean(PermissionInfoInterface.class)
-    public PermissionInterceptor permissionInterceptor(PermissionInfoInterface permissionInfoInterface) {
+    @Bean
+    public PermissionInterceptor permissionInterceptor(@Autowired PermissionInfoInterface permissionInfoInterface) {
         if (permissionInfoInterface != null) {
             return new PermissionInterceptor(permissionInfoInterface);
         } else {
@@ -114,6 +125,7 @@ public class AuthAutoConfiguration {
 
     private void setGlobalConfig(AuthProperties authProperties) {
         GlobalConfig globalConfig = new GlobalConfig();
+        globalConfig.setVersion(VersionUtil.getVersion());
         globalConfig.setStoreType(authProperties.getStoreType());
         globalConfig.setTableName(authProperties.getTableName());
         globalConfig.setTimeout(authProperties.getTimeout());
@@ -123,5 +135,20 @@ public class AuthAutoConfiguration {
         globalConfig.setJwtSecret(authProperties.getJwtSecret());
         globalConfig.setJwtSubject(authProperties.getJwtSubject());
         GlobalConfigUtils.setGlobalConfig(globalConfig);
+    }
+
+    /**
+     * 获取Bean
+     */
+    private <T> T getBean(Class<T> clazz) {
+        T bean = null;
+        Collection<T> beans = applicationContext.getBeansOfType(clazz).values();
+        while (beans.iterator().hasNext()) {
+            bean = beans.iterator().next();
+            if (bean != null) {
+                break;
+            }
+        }
+        return bean;
     }
 }
