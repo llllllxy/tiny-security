@@ -58,8 +58,8 @@ tiny-security:
   timeout: 1800
   # token风格，可配置uuid (默认风格)，snowflake (纯数字风格)，objectid (变种uuid)，random128 (随机128位字符串)，nanoid，ulid
   token-style: uuid
-  # 当配置为jdbc时，存储token的表名字，默认为b_auth_token
-  table-name: b_auth_token
+  # 当配置为jdbc时，存储token的表名字，默认为t_auth_storage
+  table-name: t_auth_storage
 ```
 
 1. 如果使用jdbcAuthStore，需要导入框架提供的sql脚本并集成好jdbcTemplate，
@@ -102,7 +102,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
         // 注册权限拦截器
         registry.addInterceptor(permissionInterceptor)
-                .addPathPatterns("/**");
+                .addPathPatterns("/**")
+                .excludePathPatterns("/login");
     }
 }
 ```
@@ -164,15 +165,12 @@ public class IndexController {
 
     @ResponseBody
     @PostMapping("/login")
-    public Result<Object> login(@ApiParam(name = "username", required = true, value = "用户名")
-                                @RequestParam("username") String username,
-                                @ApiParam(name = "password", required = true, value = "用户密码")
+    public Result<Object> login(@RequestParam("username") String username,
                                 @RequestParam("password") String password) {
         // 你的登录验证逻辑
         // ......
         // 签发token
         String token = authProvider.login(username);
-
         return Result.ok("登录成功！", token);
     }
 }
@@ -184,6 +182,7 @@ login方法参数说明：
 
 
 ### 2.3、退出登录，注销会话
+
 ```java
 @Controller
 public class IndexController {
@@ -197,11 +196,15 @@ public class IndexController {
     public Result<Object> logout(HttpServletRequest request) {
         // 退出登录，注销会话
         authProvider.logout(request);
+        
+        // 不传入request亦可，会自动获取当前的request
+        // authProvider.logout();
 
         return Result.ok("退出登录成功！");
     }
 }
 ```
+
 ---
 
 ### 2.4、使用注解控制权限
@@ -244,7 +247,6 @@ public class IndexController {
     @ResponseBody
     @GetMapping("/testPermission3")
     public Result<Object> testPermission3() {
-
         return Result.ok("testPermission3测试成功！");
     }
 
@@ -254,7 +256,7 @@ public class IndexController {
     public Result<Object> testPermission2() {
         logger.info("IndexController - testPermission3 - authProvider.getLoginId() = {}", authProvider.getLoginId());
         logger.info("IndexController - testPermission3 - AuthUtil.getLoginId() = {}", AuthUtil.getLoginId());
-       logger.info("IndexController - testPermission3 - token = {}", authProvider.getToken());
+        logger.info("IndexController - testPermission3 - token = {}", authProvider.getToken());
         
         return Result.ok("testPermission2测试成功！", authProvider.getLoginId());
     }
@@ -263,7 +265,7 @@ public class IndexController {
 
 ---
 
-### 2.5、使用代码控制权限
+### 2.5、使用代码手动判断角色和权限
 **1.代码示例：** 
 
 ```java
@@ -290,17 +292,21 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 
 ---
 
-### 2.6、获取当前登录用户编码
+### 2.6、获取当前登录会话
 ```java
 // 注入authProvider
 @Autowired
 private AuthProvider authProvider;
 
-authProvider.getLoginId()
-        
+// 获取当前登录会话id
+Object loginId = authProvider.getLoginId();
 或者直接调用静态方法
-        
-AuthUtil.getLoginId()
+Object loginId = AuthUtil.getLoginId()
+
+// 获取当前登录会话信息
+LoginSubject LoginSubject = authProvider.getLoginSubject();
+或者直接调用静态方法
+LoginSubject LoginSubject = AuthUtil.getLoginSubject();
 ```
 
 ---
@@ -311,13 +317,25 @@ AuthUtil.getLoginId()
 @Autowired
 private AuthProvider authProvider;
 
-authProvider.getToken()
+authProvider.getToken();
 或者
 authProvider.getToken(HttpServletRequest request);
 ```
 ---
 
-### 2.8、异常处理
+### 2.8、获取当前登录用户凭证（对应redis或database里的唯一键）
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
+authProvider.getCredentials();
+或者
+authProvider.getCredentials(HttpServletRequest request);
+```
+---
+
+### 2.9、异常处理
 tiny-security在会话验证失败和权限验证失败的会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
@@ -358,23 +376,27 @@ public class GlobalExceptionHandler {
 
 ---
 
-### 2.9、更多用法
+### 2.10、其他更多用法
 
-#### 2.9.1、使用注解忽略会话验证`@Ignore`
+#### 2.10.1、使用注解忽略会话验证`@Ignore`
 在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
 
 
-#### 2.9.2、主动让token失效
+#### 2.10.2、主动让会话失效
 ```java
 // 注入authProvider
 @Autowired
 private AuthProvider authProvider;
 
-// 根据token，使token失效
-authProvider.deleteToken(token);
+// 根据token，使会话失效
+authProvider.deleteByToken(token);
 
-// 根据用户loginId，使该用户的全部token都失效
+// 根据会话凭证credentials，使会话失效
+authProvider.deleteByCredentials(credentials);
+
+// 根据用户loginId，使该用户的全部会话都失效
 authProvider.deleteTokenByLoginId(loginId);
+
 ```
 
 ---

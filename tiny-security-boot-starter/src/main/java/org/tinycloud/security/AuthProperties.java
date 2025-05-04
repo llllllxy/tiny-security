@@ -21,7 +21,7 @@ public class AuthProperties {
 
     private String tokenPrefix;
 
-    private String tableName = "s_auth_token";
+    private String tableName = "t_auth_storage";
 
     private String jwtSecret;
 
