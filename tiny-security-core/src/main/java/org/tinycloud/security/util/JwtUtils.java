@@ -81,10 +81,15 @@ public class JwtUtils {
             jwtSecret = JWT_SECRET;
         }
         Date createTime = new Date();
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(createTime);
+        calendar.add(Calendar.DAY_OF_MONTH, 30); // 过期时间设置为30天后，即30天后强制过期
+        Date expireTime = calendar.getTime();
         JWTCreator.Builder builder = JWT.create();
         payload.forEach(builder::withClaim);
         return builder.withSubject(subject)
                 .withIssuedAt(createTime)
+                .withExpiresAt(expireTime)
                 .sign(Algorithm.HMAC256(jwtSecret));
     }
 
