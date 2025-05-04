@@ -50,4 +50,13 @@ public class LoginSubject implements Serializable {
     public void setLoginExpireTime(Long loginExpireTime) {
         this.loginExpireTime = loginExpireTime;
     }
+
+    @Override
+    public String toString() {
+        return "LoginSubject{" +
+                "loginId=" + loginId +
+                ", loginTime=" + loginTime +
+                ", loginExpireTime=" + loginExpireTime +
+                '}';
+    }
 }
