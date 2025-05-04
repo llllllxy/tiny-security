@@ -5,6 +5,7 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.util.JwtUtils;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -298,58 +299,58 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     }
 
     /**
-     * 刷新token
+     * 刷新凭证
      *
-     * @param token 令牌
+     * @param credentials 凭证
      * @return true成功，false失败
      */
     @Override
-    public boolean refreshToken(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean refreshByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            this.updateTimeout(AuthConsts.AUTH_TOKEN_KEY + token, GlobalConfigUtils.getGlobalConfig().getTimeout());
+            this.updateTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout());
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - refreshToken - failed，Exception：{e}", e);
+            log.error("SingleAuthProvider - refreshCredentials - failed，Exception：{e}", e);
             return false;
         }
     }
 
     @Override
-    public boolean refreshToken(String token, LoginSubject subject) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean refreshByCredentials(String credentials, LoginSubject subject) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            this.set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
+            this.set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - refreshToken - failed，Exception：{e}", e);
+            log.error("SingleAuthProvider - refreshCredentials - failed，Exception：{e}", e);
             return false;
         }
     }
 
     /**
-     * 检查token是否失效
+     * 检查凭证是否失效
      *
-     * @param token 令牌
+     * @param credentials 凭证
      * @return true有效，false已失效
      */
     @Override
-    public boolean checkToken(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean checkByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            long timeout = this.getTimeout(AuthConsts.AUTH_TOKEN_KEY + token);
+            long timeout = this.getTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return timeout > 0;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - checkToken - failed，Exception：{e}", e);
+            log.error("SingleAuthProvider - checkCredentials - failed，Exception：{e}", e);
             return false;
         }
     }
 
     @Override
-    public LoginSubject getSubject(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public LoginSubject getSubject(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String content = this.get(AuthConsts.AUTH_TOKEN_KEY + token);
+            String content = this.get(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return JsonUtil.readValue(content, LoginSubject.class);
         } catch (Exception e) {
             log.error("SingleAuthProvider - getSubject - failed，Exception：{e}", e);
@@ -364,17 +365,21 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * @return token
      */
     @Override
-    public String createToken(Object loginId) {
+    public String createAuth(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            String credentials = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            Map<String, String> payload = new HashMap<>();
+            payload.put("credentials", credentials);
+            String jwtToken = JwtUtils.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
+
             LoginSubject subject = new LoginSubject();
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
             subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
-            this.set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
-            return token;
+            this.set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
+            return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
         } catch (Exception e) {
             log.error("SingleAuthProvider - createToken - failed，Exception：{e}", e);
             return null;
@@ -382,41 +387,41 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     }
 
     /**
-     * 根据token，获取loginId
-     *
-     * @param token 令牌
-     * @return loginId
-     */
-    @Override
-    public Object getLoginId(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
-        try {
-            String content = this.get(AuthConsts.AUTH_TOKEN_KEY + token);
-            return JsonUtil.readValue(content, LoginSubject.class).getLoginId();
-        } catch (Exception e) {
-            log.error("SingleAuthProvider - getLoginId - failed，Exception：{e}", e);
-            return null;
-        }
-    }
-
-    /**
-     * 删除token
+     * 删除会话根据token
      *
      * @param token 令牌
      * @return true成功，false失败
      */
     @Override
-    public boolean deleteToken(String token) {
+    public boolean deleteByToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            this.delete(AuthConsts.AUTH_TOKEN_KEY + token);
+            String credentials = this.getCredentialsByToken(token);
+            this.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - deleteToken - failed，Exception：{e}", e);
+            log.error("SingleAuthProvider - deleteByToken - failed，Exception：{e}", e);
             return false;
         }
     }
 
+    /**
+     * 删除会话根据credentials
+     *
+     * @param credentials 凭证
+     * @return true成功，false失败
+     */
+    @Override
+    public boolean deleteByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            this.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return true;
+        } catch (Exception e) {
+            log.error("SingleAuthProvider - deleteByCredentials - failed，Exception：{e}", e);
+            return false;
+        }
+    }
 
     /**
      * 通过loginId删除token
@@ -425,20 +430,20 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
      * @return true成功，false失败
      */
     @Override
-    public boolean deleteTokenByLoginId(Object loginId) {
+    public boolean deleteByLoginId(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             for (String key : expireMap.keySet()) {
-                if (loginId.equals(dataMap.get(key))) {
+                LoginSubject subject = JsonUtil.readValue((String) dataMap.get(key), LoginSubject.class);
+                if (subject != null && loginId.equals(subject.getLoginId())) {
                     dataMap.remove(key);
                     expireMap.remove(key);
                 }
             }
             return true;
         } catch (Exception e) {
-            log.error("SingleAuthProvider - deleteTokenByLoginId - failed，Exception：{e}", e);
+            log.error("SingleAuthProvider - deleteByLoginId - failed，Exception：{e}", e);
             return false;
         }
     }
-
 }

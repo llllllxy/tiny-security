@@ -11,4 +11,8 @@ public class UnAuthorizedException extends AuthException {
     public UnAuthorizedException() {
         super(AuthConsts.CODE_UNAUTHORIZED, "未登录或会话已失效！");
     }
+
+    public UnAuthorizedException(String message) {
+        super(AuthConsts.CODE_UNAUTHORIZED, message);
+    }
 }

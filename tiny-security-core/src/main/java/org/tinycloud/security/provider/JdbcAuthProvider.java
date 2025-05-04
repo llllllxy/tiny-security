@@ -2,7 +2,9 @@ package org.tinycloud.security.provider;
 
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.util.JwtUtils;
 import org.tinycloud.security.util.TokenGenUtil;
 
 import org.slf4j.Logger;
@@ -11,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -35,33 +38,33 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     }
 
     /**
-     * 刷新token有效时间
+     * 刷新credentials有效时间
      *
-     * @param token 令牌
+     * @param credentials 凭证
      * @return true成功，false失败
      */
     @Override
-    public boolean refreshToken(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean refreshByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set token_expire_time = ? where token_str = ?";
-            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, token);
+            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set credentials_expire_time = ? where credentials = ?";
+            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider refreshToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
             return false;
         }
     }
 
     @Override
-    public boolean refreshToken(String token, LoginSubject subject) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean refreshByCredentials(String credentials, LoginSubject subject) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set token_expire_time = ?, login_subject = ? where token_str = ?";
-            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, JsonUtil.writeValueAsString(subject), token);
+            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set credentials_expire_time = ?, login_subject = ? where credentials = ?";
+            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, JsonUtil.writeValueAsString(subject), credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider refreshToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
             return false;
         }
     }
@@ -69,33 +72,33 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     /**
      * 检查token是否失效
      *
-     * @param token 令牌
+     * @param credentials 令牌
      * @return true未失效，false已失效
      */
     @Override
-    public boolean checkToken(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean checkByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "select token_expire_time from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
+            String sql = "select credentials_expire_time from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
             if (!resultList.isEmpty()) {
-                long tokenExpireTime = Long.parseLong(resultList.get(0).get("token_expire_time").toString());
+                long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
                 return tokenExpireTime > System.currentTimeMillis();
             } else {
                 return false;
             }
         } catch (Exception e) {
-            log.error("JdbcAuthProvider checkToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider checkByCredentials failed, Exception: {e}", e);
             return false;
         }
     }
 
     @Override
-    public LoginSubject getSubject(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public LoginSubject getSubject(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "select login_subject from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
+            String sql = "select login_subject from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
                 return JsonUtil.readValue(content, LoginSubject.class);
@@ -114,61 +117,63 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
      * @return token令牌
      */
     @Override
-    public String createToken(Object loginId) {
+    public String createAuth(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            String credentials = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            Map<String, String> payload = new HashMap<>();
+            payload.put("credentials", credentials);
+            String jwtToken = JwtUtils.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
+
             LoginSubject subject = new LoginSubject();
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
             subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
-            String sql = "insert into " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (token_str,login_id,login_subject,token_expire_time) values (?,?,?,?)";
-            int num = jdbcTemplate.update(sql, token, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000);
-            return num > 0 ? token : null;
+            String sql = "insert into " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) values (?,?,?,?)";
+            int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000);
+            return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider createToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider createAuth failed, Exception: {e}", e);
             return null;
         }
     }
 
     /**
-     * 根据token，获取loginId
-     *
-     * @param token 令牌
-     * @return loginId
-     */
-    @Override
-    public Object getLoginId(String token) {
-        Assert.hasText(token, "The token cannot be empty！");
-        try {
-            String sql = "select login_id from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, token);
-            if (!resultList.isEmpty()) {
-                return resultList.get(0).get("login_id");
-            }
-            return null;
-        } catch (Exception e) {
-            log.error("JdbcAuthProvider getLoginId failed, Exception: {e}", e);
-            return null;
-        }
-    }
-
-    /**
-     * 删除token
+     * 删除会话根据token
      *
      * @param token 令牌
      * @return true成功，false失败
      */
     @Override
-    public boolean deleteToken(String token) {
+    public boolean deleteByToken(String token) {
         Assert.hasText(token, "The token cannot be empty！");
         try {
-            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_str = ?";
-            int num = jdbcTemplate.update(sql, token);
+            String credentials = this.getCredentialsByToken(token);
+            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByToken failed, Exception: {e}", e);
+            return false;
+        }
+    }
+
+    /**
+     * 删除会话根据凭证
+     *
+     * @param credentials 凭证
+     * @return true成功，false失败
+     */
+    @Override
+    public boolean deleteByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty！");
+        try {
+            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            int num = jdbcTemplate.update(sql, credentials);
+            return num > 0;
+        } catch (Exception e) {
+            log.error("JdbcAuthProvider deleteByCredentials failed, Exception: {e}", e);
             return false;
         }
     }
@@ -180,14 +185,14 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
      * @return true成功，false失败
      */
     @Override
-    public boolean deleteTokenByLoginId(Object loginId) {
+    public boolean deleteByLoginId(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null！");
         try {
             String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where login_id = ?";
             int num = jdbcTemplate.update(sql, loginId);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteTokenByLoginId failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByLoginId failed, Exception: {e}", e);
             return false;
         }
     }
@@ -230,7 +235,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
 
     private void clean() {
         try {
-            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where token_expire_time < ?";
+            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials_expire_time < ?";
             int num = jdbcTemplate.update(sql, System.currentTimeMillis());
             log.info("JdbcAuthProvider clean num: {}", num);
         } catch (Exception e) {

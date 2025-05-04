@@ -13,6 +13,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
 import org.tinycloud.security.interceptor.holder.RoleHolder;
+import org.tinycloud.security.provider.LoginSubject;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -58,19 +59,9 @@ public class AuthUtil {
      * @return token
      */
     public static String getToken(String tokenName) {
-        HttpServletRequest request = null;
         try {
-            request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-            // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
-            String token = request.getHeader(tokenName);
-            if (StringUtils.isEmpty(token)) {
-                token = CookieUtil.getCookie(request, tokenName);
-            }
-            // cookie里取不到，再从请求参数里面取
-            if (StringUtils.isEmpty(token)) {
-                token = request.getParameter(tokenName);
-            }
-            return token;
+            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+            return getToken(request, tokenName);
         } catch (Exception e) {
             return null;
         }
@@ -85,11 +76,11 @@ public class AuthUtil {
     public static String getToken(HttpServletRequest request, String tokenName) {
         // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
         String token = request.getHeader(tokenName);
-        if (StringUtils.isEmpty(token)) {
+        if (!StringUtils.hasText(token)) {
             token = CookieUtil.getCookie(request, tokenName);
         }
         // cookie里取不到，再从请求参数里面取
-        if (StringUtils.isEmpty(token)) {
+        if (!StringUtils.hasText(token)) {
             token = request.getParameter(tokenName);
         }
         return token;
@@ -217,13 +208,23 @@ public class AuthUtil {
      * @return Object
      */
     public static Object getLoginId() {
-        return AuthenticeHolder.getLoginId();
+        return AuthenticeHolder.getLoginSubject() == null ? null : AuthenticeHolder.getLoginSubject().getLoginId();
     }
 
     /**
-     * 判断拥有角色：role1
+     * 获取当前登录用户的LoginId
      *
-     * @return
+     * @return Object
+     */
+    public static LoginSubject getLoginSubject() {
+        return AuthenticeHolder.getLoginSubject();
+    }
+
+
+    /**
+     * 手动判断拥有角色：role1
+     *
+     * @return true or false
      */
     public static boolean hasRole(String role) {
         Set<String> roleSet = RoleHolder.getRoleSet();
@@ -234,10 +235,10 @@ public class AuthUtil {
     }
 
     /**
-     * 判断拥有角色：role1 and role2
+     * 手动判断拥有角色：role1 and role2
      *
-     * @param roles
-     * @return
+     * @param roles 角色列表
+     * @return true or false
      */
     public static boolean hasAllRole(String... roles) {
         Set<String> roleSet = RoleHolder.getRoleSet();
@@ -254,10 +255,10 @@ public class AuthUtil {
     }
 
     /**
-     * 判断拥有角色：role1 or role2 or role3 有其一即可
+     * 手动判断拥有角色：role1 or role2 or role3 有其一即可
      *
-     * @param roles
-     * @return
+     * @param roles 角色列表
+     * @return true or false
      */
     public static boolean hasAnyRole(String... roles) {
         Set<String> roleSet = RoleHolder.getRoleSet();
@@ -275,9 +276,9 @@ public class AuthUtil {
 
 
     /**
-     * 判断拥有权限：permission1
+     * 手动判断拥有权限：permission1
      *
-     * @return
+     * @return true or false
      */
     public static boolean hasPermission(String permission) {
         Set<String> permissionSet = PermissionHolder.getPermissionSet();
@@ -288,10 +289,10 @@ public class AuthUtil {
     }
 
     /**
-     * 判断拥有角色：permission1 and permission2
+     * 手动判断拥有角色：permission1 and permission2
      *
-     * @param permissions
-     * @return
+     * @param permissions 权限列表
+     * @return true or false
      */
     public static boolean hasAllPermission(String... permissions) {
         Set<String> permissionSet = PermissionHolder.getPermissionSet();
@@ -308,10 +309,10 @@ public class AuthUtil {
     }
 
     /**
-     * 判断拥有权限：permission1 or permission2 or permission3 有其一即可
+     * 手动判断拥有权限：permission1 or permission2 or permission3 有其一即可
      *
-     * @param permissions
-     * @return
+     * @param permissions 权限列表
+     * @return true or false
      */
     public static boolean hasAnyPermission(String... permissions) {
         Set<String> permissionSet = PermissionHolder.getPermissionSet();

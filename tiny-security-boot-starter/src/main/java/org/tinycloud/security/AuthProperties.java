@@ -23,6 +23,10 @@ public class AuthProperties {
 
     private String tableName = "s_auth_token";
 
+    private String jwtSecret;
+
+    private String jwtSubject;
+
     public String getStoreType() {
         return storeType;
     }
@@ -69,5 +73,21 @@ public class AuthProperties {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    public String getJwtSecret() {
+        return jwtSecret;
+    }
+
+    public void setJwtSecret(String jwtSecret) {
+        this.jwtSecret = jwtSecret;
+    }
+
+    public String getJwtSubject() {
+        return jwtSubject;
+    }
+
+    public void setJwtSubject(String jwtSubject) {
+        this.jwtSubject = jwtSubject;
     }
 }

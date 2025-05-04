@@ -68,15 +68,15 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // 第一步、先从请求的request里获取传来的token值，并且判断token值是否为空
-        String token = this.getAuthProvider().getToken(request);
-        if (StringUtils.isEmpty(token)) {
+        // 第一步、先从请求的request里获取传来的credentials值，并且判断credentials值是否为空
+        String credentials = this.getAuthProvider().getCredentials(request);
+        if (!StringUtils.hasText(credentials)) {
             // 直接抛出异常的话，就不需要return false了
             throw new UnAuthorizedException();
         }
 
         // 第二步、再判断此token值在会话存储器中是否存在，存在的话说明会话有效，并刷新会话时长
-        LoginSubject subject = this.getAuthProvider().getSubject(token);
+        LoginSubject subject = this.getAuthProvider().getSubject(credentials);
         if (Objects.isNull(subject)) {
             throw new UnAuthorizedException();
         } else {
@@ -87,10 +87,10 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
             if (expireTime - currentTime <= millsCritical) {
                 // 刷新会话缓存时长
                 subject.setLoginExpireTime(currentTime + timeout * 1000L);
-                boolean result = this.getAuthProvider().refreshToken(token, subject);
+                boolean result = this.getAuthProvider().refreshByCredentials(credentials, subject);
             }
             // 存入LoginId，以方便后续使用
-            AuthenticeHolder.setLoginId(subject.getLoginId());
+            AuthenticeHolder.setLoginSubject(subject);
             // 合格不需要拦截，放行
             return true;
         }
