@@ -1,5 +1,7 @@
 package org.tinycloud.security.interceptor.holder;
 
+import org.tinycloud.security.provider.LoginSubject;
+
 import java.util.Objects;
 
 /**
@@ -9,19 +11,19 @@ import java.util.Objects;
  * @version 2022-06-14 13:58
  **/
 public class AuthenticeHolder {
-    private final static ThreadLocal<Object> authentice = new ThreadLocal<>();
+    private final static ThreadLocal<LoginSubject> authentice = new ThreadLocal<>();
 
-    public static Object getLoginId() {
-        Object loginId = authentice.get();
-        if (Objects.isNull(loginId)) {
+    public static LoginSubject getLoginSubject() {
+        LoginSubject subject = authentice.get();
+        if (Objects.isNull(subject)) {
             return null;
         } else {
-            return loginId;
+            return subject;
         }
     }
 
-    public static void setLoginId(Object loginId) {
-        authentice.set(loginId);
+    public static void setLoginSubject(LoginSubject loginSubject) {
+        authentice.set(loginSubject);
     }
 
     public static void clearLoginId() {

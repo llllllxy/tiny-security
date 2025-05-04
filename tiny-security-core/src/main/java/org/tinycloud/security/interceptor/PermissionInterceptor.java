@@ -14,13 +14,14 @@ import org.springframework.web.servlet.ModelAndView;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
+import java.util.Objects;
 import java.util.Set;
 
 /**
  * 用户权限验证拦截器
  *
  * @author liuxingyu01
- * @version  2020-03-22-11:23
+ * @version 2024-03-22-11:23
  **/
 public class PermissionInterceptor implements HandlerInterceptor {
 
@@ -59,15 +60,16 @@ public class PermissionInterceptor implements HandlerInterceptor {
             response.setStatus(HttpServletResponse.SC_OK);
             return true;
         }
-
+        if (Objects.isNull(AuthenticeHolder.getLoginSubject())) {
+            throw new NoPermissionException();
+        }
         Method method = ((HandlerMethod) handler).getMethod();
-        Object loginId = AuthenticeHolder.getLoginId();
+        Object loginId = AuthenticeHolder.getLoginSubject().getLoginId();
         Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(loginId);
         Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(loginId);
 
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
-
         if (AuthUtil.checkPermission(method, permissionSet) && AuthUtil.checkRole(method, roleSet)) {
             return true;
         } else {

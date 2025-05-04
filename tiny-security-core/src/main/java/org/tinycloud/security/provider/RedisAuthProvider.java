@@ -1,17 +1,19 @@
 package org.tinycloud.security.provider;
 
-
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.util.JwtUtils;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 
@@ -31,18 +33,18 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     }
 
     /**
-     * 刷新token
+     * 刷新会话
      *
-     * @param token 令牌
+     * @param credentials 凭证
      * @return true成功，false失败
      */
     @Override
-    public boolean refreshToken(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean refreshByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.redisTemplate.expire(AuthConsts.AUTH_TOKEN_KEY + token, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            return this.redisTemplate.expire(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
         } catch (Exception e) {
-            log.error("RedisAuthProvider refreshToken failed, Exception：{e}", e);
+            log.error("RedisAuthProvider refreshByCredentials failed, Exception：{e}", e);
             return false;
         }
     }
@@ -50,50 +52,50 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     /**
      * 刷新token
      *
-     * @param token   令牌
-     * @param subject 登录用户
+     * @param credentials 凭证
+     * @param subject     登录用户
      * @return true成功，false失败
      */
     @Override
-    public boolean refreshToken(String token, LoginSubject subject) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean refreshByCredentials(String credentials, LoginSubject subject) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            this.redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            this.redisTemplate.opsForValue().set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider refreshToken failed, Exception：{e}", e);
+            log.error("RedisAuthProvider refreshByCredentials failed, Exception：{e}", e);
             return false;
         }
     }
 
     /**
-     * 检查token是否失效
+     * 检查凭证是否失效
      *
-     * @param token 令牌
+     * @param credentials 凭证
      * @return true未失效，false已失效
      */
     @Override
-    public boolean checkToken(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public boolean checkByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.redisTemplate.hasKey(AuthConsts.AUTH_TOKEN_KEY + token);
+            return this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
         } catch (Exception e) {
-            log.error("RedisAuthProvider checkToken failed, Exception：{e}", e);
+            log.error("RedisAuthProvider checkByCredentials failed, Exception：{e}", e);
             return false;
         }
     }
 
     /**
-     * 根据令牌获取登录用户
+     * 根据凭证获取登录用户
      *
-     * @param token 令牌
+     * @param credentials 凭证
      * @return LoginSubject
      */
     @Override
-    public LoginSubject getSubject(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
+    public LoginSubject getSubject(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
+            String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return JsonUtil.readValue(content, LoginSubject.class);
         } catch (Exception e) {
             log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
@@ -109,55 +111,58 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      * @return token令牌
      */
     @Override
-    public String createToken(Object loginId) {
+    public String createAuth(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String token = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            String credentials = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            Map<String, String> payload = new HashMap<>();
+            payload.put("credentials", credentials);
+            String jwtToken = JwtUtils.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
+
             LoginSubject subject = new LoginSubject();
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
             subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
-            this.redisTemplate.opsForValue().set(AuthConsts.AUTH_TOKEN_KEY + token, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
-            return token;
+            this.redisTemplate.opsForValue().set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
         } catch (Exception e) {
-            log.error("RedisAuthProvider createToken failed, Exception：{e}", e);
-            return null;
-        }
-    }
-
-
-    /**
-     * 根据token，获取loginId
-     *
-     * @param token 令牌
-     * @return loginId
-     */
-    @Override
-    public Object getLoginId(String token) {
-        Assert.hasText(token, "The token cannot be empty!");
-        try {
-            String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_TOKEN_KEY + token);
-            return JsonUtil.readValue(content, LoginSubject.class).getLoginId();
-        } catch (Exception e) {
-            log.error("RedisAuthProvider getLoginId failed, Exception：{e}", e);
+            log.error("RedisAuthProvider createAuth failed, Exception：{e}", e);
             return null;
         }
     }
 
     /**
-     * 删除token
+     * 根据token删除
      *
      * @param token 令牌
      * @return true成功，false失败
      */
     @Override
-    public boolean deleteToken(String token) {
+    public boolean deleteByToken(String token) {
         Assert.hasText(token, "The token cannot be empty!");
         try {
-            return this.redisTemplate.delete(AuthConsts.AUTH_TOKEN_KEY + token);
+            String credentials = this.getCredentialsByToken(token);
+            return this.redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
         } catch (Exception e) {
             log.error("RedisAuthProvider deleteToken failed, Exception：{e}", e);
+            return false;
+        }
+    }
+
+    /**
+     * 根据凭证删除
+     *
+     * @param credentials 凭证
+     * @return true成功，false失败
+     */
+    @Override
+    public boolean deleteByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            return this.redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+        } catch (Exception e) {
+            log.error("RedisAuthProvider deleteByCredentials failed, Exception：{e}", e);
             return false;
         }
     }
@@ -169,10 +174,10 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      * @return true成功，false失败
      */
     @Override
-    public boolean deleteTokenByLoginId(Object loginId) {
+    public boolean deleteByLoginId(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            Set<String> keys = redisTemplate.keys(AuthConsts.AUTH_TOKEN_KEY.concat("*"));
+            Set<String> keys = this.scanKeys(AuthConsts.AUTH_CREDENTIALS_KEY.concat("*"));
             if (Objects.nonNull(keys) && !keys.isEmpty()) {
                 for (String key : keys) {
                     String content = redisTemplate.opsForValue().get(key);
@@ -187,9 +192,29 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             }
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider deleteToken failed, Exception：{e}", e);
+            log.error("RedisAuthProvider deleteByLoginId failed, Exception：{e}", e);
             return false;
         }
     }
 
+
+    /**
+     * 使用scan命令查询所有符合给定模式(pattern)的key
+     *
+     * @param pattern 匹配
+     * @return keys列表
+     */
+    public Set<String> scanKeys(String pattern) {
+        Set<String> keys = new HashSet<>();
+        RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
+        ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
+        try (Cursor<byte[]> cursor = connection.scan(options)) {
+            while (cursor.hasNext()) {
+                keys.add(new String(cursor.next()));
+            }
+        } catch (Exception e) {
+            log.error("RedisAuthProvider scanKeys failed, Exception：{e}", e);
+        }
+        return keys;
+    }
 }

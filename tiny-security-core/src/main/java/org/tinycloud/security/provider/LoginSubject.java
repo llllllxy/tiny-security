@@ -1,5 +1,7 @@
 package org.tinycloud.security.provider;
 
+import java.io.Serializable;
+
 /**
  * <p>
  * </p>
@@ -7,7 +9,8 @@ package org.tinycloud.security.provider;
  * @author liuxingyu01
  * @since 2024-09-04 16:50
  */
-public class LoginSubject {
+public class LoginSubject implements Serializable {
+    private static final long serialVersionUID = -1L;
 
     /**
      * 租户ID

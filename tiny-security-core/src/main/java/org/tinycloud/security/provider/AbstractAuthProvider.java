@@ -1,30 +1,48 @@
 package org.tinycloud.security.provider;
 
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
+import org.tinycloud.security.util.JwtUtils;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Map;
+import java.util.Objects;
 
 public abstract class AbstractAuthProvider implements AuthProvider {
 
-    /**
-     * 获取token
-     * @return token
-     */
-    @Override
-    public String getToken() {
-        return AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
+    public String getCredentialsByToken(String token) {
+        // 校验token是不是伪造的
+        Map<String, String> claims = JwtUtils.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
+        if (Objects.isNull(claims)) {
+            throw new UnAuthorizedException();
+        }
+        // 从jwt的Payload里获取credentials，这才是会话的凭证key，它在redis或者mysql里面存着用户信息
+        return claims.get("credentials");
     }
 
     /**
      * 获取token
+     *
+     * @return token
+     */
+    @Override
+    public String getCredentials() {
+        String jwtToken = this.getToken();
+        return getCredentialsByToken(jwtToken);
+    }
+
+    /**
+     * 获取token
+     *
      * @param request HttpServletRequest
      * @return token
      */
     @Override
-    public String getToken(HttpServletRequest request) {
-        return AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
+    public String getCredentials(HttpServletRequest request) {
+        String jwtToken = this.getToken(request);
+        return getCredentialsByToken(jwtToken);
     }
 
     /**
@@ -34,7 +52,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public String login(Object loginId) {
-        String token = this.createToken(loginId);
+        String token = this.createAuth(loginId);
         // 设置 Cookie，通过 Cookie 上下文返回给前端
         CookieUtil.setCookie(AuthUtil.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
         return token;
@@ -45,7 +63,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public void logout(HttpServletRequest request) {
-        this.deleteToken(this.getToken(request));
+        this.deleteByCredentials(this.getCredentials(request));
     }
 
     /**
@@ -53,7 +71,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public void logout() {
-        this.deleteToken(this.getToken());
+        this.deleteByCredentials(this.getCredentials());
     }
 
     /**
@@ -63,15 +81,26 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public Object getLoginId() {
-        return this.getLoginId(this.getToken());
+        return this.getSubject(this.getCredentials()).getLoginId();
+    }
+
+    /**
+     * 获取当前登录用户信息
+     *
+     * @return LoginSubject
+     */
+    @Override
+    public LoginSubject getLoginSubject() {
+        return this.getSubject(this.getCredentials());
     }
 
     /**
      * 校验当前会话是否登录
+     *
      * @return true已登录，false未登录
      */
     @Override
     public boolean isLogin() {
-        return this.checkToken(this.getToken());
+        return this.checkByCredentials(this.getCredentials());
     }
 }

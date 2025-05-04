@@ -42,7 +42,7 @@ tiny-security是一个基于SpringBoot开发的轻量级权限控制框架，支
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.0.7</version>
+    <version>1.1.1</version>
 </dependency>
 ```
 
@@ -318,14 +318,15 @@ authProvider.getToken(HttpServletRequest request);
 ---
 
 ### 2.8、异常处理
-bluewind-auth-client在会话验证失败和权限验证失败的时候会抛出自定义异常：
+tiny-security在会话验证失败和权限验证失败的会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
 |:----------------------|:-------------|:----------------------------------|
 | UnAuthorizedException | 未登录或会话已失效 | 错误信息“未登录或会话已失效！”，错误码401 |
 | NoPermissionException | 无权限访问（角色或者资源不匹配）  | 错误信息“无权限访问！”，错误码403   |
 
-建议使用全局异常处理器来捕获异常并进行处理：
+需要使用全局异常处理器来捕获异常并进行处理返回JSON数据：
+
 ```java
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -401,8 +402,8 @@ $.ajax({
 
 ### 2.11、自定义AuthProvider
 框架内置了JdbcAuthProvider、RedisAuthProvider和SingleAuthProvider三种会话实现，
-如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘、MongoDB中，只需以下三步即可：
-- 实现org.bluewind.authclient.provider.AuthProvider接口，或者继承org.bluewind.authclient.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，
+如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘文件、MongoDB中，只需以下三步即可：
+- 继承org.tinycloud.security.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，
 - 注入bean，如下
 ```java
    @Component

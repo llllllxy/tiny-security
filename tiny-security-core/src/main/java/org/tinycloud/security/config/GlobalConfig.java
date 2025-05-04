@@ -30,6 +30,10 @@ public class GlobalConfig implements Serializable {
 
     private String tableName;
 
+    private String jwtSecret;
+
+    private String jwtSubject;
+
     public boolean isBanner() {
         return banner;
     }
@@ -92,5 +96,21 @@ public class GlobalConfig implements Serializable {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    public String getJwtSecret() {
+        return jwtSecret;
+    }
+
+    public void setJwtSecret(String jwtSecret) {
+        this.jwtSecret = jwtSecret;
+    }
+
+    public String getJwtSubject() {
+        return jwtSubject;
+    }
+
+    public void setJwtSubject(String jwtSubject) {
+        this.jwtSubject = jwtSubject;
     }
 }

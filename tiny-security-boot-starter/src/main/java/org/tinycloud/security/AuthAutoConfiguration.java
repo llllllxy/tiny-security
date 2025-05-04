@@ -120,6 +120,8 @@ public class AuthAutoConfiguration {
         globalConfig.setTokenName(authProperties.getTokenName());
         globalConfig.setTokenPrefix(authProperties.getTokenPrefix());
         globalConfig.setTokenStyle(authProperties.getTokenStyle());
+        globalConfig.setJwtSecret(authProperties.getJwtSecret());
+        globalConfig.setJwtSubject(authProperties.getJwtSubject());
         GlobalConfigUtils.setGlobalConfig(globalConfig);
     }
 }
