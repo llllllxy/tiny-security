@@ -5,7 +5,7 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.JsonUtil;
-import org.tinycloud.security.util.JwtUtils;
+import org.tinycloud.security.util.JwtUtil;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -371,7 +371,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             String credentials = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
             Map<String, String> payload = new HashMap<>();
             payload.put("credentials", credentials);
-            String jwtToken = JwtUtils.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
+            String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
 
             LoginSubject subject = new LoginSubject();
             subject.setLoginId(loginId);

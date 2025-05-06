@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "tiny-security")
 public class AuthProperties {
 
-    private String storeType = "redis";
+    private String storeType = "single";
 
     private String tokenName = "token";
 
