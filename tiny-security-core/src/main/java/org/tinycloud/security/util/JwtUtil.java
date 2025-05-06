@@ -18,8 +18,8 @@ import java.util.*;
  * @author liuxingyu01
  * @since 2024-12-17 21:43
  */
-public class JwtUtils {
-    final static Logger log = LoggerFactory.getLogger(JwtUtils.class);
+public class JwtUtil {
+    final static Logger log = LoggerFactory.getLogger(JwtUtil.class);
 
     // jwt签名密钥
     private static final String JWT_SECRET = "K$N)A3*sGGf<wo*22*%&(DF";

@@ -4,7 +4,7 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
-import org.tinycloud.security.util.JwtUtils;
+import org.tinycloud.security.util.JwtUtil;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.Map;
@@ -14,7 +14,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
 
     public String getCredentialsByToken(String token) {
         // 校验token是不是伪造的
-        Map<String, String> claims = JwtUtils.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
+        Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
         if (Objects.isNull(claims)) {
             throw new UnAuthorizedException();
         }
