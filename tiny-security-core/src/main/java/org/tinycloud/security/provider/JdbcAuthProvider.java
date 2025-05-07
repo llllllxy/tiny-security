@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  * @version 2023-01-06-9:33
  **/
 public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvider {
-    final static Logger log = LoggerFactory.getLogger(JdbcAuthProvider.class);
+    private final static Logger log = LoggerFactory.getLogger(JdbcAuthProvider.class);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -47,7 +47,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean refreshByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set credentials_expire_time = ? where credentials = ?";
+            String sql = "UPDATE " + GlobalConfigUtils.getGlobalConfig().getTableName() + " SET credentials_expire_time = ? WHERE credentials = ?";
             int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, credentials);
             return num > 0;
         } catch (Exception e) {
@@ -60,7 +60,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "update " + GlobalConfigUtils.getGlobalConfig().getTableName() + " set credentials_expire_time = ?, login_subject = ? where credentials = ?";
+            String sql = "UPDATE " + GlobalConfigUtils.getGlobalConfig().getTableName() + " SET credentials_expire_time = ?, login_subject = ? WHERE credentials = ?";
             int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, JsonUtil.writeValueAsString(subject), credentials);
             return num > 0;
         } catch (Exception e) {
@@ -79,7 +79,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "select credentials_expire_time from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            String sql = "SELECT credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
             if (!resultList.isEmpty()) {
                 long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
@@ -97,7 +97,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "select login_subject from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            String sql = "SELECT login_subject FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
@@ -130,7 +130,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
             subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
-            String sql = "insert into " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) values (?,?,?,?)";
+            String sql = "INSERT INTO " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) VALUES (?,?,?,?)";
             int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000);
             return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;
         } catch (Exception e) {
@@ -150,7 +150,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         Assert.hasText(token, "The token cannot be empty！");
         try {
             String credentials = this.getCredentialsByToken(token);
-            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            String sql = "DELETE FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
             int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
@@ -169,7 +169,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean deleteByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty！");
         try {
-            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials = ?";
+            String sql = "DELETE FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
             int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
@@ -188,7 +188,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean deleteByLoginId(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null！");
         try {
-            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where login_id = ?";
+            String sql = "DELETE FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE login_id = ?";
             int num = jdbcTemplate.update(sql, loginId);
             return num > 0;
         } catch (Exception e) {
@@ -235,7 +235,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
 
     private void clean() {
         try {
-            String sql = "delete from " + GlobalConfigUtils.getGlobalConfig().getTableName() + " where credentials_expire_time < ?";
+            String sql = "DELETE FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials_expire_time < ?";
             int num = jdbcTemplate.update(sql, System.currentTimeMillis());
             log.info("JdbcAuthProvider clean num: {}", num);
         } catch (Exception e) {

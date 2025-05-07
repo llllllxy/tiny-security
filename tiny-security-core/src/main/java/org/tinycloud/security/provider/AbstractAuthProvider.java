@@ -1,49 +1,16 @@
 package org.tinycloud.security.provider;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
-import org.tinycloud.security.util.JwtUtil;
 
 import javax.servlet.http.HttpServletRequest;
-import java.util.Map;
-import java.util.Objects;
 
 public abstract class AbstractAuthProvider implements AuthProvider {
-
-    public String getCredentialsByToken(String token) {
-        // 校验token是不是伪造的
-        Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
-        if (Objects.isNull(claims)) {
-            throw new UnAuthorizedException();
-        }
-        // 从jwt的Payload里获取credentials，这才是会话的凭证key，它在redis或者mysql里面存着用户信息
-        return claims.get("credentials");
-    }
-
-    /**
-     * 获取token
-     *
-     * @return token
-     */
-    @Override
-    public String getCredentials() {
-        String jwtToken = this.getToken();
-        return getCredentialsByToken(jwtToken);
-    }
-
-    /**
-     * 获取token
-     *
-     * @param request HttpServletRequest
-     * @return token
-     */
-    @Override
-    public String getCredentials(HttpServletRequest request) {
-        String jwtToken = this.getToken(request);
-        return getCredentialsByToken(jwtToken);
-    }
+    private final static Logger log = LoggerFactory.getLogger(AbstractAuthProvider.class);
 
     /**
      * 执行登录操作
@@ -97,10 +64,29 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     /**
      * 校验当前会话是否登录
      *
-     * @return true已登录，false未登录
+     * @return true已登录，false未登录（不抛出异常）
      */
     @Override
     public boolean isLogin() {
-        return this.checkByCredentials(this.getCredentials());
+        try {
+            return this.checkByCredentials(this.getCredentials());
+        } catch (Exception e) {
+            log.error("AbstractAuthProvider isLogin failed, Exception：{e}", e);
+            return false;
+        }
+    }
+
+    /**
+     * 校验当前会话是否登录
+     *
+     * @return true已登录，false未登录
+     */
+    @Override
+    public boolean checkLogin() {
+        boolean success = this.checkByCredentials(this.getCredentials());
+        if (!success) {
+            throw new UnAuthorizedException();
+        }
+        return true;
     }
 }
