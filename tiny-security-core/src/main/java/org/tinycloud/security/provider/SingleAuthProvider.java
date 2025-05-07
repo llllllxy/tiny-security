@@ -21,7 +21,7 @@ import java.util.concurrent.*;
  * @version 2023-01-06-9:33
  **/
 public class SingleAuthProvider extends AbstractAuthProvider implements AuthProvider {
-    final static Logger log = LoggerFactory.getLogger(SingleAuthProvider.class);
+    private final static Logger log = LoggerFactory.getLogger(SingleAuthProvider.class);
 
     /**
      * 常量，每次清理过期数据间隔的时间 (单位: 秒) ，默认值30秒

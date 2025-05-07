@@ -6,8 +6,11 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
+import org.tinycloud.security.util.JwtUtil;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * 操作token和会话的接口
@@ -19,6 +22,12 @@ public interface AuthProvider {
 
     /*============================操作token开始=============================*/
 
+    /**
+     * 获取当前会话的token值（jwtToken）
+     *
+     * @param request HttpServletRequest
+     * @return String
+     */
     default String getToken(HttpServletRequest request) {
         String jwtToken = AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
         // 第1步：先判断jwtToken是否为空
@@ -35,6 +44,11 @@ public interface AuthProvider {
         return jwtToken;
     }
 
+    /**
+     * 获取当前会话的token值（jwtToken）
+     *
+     * @return String
+     */
     default String getToken() {
         String jwtToken = AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
         // 第1步：先判断jwtToken是否为空
@@ -52,11 +66,30 @@ public interface AuthProvider {
     }
 
     /**
-     * 获取会话凭证
+     * 根据token值（jwtToken）解析得到会话凭证（redis、database、memory里面的key）
+     *
+     * @param token jwtToken
+     * @return 会话凭证
+     */
+    default String getCredentialsByToken(String token) {
+        // 校验token是不是伪造的
+        Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
+        if (Objects.isNull(claims)) {
+            throw new UnAuthorizedException();
+        }
+        // 从jwt的Payload里获取credentials，这才是会话的凭证key，它在redis或者mysql里面存着用户信息
+        return claims.get("credentials");
+    }
+
+    /**
+     * 根据token值（jwtToken）解析得到会话凭证（redis、database、memory里面的key）
      *
      * @return 会话凭证
      */
-    String getCredentials();
+    default String getCredentials() {
+        String jwtToken = this.getToken();
+        return getCredentialsByToken(jwtToken);
+    }
 
     /**
      * 获取获取会话凭证
@@ -64,7 +97,10 @@ public interface AuthProvider {
      * @param request HttpServletRequest
      * @return 会话凭证
      */
-    String getCredentials(HttpServletRequest request);
+    default String getCredentials(HttpServletRequest request) {
+        String jwtToken = this.getToken(request);
+        return getCredentialsByToken(jwtToken);
+    }
 
     /**
      * 刷新credentials
@@ -150,21 +186,48 @@ public interface AuthProvider {
     /**
      * HttpServletRequest request
      *
-     * @param request
+     * @param request HttpServletRequest
      */
     void logout(HttpServletRequest request);
 
     /**
      * 获取当前登录用户的loginId
      *
-     * @return
+     * @return Object
      */
     Object getLoginId();
 
     /**
+     * 获取当前登录用户的loginId, 并转换为 String 类型
+     *
+     * @return 账号id
+     */
+    default String getLoginIdAsString() {
+        return String.valueOf(getLoginId());
+    }
+
+    /**
+     * 获取当前登录用户的loginId, 并转换为 Integer 类型
+     *
+     * @return 账号id
+     */
+    default Integer getLoginIdAsInt() {
+        return Integer.parseInt(String.valueOf(getLoginId()));
+    }
+
+    /**
+     * 获取当前登录用户的loginId, 并转换为 Long 类型
+     *
+     * @return 账号id
+     */
+    default Long getLoginIdAsLong() {
+        return Long.parseLong(String.valueOf(getLoginId()));
+    }
+
+    /**
      * 获取当前登录用户信息
      *
-     * @return
+     * @return LoginSubject
      */
     LoginSubject getLoginSubject();
 
@@ -174,5 +237,12 @@ public interface AuthProvider {
      * @return true已登录，false未登录
      */
     boolean isLogin();
+
+    /**
+     * 检验当前会话是否已经登录, 如果未登录，则抛出异常
+     *
+     * @return true已登录，false未登录（会抛出异常）
+     */
+    boolean checkLogin();
     /*============================操作会话结束=============================*/
 }

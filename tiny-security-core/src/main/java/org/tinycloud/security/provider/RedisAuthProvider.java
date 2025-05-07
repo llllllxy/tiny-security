@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
  * @version 2023-01-06-9:33
  **/
 public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvider {
-    final static Logger log = LoggerFactory.getLogger(RedisAuthProvider.class);
+    private final static Logger log = LoggerFactory.getLogger(RedisAuthProvider.class);
 
     private final StringRedisTemplate redisTemplate;
 
