@@ -3,15 +3,14 @@ package org.tinycloud.security.provider;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.util.CommonUtil;
-import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.provider.timedcache.LocalMapContainerByConcurrentHashMap;
+import org.tinycloud.security.provider.timedcache.LocalTimeCache;
 import org.tinycloud.security.util.JwtUtil;
 import org.tinycloud.security.util.TokenGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.*;
 
 /**
  * 操作token和会话的接口（通过单机内存Map实现，系统重启后数据会丢失）
@@ -23,279 +22,15 @@ import java.util.concurrent.*;
 public class SingleAuthProvider extends AbstractAuthProvider implements AuthProvider {
     private final static Logger log = LoggerFactory.getLogger(SingleAuthProvider.class);
 
-    /**
-     * 常量，每次清理过期数据间隔的时间 (单位: 秒) ，默认值30秒
-     */
-    final static int DATA_REFRESH_PERIOD = 30;
+    public LocalTimeCache timedCache = new LocalTimeCache(new LocalMapContainerByConcurrentHashMap<>(), new LocalMapContainerByConcurrentHashMap<>());
 
-    /**
-     * 常量，表示系统中不存在这个缓存 (在对不存在的key获取剩余存活时间时返回此值)
-     */
-    final static long NOT_VALUE_EXPIRE = -1L;
-
-    /**
-     * 数据存储集合
-     */
-    public final static Map<String, Object> dataMap = new ConcurrentHashMap<>();
-
-    /**
-     * 数据的过期时间存储集合 (单位: 毫秒) , 记录所有key的到期时间 [注意不是剩余存活时间]
-     */
-    public final static Map<String, Long> expireMap = new ConcurrentHashMap<>();
-
-
-    // ------------------------ String 读写操作开始 ------------------------ //
-
-    /**
-     * 从缓存中获取数据（String）
-     *
-     * @param key 键
-     * @return 值
-     */
-    public String get(String key) {
-        clearKeyByTimeout(key);
-        return (String) dataMap.get(key);
-    }
-
-    /**
-     * 往缓存中存入数据（String）
-     *
-     * @param key     键
-     * @param value   值
-     * @param timeout 有效时间（秒）
-     */
-    public void set(String key, String value, long timeout) {
-        if (timeout == 0) {
-            return;
-        }
-        dataMap.put(key, value);
-        expireMap.put(key, (System.currentTimeMillis() + timeout * 1000));
-    }
-
-    /**
-     * 更新缓存数据（String）
-     *
-     * @param key   键
-     * @param value 值
-     */
-    public void update(String key, String value) {
-        if (getKeyTimeout(key) == SingleAuthProvider.NOT_VALUE_EXPIRE) {
-            return;
-        }
-        dataMap.put(key, value);
-    }
-
-    /**
-     * 删除缓存
-     *
-     * @param key 键
-     */
-    public void delete(String key) {
-        dataMap.remove(key);
-        expireMap.remove(key);
-    }
-
-    /**
-     * 获取缓存剩余存活时间 (单位：秒)
-     *
-     * @param key 键
-     * @return 剩余存活时间 (单位：秒)
-     */
-    public long getTimeout(String key) {
-        return getKeyTimeout(key);
-    }
-
-    /**
-     * 更新缓存剩余存活时间 (单位：秒)
-     *
-     * @param key     键
-     * @param timeout 有效时间（秒）
-     */
-    public void updateTimeout(String key, long timeout) {
-        expireMap.put(key, (System.currentTimeMillis() + timeout * 1000));
-    }
-
-    // ------------------------ Object 读写操作开始 ------------------------ //
-
-    /**
-     * 从缓存中获取数据（Object）
-     *
-     * @param key 键
-     * @return 值
-     */
-    public Object getObject(String key) {
-        clearKeyByTimeout(key);
-        return dataMap.get(key);
-    }
-
-    /**
-     * 往缓存中存入数据（Object）
-     *
-     * @param key     键
-     * @param object  值
-     * @param timeout 有效时间（秒）
-     */
-    public void setObject(String key, Object object, long timeout) {
-        if (timeout == 0) {
-            return;
-        }
-        dataMap.put(key, object);
-        expireMap.put(key, (System.currentTimeMillis() + timeout * 1000));
-    }
-
-    /**
-     * 更新缓存数据（Object）
-     *
-     * @param key    键
-     * @param object 值
-     */
-    public void updateObject(String key, Object object) {
-        if (getKeyTimeout(key) == SingleAuthProvider.NOT_VALUE_EXPIRE) {
-            return;
-        }
-        dataMap.put(key, object);
-    }
-
-    /**
-     * 删除缓存
-     *
-     * @param key 键
-     */
-    public void deleteObject(String key) {
-        dataMap.remove(key);
-        expireMap.remove(key);
-    }
-
-    /**
-     * 获取缓存剩余存活时间 (单位：秒)
-     *
-     * @param key 键
-     * @return 剩余存活时间 (单位：秒)
-     */
-    public long getObjectTimeout(String key) {
-        return getKeyTimeout(key);
-    }
-
-    /**
-     * 更新缓存剩余存活时间 (单位：秒)
-     *
-     * @param key     键
-     * @param timeout 有效时间（秒）
-     */
-    public void updateObjectTimeout(String key, long timeout) {
-        expireMap.put(key, (System.currentTimeMillis() + timeout * 1000));
-    }
-
-    // ------------------------ 过期时间相关操作开始 ------------------------ //
-
-    /**
-     * 如果指定key已经过期，则立即清除它
-     *
-     * @param key 键
-     */
-    private void clearKeyByTimeout(String key) {
-        Long expirationTime = expireMap.get(key);
-        // 清除条件：如果不为空 && 已经超过过期时间
-        if (expirationTime != null && expirationTime < System.currentTimeMillis()) {
-            dataMap.remove(key);
-            expireMap.remove(key);
-        }
-    }
-
-    /**
-     * 获取指定key的剩余存活时间 (单位：秒)
-     *
-     * @param key 键
-     */
-    private long getKeyTimeout(String key) {
-        // 先检查是否已经过期
-        clearKeyByTimeout(key);
-        // 获取过期时间
-        Long expire = expireMap.get(key);
-        // 如果根本没有这个值，则直接返回NOT_VALUE_EXPIRE
-        if (expire == null) {
-            return SingleAuthProvider.NOT_VALUE_EXPIRE;
-        }
-        // 计算剩余时间并返回
-        long timeout = (expire - System.currentTimeMillis()) / 1000;
-        // 小于零时，视为不存在，返回NOT_VALUE_EXPIRE
-        if (timeout < 0) {
-            dataMap.remove(key);
-            expireMap.remove(key);
-            return SingleAuthProvider.NOT_VALUE_EXPIRE;
-        }
-        return timeout;
-    }
-
-
-    // ------------------------ 定时清理过期数据 ------------------------ //
-
-    /**
-     * 用于定时执行数据清理的线程池
-     */
-    private volatile ScheduledExecutorService executorService;
-
-    /**
-     * 是否继续执行数据清理的线程标记
-     */
-    private volatile boolean refreshFlag;
-
-    /**
-     * 清理所有已经过期的key
-     */
-    public void refreshDataMap() {
-        for (String key : expireMap.keySet()) {
-            clearKeyByTimeout(key);
-        }
-    }
-
-    /**
-     * 初始化定时任务
-     */
-    public void initRefreshThread() {
-        // 启动定时刷新
-        this.refreshFlag = true;
-        // 双重校验构造一个单例的ScheduledThreadPool
-        if (this.executorService == null) {
-            synchronized (SingleAuthProvider.class) {
-                if (this.executorService == null) {
-                    this.executorService = Executors.newScheduledThreadPool(1);
-                    this.executorService.scheduleWithFixedDelay(() -> {
-                        log.info("SingleAuthProvider - refreshSession - at ：{}", CommonUtil.getCurrentTime());
-                        try {
-                            // 如果已经被标记为结束
-                            if (!refreshFlag) {
-                                return;
-                            }
-                            // 执行清理方法
-                            refreshDataMap();
-                        } catch (Exception e2) {
-                            log.error("SingleAuthProvider - refreshSession - Exception：{e2}", e2);
-                        }
-                    }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
-                }
-            }
-        }
-        log.info("SingleAuthProvider - refreshThread - init successful!");
-    }
-
-
-    /**
-     * 结束定时任务，不再定时清理过期数据
-     */
-    public void endRefreshThread() {
-        this.refreshFlag = false;
-    }
-
-
-    // ------------------------ 实现AuthProvider接口开始 ------------------------ //
 
     /**
      * 构造函数
      */
     public SingleAuthProvider() {
         // 同时初始化定时任务
-        this.initRefreshThread();
+        this.timedCache.initRefreshThread();
     }
 
     /**
@@ -308,7 +43,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public boolean refreshByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            this.updateTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout());
+            this.timedCache.updateObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout());
             return true;
         } catch (Exception e) {
             log.error("SingleAuthProvider - refreshCredentials - failed，Exception：{e}", e);
@@ -320,7 +55,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            this.set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
+            this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, (subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
             return true;
         } catch (Exception e) {
             log.error("SingleAuthProvider - refreshCredentials - failed，Exception：{e}", e);
@@ -338,7 +73,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            long timeout = this.getTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return timeout > 0;
         } catch (Exception e) {
             log.error("SingleAuthProvider - checkCredentials - failed，Exception：{e}", e);
@@ -350,8 +85,13 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String content = this.get(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
-            return JsonUtil.readValue(content, LoginSubject.class);
+            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            if (timeout <= 0) {
+                return null;
+            } else {
+                Object content = this.timedCache.getObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+                return content == null ? null : (LoginSubject) content;
+            }
         } catch (Exception e) {
             log.error("SingleAuthProvider - getSubject - failed，Exception：{e}", e);
             return null;
@@ -378,7 +118,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
             subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
-            this.set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout());
+            this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, subject, GlobalConfigUtils.getGlobalConfig().getTimeout());
             return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
         } catch (Exception e) {
             log.error("SingleAuthProvider - createToken - failed，Exception：{e}", e);
@@ -397,7 +137,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
         Assert.hasText(token, "The token cannot be empty!");
         try {
             String credentials = this.getCredentialsByToken(token);
-            this.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return true;
         } catch (Exception e) {
             log.error("SingleAuthProvider - deleteByToken - failed，Exception：{e}", e);
@@ -415,7 +155,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public boolean deleteByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            this.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return true;
         } catch (Exception e) {
             log.error("SingleAuthProvider - deleteByCredentials - failed，Exception：{e}", e);
@@ -433,11 +173,10 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public boolean deleteByLoginId(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            for (String key : expireMap.keySet()) {
-                LoginSubject subject = JsonUtil.readValue((String) dataMap.get(key), LoginSubject.class);
+            for (String key : this.timedCache.expireMapKeySet()) {
+                LoginSubject subject = (LoginSubject) this.timedCache.getObject(key);
                 if (subject != null && loginId.equals(subject.getLoginId())) {
-                    dataMap.remove(key);
-                    expireMap.remove(key);
+                    this.timedCache.deleteObject(key);
                 }
             }
             return true;

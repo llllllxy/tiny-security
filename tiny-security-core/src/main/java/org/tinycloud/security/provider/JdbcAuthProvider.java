@@ -61,7 +61,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
             String sql = "UPDATE " + GlobalConfigUtils.getGlobalConfig().getTableName() + " SET credentials_expire_time = ?, login_subject = ? WHERE credentials = ?";
-            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, JsonUtil.writeValueAsString(subject), credentials);
+            int num = jdbcTemplate.update(sql, subject.getLoginExpireTime(), JsonUtil.writeValueAsString(subject), credentials);
             return num > 0;
         } catch (Exception e) {
             log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
@@ -97,13 +97,19 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "SELECT login_subject FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
+            String sql = "SELECT login_subject, credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
             List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
-                return JsonUtil.readValue(content, LoginSubject.class);
+                long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
+                if (tokenExpireTime < System.currentTimeMillis()) {
+                    return null;
+                } else {
+                    return JsonUtil.readValue(content, LoginSubject.class);
+                }
+            } else {
+                return null;
             }
-            return null;
         } catch (Exception e) {
             log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
             return null;
@@ -129,9 +135,10 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
-            subject.setLoginExpireTime(currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L);
+            long loginExpireTime = currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L;
+            subject.setLoginExpireTime(currentTime + loginExpireTime);
             String sql = "INSERT INTO " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) VALUES (?,?,?,?)";
-            int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000);
+            int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), subject.getLoginExpireTime());
             return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;
         } catch (Exception e) {
             log.error("JdbcAuthProvider createAuth failed, Exception: {e}", e);
@@ -203,7 +210,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     private volatile ScheduledExecutorService executorService;
 
     /**
-     * 初始化清理任务，每天执行一次
+     * 初始化清理任务，每天凌晨第一秒执行一次
      */
     private void initCleanThread() {
         // 双重校验构造一个单例的ScheduledThreadPool
