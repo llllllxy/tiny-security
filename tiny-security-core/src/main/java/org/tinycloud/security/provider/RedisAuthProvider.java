@@ -96,7 +96,11 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
             String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
-            return JsonUtil.readValue(content, LoginSubject.class);
+            if (content == null) {
+                return null;
+            } else {
+                return JsonUtil.readValue(content, LoginSubject.class);
+            }
         } catch (Exception e) {
             log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
             return null;
