@@ -17,7 +17,7 @@ import java.net.URLEncoder;
  * @description  Cookie工具类
  **/
 public class CookieUtil {
-    private static Logger logger = LoggerFactory.getLogger(CookieUtil.class);
+    private static final Logger logger = LoggerFactory.getLogger(CookieUtil.class);
 
     /**
      * 设置 Cookie（生成时间为1天）
