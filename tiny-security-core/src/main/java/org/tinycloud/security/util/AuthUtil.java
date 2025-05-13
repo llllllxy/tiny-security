@@ -59,12 +59,8 @@ public class AuthUtil {
      * @return token
      */
     public static String getToken(String tokenName) {
-        try {
-            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-            return getToken(request, tokenName);
-        } catch (Exception e) {
-            return null;
-        }
+        HttpServletRequest request = getRequest();
+        return request == null ? null : getToken(request, tokenName);
     }
 
 
