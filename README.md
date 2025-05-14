@@ -42,7 +42,7 @@ tiny-security是一个基于SpringBoot开发的轻量级权限控制框架，支
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.1.1</version>
+    <version>1.2.0</version>
 </dependency>
 ```
 
