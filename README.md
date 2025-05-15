@@ -60,6 +60,8 @@ tiny-security:
   credentials-style: uuid
   # 当配置为jdbc时，存储token的表名字，默认为t_auth_storage
   table-name: t_auth_storage
+  # 权限校验方式，可配置annotation（注解方式）、url（url方式）
+  perm-check-type: annotation
   # jwt密钥
   jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
   # jwt主题

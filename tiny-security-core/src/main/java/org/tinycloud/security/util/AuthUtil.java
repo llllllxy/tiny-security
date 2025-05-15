@@ -1,7 +1,6 @@
 package org.tinycloud.security.util;
 
-import org.springframework.util.CollectionUtils;
-import org.springframework.util.ObjectUtils;
+import org.springframework.util.*;
 import org.tinycloud.security.annotation.Ignore;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
@@ -10,7 +9,6 @@ import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.springframework.util.StringUtils;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
 import org.tinycloud.security.interceptor.holder.RoleHolder;
 import org.tinycloud.security.provider.LoginSubject;
@@ -18,6 +16,7 @@ import org.tinycloud.security.provider.LoginSubject;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.Set;
 
 public class AuthUtil {
@@ -227,7 +226,7 @@ public class AuthUtil {
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
         }
-        return roleSet.contains(role);
+        return hasElement(roleSet, role);
     }
 
     /**
@@ -243,7 +242,7 @@ public class AuthUtil {
         }
         // 只要有一个角色不是true的，就返回false（同时拥有）
         for (String ro : roles) {
-            if (!roleSet.contains(ro)) {
+            if (!hasElement(roleSet, ro)) {
                 return false;
             }
         }
@@ -263,7 +262,7 @@ public class AuthUtil {
         }
         // 如果有任何一个角色，返回true，否则返回false（拥有其一）
         for (String ro : roles) {
-            if (roleSet.contains(ro)) {
+            if (hasElement(roleSet, ro)) {
                 return true;
             }
         }
@@ -281,7 +280,7 @@ public class AuthUtil {
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
         }
-        return permissionSet.contains(permission);
+        return hasElement(permissionSet, permission);
     }
 
     /**
@@ -297,7 +296,7 @@ public class AuthUtil {
         }
         // 只要有一个权限不是true的，就返回false（同时拥有）
         for (String pe : permissions) {
-            if (!permissionSet.contains(pe)) {
+            if (!hasElement(permissionSet, pe)) {
                 return false;
             }
         }
@@ -317,10 +316,37 @@ public class AuthUtil {
         }
         // 如果有任何一个权限，返回true，否则返回false（拥有其一）
         for (String pe : permissions) {
-            if (permissionSet.contains(pe)) {
+            if (hasElement(permissionSet, pe)) {
                 return true;
             }
         }
         return false;
     }
+
+    /**
+     * 判断集合中是否包含某个元素，支持模糊匹配
+     *
+     * @param list    集合列表
+     * @param element 元素
+     * @return true匹配成功 or false匹配失败
+     */
+    public static boolean hasElement(Collection<String> list, String element) {
+        // 空集合直接返回false
+        if (list == null || list.isEmpty()) {
+            return false;
+        }
+        // 先尝试一下简单匹配，如果可以匹配成功则无需继续模糊匹配
+        if (list.contains(element)) {
+            return true;
+        }
+        // 开始模糊匹配
+        for (String pattern : list) {
+            if (CommonUtil.vagueMatch(pattern, element)) {
+                return true;
+            }
+        }
+        // 走出for循环说明没有一个元素可以匹配成功
+        return false;
+    }
+
 }
