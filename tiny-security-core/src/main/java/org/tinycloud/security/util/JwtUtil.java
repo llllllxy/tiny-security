@@ -83,7 +83,7 @@ public class JwtUtil {
             jwtSecret = JWT_SECRET;
         }
         if (subject == null || subject.isEmpty()) {
-            jwtSecret = JWT_SUBJECT;
+            subject = JWT_SUBJECT;
         }
         Date createTime = new Date();
         Calendar calendar = Calendar.getInstance();

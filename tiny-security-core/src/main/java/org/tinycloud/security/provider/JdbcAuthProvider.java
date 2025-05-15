@@ -136,7 +136,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);
             long loginExpireTime = currentTime + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000L;
-            subject.setLoginExpireTime(currentTime + loginExpireTime);
+            subject.setLoginExpireTime(loginExpireTime);
             String sql = "INSERT INTO " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) VALUES (?,?,?,?)";
             int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), subject.getLoginExpireTime());
             return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;

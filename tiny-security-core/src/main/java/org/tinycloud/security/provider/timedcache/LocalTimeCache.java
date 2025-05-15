@@ -116,7 +116,7 @@ public class LocalTimeCache {
      * @param timeout 有效时间（秒）
      */
     public void updateObjectTimeout(String key, long timeout) {
-        expireMap.put(key, timeout == NEVER_EXPIRE ? NEVER_EXPIRE : (System.currentTimeMillis() + timeout * 1000));
+        expireMap.put(key, timeout == NEVER_EXPIRE ? NEVER_EXPIRE : System.currentTimeMillis() + timeout * 1000);
     }
 
     public Set<String> dataMapKeySet() {
