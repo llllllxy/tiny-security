@@ -130,8 +130,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         globalConfig.setTableName(authProperties.getTableName());
         globalConfig.setTimeout(authProperties.getTimeout());
         globalConfig.setTokenName(authProperties.getTokenName());
-        globalConfig.setTokenPrefix(authProperties.getTokenPrefix());
-        globalConfig.setTokenStyle(authProperties.getTokenStyle());
+        globalConfig.setCredentialsStyle(authProperties.getCredentialsStyle());
         globalConfig.setJwtSecret(authProperties.getJwtSecret());
         globalConfig.setJwtSubject(authProperties.getJwtSubject());
         GlobalConfigUtils.setGlobalConfig(globalConfig);

@@ -24,6 +24,8 @@ public class JwtUtil {
     // jwt签名密钥
     private static final String JWT_SECRET = "K$N)A3*sGGf<wo*22*%&(DF";
 
+    private static final String JWT_SUBJECT = "tiny-security";
+
     /**
      * 获取subject
      * <br/>
@@ -79,6 +81,9 @@ public class JwtUtil {
     public static String sign(String jwtSecret, String subject, Map<String, String> payload) {
         if (jwtSecret == null || jwtSecret.isEmpty()) {
             jwtSecret = JWT_SECRET;
+        }
+        if (subject == null || subject.isEmpty()) {
+            jwtSecret = JWT_SUBJECT;
         }
         Date createTime = new Date();
         Calendar calendar = Calendar.getInstance();

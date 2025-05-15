@@ -17,9 +17,7 @@ public class AuthProperties {
 
     private Integer timeout = 1800;
 
-    private String tokenStyle = "uuid";
-
-    private String tokenPrefix;
+    private String credentialsStyle = "uuid";
 
     private String tableName = "t_auth_storage";
 
@@ -51,20 +49,12 @@ public class AuthProperties {
         this.timeout = timeout;
     }
 
-    public String getTokenStyle() {
-        return tokenStyle;
+    public String getCredentialsStyle() {
+        return credentialsStyle;
     }
 
-    public void setTokenStyle(String tokenStyle) {
-        this.tokenStyle = tokenStyle;
-    }
-
-    public String getTokenPrefix() {
-        return tokenPrefix;
-    }
-
-    public void setTokenPrefix(String tokenPrefix) {
-        this.tokenPrefix = tokenPrefix;
+    public void setCredentialsStyle(String credentialsStyle) {
+        this.credentialsStyle = credentialsStyle;
     }
 
     public String getTableName() {

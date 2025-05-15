@@ -13,7 +13,7 @@ import java.util.UUID;
  * @author liuxingyu01
  * @version 2022-05-21 9:53
  **/
-public class TokenGenUtil {
+public class CredentialsGenUtil {
 
     final static String TOKEN_STYLE_UUID = "uuid";
 
@@ -33,7 +33,7 @@ public class TokenGenUtil {
      * @param tokenStyle token风格
      * @return token字符串
      */
-    public static String genTokenStr(String tokenStyle) {
+    public static String generate(String tokenStyle) {
         if (tokenStyle == null || tokenStyle.isEmpty()) {
             tokenStyle = TOKEN_STYLE_UUID;
         }

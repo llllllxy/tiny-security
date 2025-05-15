@@ -12,9 +12,10 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 
 /**
+ * Cookie工具类
+ *
  * @author liuxingyu01
- * @date 2021-01-30-11:18
- * @description  Cookie工具类
+ * @since 2021-01-30-11:18
  **/
 public class CookieUtil {
     private static final Logger logger = LoggerFactory.getLogger(CookieUtil.class);
@@ -23,8 +24,8 @@ public class CookieUtil {
      * 设置 Cookie（生成时间为1天）
      *
      * @param response 响应对象
-     * @param name  名称
-     * @param value 值
+     * @param name     名称
+     * @param value    值
      */
     public static void setCookie(HttpServletResponse response, String name, String value) {
         setCookie(response, name, value, 60 * 60 * 24);
@@ -34,9 +35,9 @@ public class CookieUtil {
      * 设置 Cookie
      *
      * @param response 响应对象
-     * @param name   名称
-     * @param value  值
-     * @param path    上下文路径
+     * @param name     名称
+     * @param value    值
+     * @param path     上下文路径
      */
     public static void setCookie(HttpServletResponse response, String name, String value, String path) {
         setCookie(response, name, value, path, 60 * 60 * 24);
@@ -46,9 +47,9 @@ public class CookieUtil {
      * 设置 Cookie
      *
      * @param response 响应对象
-     * @param name   名称
-     * @param value  值
-     * @param maxAge 生存时间（单位秒）
+     * @param name     名称
+     * @param value    值
+     * @param maxAge   生存时间（单位秒）
      */
     public static void setCookie(HttpServletResponse response, String name, String value, int maxAge) {
         setCookie(response, name, value, "/", maxAge);
@@ -58,13 +59,13 @@ public class CookieUtil {
      * 设置 Cookie
      *
      * @param response 响应对象
-     * @param name   名称
-     * @param value  值
-     * @param maxAge 生存时间（单位秒）
-     * @param path   上下文路径
+     * @param name     名称
+     * @param value    值
+     * @param maxAge   生存时间（单位秒）
+     * @param path     上下文路径
      */
     public static void setCookie(HttpServletResponse response, String name, String value, String path, int maxAge) {
-        if (!StringUtils.isEmpty(name)) {
+        if (StringUtils.hasText(name)) {
             Cookie cookie = new Cookie(name, null);
             cookie.setPath(path);
             cookie.setMaxAge(maxAge);
@@ -80,8 +81,9 @@ public class CookieUtil {
 
     /**
      * 获得指定Cookie的值
-     * @param request  请求对象
-     * @param name 名称
+     *
+     * @param request 请求对象
+     * @param name    名称
      * @return 值
      */
     public static String getCookie(HttpServletRequest request, String name) {
@@ -93,7 +95,7 @@ public class CookieUtil {
      *
      * @param request  请求对象
      * @param response 响应对象
-     * @param name 名称
+     * @param name     名称
      * @return 值
      */
     public static String getCookie(HttpServletRequest request, HttpServletResponse response, String name) {
@@ -106,7 +108,7 @@ public class CookieUtil {
      * @param request  请求对象
      * @param response 响应对象
      * @param name     名字
-     * @param path 上下文路径
+     * @param path     上下文路径
      * @return 值
      */
     public static String getCookie(HttpServletRequest request, HttpServletResponse response, String name, String path) {
@@ -137,7 +139,7 @@ public class CookieUtil {
      */
     public static String getCookie(HttpServletRequest request, HttpServletResponse response, String name, String path, boolean isRemove) {
         String value = null;
-        if (!StringUtils.isEmpty(name)) {
+        if (StringUtils.hasText(name)) {
             Cookie[] cookies = request.getCookies();
             if (cookies != null) {
                 for (Cookie cookie : cookies) {
@@ -158,6 +160,5 @@ public class CookieUtil {
         }
         return value;
     }
-
 
 }

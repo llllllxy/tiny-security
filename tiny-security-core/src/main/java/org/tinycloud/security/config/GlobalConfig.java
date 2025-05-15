@@ -24,7 +24,7 @@ public class GlobalConfig implements Serializable {
 
     private Integer timeout;
 
-    private String tokenStyle;
+    private String credentialsStyle;
 
     private String tokenPrefix;
 
@@ -74,12 +74,12 @@ public class GlobalConfig implements Serializable {
         this.timeout = timeout;
     }
 
-    public String getTokenStyle() {
-        return tokenStyle;
+    public String getCredentialsStyle() {
+        return credentialsStyle;
     }
 
-    public void setTokenStyle(String tokenStyle) {
-        this.tokenStyle = tokenStyle;
+    public void setCredentialsStyle(String credentialsStyle) {
+        this.credentialsStyle = credentialsStyle;
     }
 
     public String getTokenPrefix() {
