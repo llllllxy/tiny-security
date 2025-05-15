@@ -30,6 +30,8 @@ public class GlobalConfig implements Serializable {
 
     private String tableName;
 
+    private String permCheckType;
+
     private String jwtSecret;
 
     private String jwtSubject;
@@ -96,6 +98,14 @@ public class GlobalConfig implements Serializable {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    public String getPermCheckType() {
+        return permCheckType;
+    }
+
+    public void setPermCheckType(String permCheckType) {
+        this.permCheckType = permCheckType;
     }
 
     public String getJwtSecret() {

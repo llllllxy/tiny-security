@@ -21,6 +21,8 @@ public class AuthProperties {
 
     private String tableName = "t_auth_storage";
 
+    private String permCheckType = "annotation";
+
     private String jwtSecret;
 
     private String jwtSubject;
@@ -63,6 +65,14 @@ public class AuthProperties {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    public String getPermCheckType() {
+        return permCheckType;
+    }
+
+    public void setPermCheckType(String permCheckType) {
+        this.permCheckType = permCheckType;
     }
 
     public String getJwtSecret() {
