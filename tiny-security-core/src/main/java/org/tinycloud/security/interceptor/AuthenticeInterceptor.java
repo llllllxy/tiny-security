@@ -83,7 +83,7 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
             long expireTime = subject.getLoginExpireTime();
             long currentTime = System.currentTimeMillis();
             int timeout = GlobalConfigUtils.getGlobalConfig().getTimeout();
-            long millsCritical = (long) Math.floor(timeout * 1000L * 0.6);
+            long millsCritical = (long) (timeout * 1000L * 0.8);
             if (expireTime - currentTime <= millsCritical) {
                 // 刷新会话缓存时长
                 subject.setLoginExpireTime(currentTime + timeout * 1000L);
