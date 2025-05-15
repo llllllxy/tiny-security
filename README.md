@@ -28,8 +28,8 @@
 
 ## 1、简介
 
-tiny-security是一个基于SpringBoot开发的轻量级权限控制框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
-支持redis、jdbc和单机session多种会话存储方式（亦可自行扩展存储方式）；前后端分离项目、不分离项目均可使用，功能完善、使用简单，文档清晰，让认证鉴权这件事变得更加简单！
+tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
+支持redis、jdbc和单机session多种会话存储方式（可自行扩展其他存储方式）；前后端分离项目、不分离项目均可使用，功能完善、使用简单，文档清晰，让认证鉴权这件事变得更加简单！
 
 ---
 
@@ -42,7 +42,7 @@ tiny-security是一个基于SpringBoot开发的轻量级权限控制框架，支
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.1</version>
 </dependency>
 ```
 
@@ -51,18 +51,22 @@ tiny-security是一个基于SpringBoot开发的轻量级权限控制框架，支
 ```yaml
 tiny-security:
   # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)，如不配置，则默认为single
-  store-type: redis
+  store-type: single
   # token名称 (同时也是cookie名称，适配前后端不分离的模式)
   token-name: token
   # token有效期 (即会话时长)，单位秒 默认1800秒(30分钟)
   timeout: 1800
-  # token风格，可配置uuid (默认风格)，snowflake (纯数字风格)，objectid (变种uuid)，random128 (随机128位字符串)，nanoid，ulid
-  token-style: uuid
+  # credentials凭类型，可配置uuid (默认风格)，snowflake (纯数字风格)，objectid (变种uuid)，random128 (随机128位字符串)，nanoid，ulid
+  credentials-style: uuid
   # 当配置为jdbc时，存储token的表名字，默认为t_auth_storage
   table-name: t_auth_storage
+  # jwt密钥
+  jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
+  # jwt主题
+  jwt-subject: tiny-security
 ```
 
-1. 如果使用jdbcAuthStore，需要导入框架提供的sql脚本并集成好jdbcTemplate，
+1. 如果使用jdbc，需要导入框架提供的sql脚本（目前只提供了MySQL版本）并集成好jdbcTemplate，
    导入依赖 `spring-boot-starter-jdbc`，在yml里进行相应配置即可
 ```xml
 <dependency>
@@ -70,7 +74,7 @@ tiny-security:
     <artifactId>spring-boot-starter-jdbc</artifactId>
 </dependency>
 ```
-2. 如果使用redisAuthStore，需要集成好redisTemplate，
+2. 如果使用redis，需要集成好stringRedisTemplate
    导入依赖 `spring-boot-starter-data-redis` ，在yml里进行相应配置即可
 ```xml
 <dependency>
@@ -79,18 +83,14 @@ tiny-security:
 </dependency>
 ```
 
-#### 2.1.3、其他自定义配置
-1. 配置会话拦截器和权限角色拦截器，以`SpringBoot2.0`版本为例, 新建配置类`WebMvcConfig.java`，两个拦截器的拦截路由规则可自行配置
+### 2.1.3、配置会话拦截器
+ 以`SpringBoot2.+`版本为例, 新建配置类`WebMvcConfig.java`，注册会话拦截器，拦截器的拦截路由规则可自行配置
 ```java
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
     @Autowired
     private AuthenticeInterceptor authenticeInterceptor;
-
-    // 按需要来，如果不需要角色权限控制，可以不配置此拦截器
-    @Autowired
-    private PermissionInterceptor permissionInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -99,6 +99,22 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(authenticeInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns("/login");
+    }
+}
+```
+
+### 2.1.4、配置权限角色拦截器（可选）
+以`SpringBoot2.+`版本为例, 在配置类`WebMvcConfig.java`内，注册权限角色拦截器，拦截器的拦截路由规则可自行配置
+```java
+@Configuration
+public class WebMvcConfig implements WebMvcConfigurer {
+
+    // 按需要来，如果不需要角色权限控制，可以不配置此拦截器
+    @Autowired
+    private PermissionInterceptor permissionInterceptor;
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
 
         // 注册权限拦截器
         registry.addInterceptor(permissionInterceptor)
@@ -107,7 +123,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
     }
 }
 ```
-2. 如需权限角色拦截器进行权限控制的话，则需要实现`PermissionInfoInterface`接口，重写权限和角色编码列表获取的业务逻辑（框架没有对权限和角色编码进行缓存，如需缓存请自行处理），例如以下代码：
+
+使用权限角色拦截器，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码列表获取的业务逻辑（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理），例如以下代码：
 ```java
 @Component
 public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
@@ -211,7 +228,7 @@ public class IndexController {
 
 **1.注解解释：**
 
-```text
+```java
 // 需要有system权限才能访问
 @RequiresPermissions("system")
 
@@ -231,7 +248,7 @@ public class IndexController {
 @RequiresRoles(value={"admin","user"}, logical=Logical.OR)
 ```
 
-> 注解加在Controller的方法或类上面。
+> 注解加在Controller的方法或类上面
 
 **2.代码示例：**
 
@@ -245,20 +262,20 @@ public class IndexController {
 
     @RequiresPermissions("权限3")
     @ResponseBody
-    @GetMapping("/testPermission3")
-    public Result<Object> testPermission3() {
-        return Result.ok("testPermission3测试成功！");
+    @GetMapping("/testPermission")
+    public Result<Object> testPermission() {
+        return Result.ok("testPermission测试成功！");
     }
 
-    @RequiresPermissions("权限2")
+    @RequiresRoles(value="角色1")
     @ResponseBody
-    @GetMapping("/testPermission2")
-    public Result<Object> testPermission2() {
-        logger.info("IndexController - testPermission3 - authProvider.getLoginId() = {}", authProvider.getLoginId());
-        logger.info("IndexController - testPermission3 - AuthUtil.getLoginId() = {}", AuthUtil.getLoginId());
-        logger.info("IndexController - testPermission3 - token = {}", authProvider.getToken());
-        
-        return Result.ok("testPermission2测试成功！", authProvider.getLoginId());
+    @GetMapping("/testRole")
+    public Result<Object> testRole() {
+        logger.info("LoginSubject = {}", authProvider.getLoginSubject());
+        logger.info("authProvider.getLoginId() = {}", authProvider.getLoginId());
+        logger.info("AuthUtil.getLoginId() = {}", AuthUtil.getLoginId());
+        logger.info("token = {}", authProvider.getToken());
+        return Result.ok("testRole测试成功！", authProvider.getLoginId());
     }
 }
 ```
@@ -343,7 +360,7 @@ tiny-security在会话验证失败和权限验证失败的会抛出自定义异�
 | UnAuthorizedException | 未登录或会话已失效 | 错误信息“未登录或会话已失效！”，错误码401 |
 | NoPermissionException | 无权限访问（角色或者资源不匹配）  | 错误信息“无权限访问！”，错误码403   |
 
-需要使用全局异常处理器来捕获异常并进行处理返回JSON数据：
+需要使用全局异常处理器来捕获异常并进行处理返回JSON数据（或者页面）：
 
 ```java
 @ControllerAdvice

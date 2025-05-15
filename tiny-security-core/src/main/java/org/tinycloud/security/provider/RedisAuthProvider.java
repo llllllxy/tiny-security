@@ -8,7 +8,7 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.JwtUtil;
-import org.tinycloud.security.util.TokenGenUtil;
+import org.tinycloud.security.util.CredentialsGenUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -118,7 +118,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public String createAuth(Object loginId) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
-            String credentials = TokenGenUtil.genTokenStr(GlobalConfigUtils.getGlobalConfig().getTokenStyle());
+            String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
             Map<String, String> payload = new HashMap<>();
             payload.put("credentials", credentials);
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
