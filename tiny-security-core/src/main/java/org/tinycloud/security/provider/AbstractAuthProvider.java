@@ -7,7 +7,7 @@ import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 public abstract class AbstractAuthProvider implements AuthProvider {
     private final static Logger log = LoggerFactory.getLogger(AbstractAuthProvider.class);
