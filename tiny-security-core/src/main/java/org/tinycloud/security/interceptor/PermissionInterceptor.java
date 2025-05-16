@@ -70,7 +70,7 @@ public class PermissionInterceptor implements HandlerInterceptor {
 
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
-        if (AuthUtil.checkPermission(method, permissionSet) && AuthUtil.checkRole(method, roleSet)) {
+        if (AuthUtil.checkPermission(method) && AuthUtil.checkRole(method)) {
             return true;
         } else {
             // 权限和角色校验不通过

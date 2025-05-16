@@ -26,18 +26,18 @@
     <br />
 </p>
 
-## 1、简介
+# 1、简介
 
 tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
 支持redis、jdbc和单机session多种会话存储方式（可自行扩展其他存储方式）；前后端分离项目、不分离项目均可使用，功能完善、使用简单，文档清晰，让认证鉴权这件事变得更加简单！
 
 ---
 
-## 2、使用
+# 2、使用
 
-### 2.1、SpringBoot集成
+## 2.1、SpringBoot集成
 
-#### 2.1.1、引入依赖
+### 2.1.1、引入依赖
 ```xml
 <dependency>
     <groupId>top.lxyccc</groupId>
@@ -46,7 +46,7 @@ tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框�
 </dependency>
 ```
 
-#### 2.1.2、yml参数配置项
+### 2.1.2、yml参数配置项
 
 ```yaml
 tiny-security:
@@ -61,7 +61,7 @@ tiny-security:
   # 当配置为jdbc时，存储token的表名字，默认为t_auth_storage
   table-name: t_auth_storage
   # 权限校验方式，可配置annotation（注解方式）、url（url方式）
-  perm-check-type: annotation
+  perm-check-mode: annotation
   # jwt密钥
   jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
   # jwt主题
@@ -172,7 +172,9 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
 
 ---
 
-### 2.2、登录签发token，创建会话
+## 2.2 会话认证
+
+### 2.2.1、登录签发token，创建会话
 
 ```java
 @Controller
@@ -199,8 +201,7 @@ login方法参数说明：
 
 ---
 
-
-### 2.3、退出登录，注销会话
+### 2.2.2、退出登录，注销会话
 
 ```java
 @Controller
@@ -224,30 +225,99 @@ public class IndexController {
 }
 ```
 
+### 2.2.3、获取当前登录会话
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
+// 获取当前登录会话id
+Object loginId = authProvider.getLoginId();
+或者直接调用静态方法
+Object loginId = AuthUtil.getLoginId()
+
+// 获取当前登录会话信息
+LoginSubject LoginSubject = authProvider.getLoginSubject();
+或者直接调用静态方法
+LoginSubject LoginSubject = AuthUtil.getLoginSubject();
+```
+
 ---
 
-### 2.4、使用注解控制权限
+### 2.2.4、获取当前登录用户token
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
+authProvider.getToken();
+或者
+authProvider.getToken(HttpServletRequest request);
+```
+---
+
+### 2.2.5、获取当前登录用户凭证（对应redis或database里的唯一键）
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
+authProvider.getCredentials();
+或者
+authProvider.getCredentials(HttpServletRequest request);
+```
+
+---
+
+### 2.2.6、使用会话验证忽略注解 `@Ignore`
+在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
+
+---
+
+### 2.2.7、会话主动注销
+```java
+// 注入authProvider
+@Autowired
+private AuthProvider authProvider;
+
+// 根据token，使会话注销
+authProvider.deleteByToken(token);
+
+// 根据会话凭证credentials，使会话注销
+authProvider.deleteByCredentials(credentials);
+
+// 根据用户loginId，使该用户的全部会话都注销
+authProvider.deleteTokenByLoginId(loginId);
+
+```
+
+---
+
+
+## 2.3、权限认证
+
+### 2.3.1、注解方式控制权限
 
 **1.注解解释：**
 
 ```java
-// 需要有system权限才能访问
-@RequiresPermissions("system")
+// 需要有 system:user:add 权限才能访问
+@RequiresPermissions("system:user:add")
 
-// 需要有system和front权限才能访问, logical可以不写,默认是AND
-@RequiresPermissions(value={"system","front"}, logical=Logical.AND)
+// 需要有 system:user:add 和 system:user:delete 权限才能访问, logical可以不写,默认是AND
+@RequiresPermissions(value={"system:user:add", "system:user:delete"}, logical=Logical.AND)
 
-// 需要有system或front权限才能访问
-@RequiresPermissions(value={"system","front"}, logical=Logical.OR)
+// 需要有 system:user:add 或 system:user:delete 权限才能访问
+@RequiresPermissions(value={"system:user:add", "system:user:delete"}, logical=Logical.OR)
 
 // 需要有user角色才能访问
 @RequiresRoles(value="user")
 
 // 需要有admin和user角色才能访问
-@RequiresRoles(value={"admin","user"}, logical=Logical.AND)
+@RequiresRoles(value={"admin", "user"}, logical=Logical.AND)
 
 // 需要有admin或user角色才能访问
-@RequiresRoles(value={"admin","user"}, logical=Logical.OR)
+@RequiresRoles(value={"admin", "user"}, logical=Logical.OR)
 ```
 
 > 注解加在Controller的方法或类上面
@@ -284,7 +354,7 @@ public class IndexController {
 
 ---
 
-### 2.5、使用代码手动判断角色和权限
+### 2.3.2、代码方式控制权限
 **1.代码示例：** 
 
 ```java
@@ -311,50 +381,15 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 
 ---
 
-### 2.6、获取当前登录会话
-```java
-// 注入authProvider
-@Autowired
-private AuthProvider authProvider;
+### 2.3.3、权限通配符的使用
+> 🚨支持使用通配符指定泛权限，例如当一个账号拥有system:user:*的权限时，system:user:add、system:user:delete、system:user:update都将匹配通过
 
-// 获取当前登录会话id
-Object loginId = authProvider.getLoginId();
-或者直接调用静态方法
-Object loginId = AuthUtil.getLoginId()
-
-// 获取当前登录会话信息
-LoginSubject LoginSubject = authProvider.getLoginSubject();
-或者直接调用静态方法
-LoginSubject LoginSubject = AuthUtil.getLoginSubject();
-```
+> ⚠️注意
+> 当一个账号拥有 "*" 权限时，可以验证通过任何权限码 （角色认证同理）, 所以请谨慎使用 "*" 权限码
 
 ---
 
-### 2.7、获取当前登录用户token
-```java
-// 注入authProvider
-@Autowired
-private AuthProvider authProvider;
-
-authProvider.getToken();
-或者
-authProvider.getToken(HttpServletRequest request);
-```
----
-
-### 2.8、获取当前登录用户凭证（对应redis或database里的唯一键）
-```java
-// 注入authProvider
-@Autowired
-private AuthProvider authProvider;
-
-authProvider.getCredentials();
-或者
-authProvider.getCredentials(HttpServletRequest request);
-```
----
-
-### 2.9、异常处理
+## 2.4、异常处理
 tiny-security在会话验证失败和权限验证失败的会抛出自定义异常：
 
 | 自定义异常                  | 描述          | 错误信息                          |
@@ -395,32 +430,9 @@ public class GlobalExceptionHandler {
 
 ---
 
-### 2.10、其他更多用法
+## 2.5、其他更多用法
 
-#### 2.10.1、使用注解忽略会话验证`@Ignore`
-在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
-
-
-#### 2.10.2、主动让会话失效
-```java
-// 注入authProvider
-@Autowired
-private AuthProvider authProvider;
-
-// 根据token，使会话失效
-authProvider.deleteByToken(token);
-
-// 根据会话凭证credentials，使会话失效
-authProvider.deleteByCredentials(credentials);
-
-// 根据用户loginId，使该用户的全部会话都失效
-authProvider.deleteTokenByLoginId(loginId);
-
-```
-
----
-
-### 2.10、前端传递token
+### 2.5.1、前端传递token
 1. 放在参数里面用`token`传递：
 ```javascript
 $.get("/xxx", { "token": token }, function(data) {
@@ -441,7 +453,7 @@ $.ajax({
 
 ---
 
-### 2.11、自定义AuthProvider
+### 2.5.2、自定义AuthProvider
 框架内置了JdbcAuthProvider、RedisAuthProvider和SingleAuthProvider三种会话实现，
 如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘文件、MongoDB中，只需以下三步即可：
 - 继承org.tinycloud.security.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，

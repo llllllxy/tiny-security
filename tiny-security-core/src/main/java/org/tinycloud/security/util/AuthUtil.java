@@ -102,11 +102,10 @@ public class AuthUtil {
     /**
      * 检查Method上是否有@RequiresPermissions注解，并检验其值，通过返回true，拒绝返回false
      *
-     * @param method        Method
-     * @param permissionSet 权限列表
+     * @param method Method
      * @return true or false
      */
-    public static boolean checkPermission(Method method, Set<String> permissionSet) {
+    public static boolean checkPermission(Method method) {
         RequiresPermissions annotation = method.getAnnotation(RequiresPermissions.class);
         // 方法上没有注解再检查类上面有没有注解
         if (annotation == null) {
@@ -116,10 +115,6 @@ public class AuthUtil {
         if (annotation == null) {
             return true;
         }
-        // 当permissionSet为空时，说明无任何权限，直接返回false
-        if (CollectionUtils.isEmpty(permissionSet)) {
-            return false;
-        }
         // 当roles为空时，说明不需要任何权限，直接返回true
         String[] permissions = annotation.value();
         if (ObjectUtils.isEmpty(permissions)) {
@@ -127,21 +122,9 @@ public class AuthUtil {
         }
         Logical logical = annotation.logical();
         if (logical == Logical.OR) {
-            // 如果有任何一个权限，返回true，否则返回false（拥有其一）
-            for (String perm : permissions) {
-                if (permissionSet.contains(perm)) {
-                    return true;
-                }
-            }
-            return false;
+            return hasAnyPermission(permissions);
         } else if (logical == Logical.AND) {
-            // 只要有一个权限不是true的，就返回false（同时拥有）
-            for (String perm : permissions) {
-                if (!permissionSet.contains(perm)) {
-                    return false;
-                }
-            }
-            return true;
+            return hasAllPermission(permissions);
         } else {
             return false;
         }
@@ -151,11 +134,10 @@ public class AuthUtil {
     /**
      * 检查Method上是否有@RequiresRoles注解，并检验其值，通过返回true，拒绝返回false
      *
-     * @param method  Method
-     * @param roleSet 角色列表
+     * @param method Method
      * @return true or false
      */
-    public static boolean checkRole(Method method, Set<String> roleSet) {
+    public static boolean checkRole(Method method) {
         RequiresRoles annotation = method.getAnnotation(RequiresRoles.class);
         // 方法上没有注解再检查类上面有没有注解
         if (annotation == null) {
@@ -165,10 +147,6 @@ public class AuthUtil {
         if (annotation == null) {
             return true;
         }
-        // 当roleSet为空时，说明无任何权限，直接返回false
-        if (CollectionUtils.isEmpty(roleSet)) {
-            return false;
-        }
         // 当roles为空时，说明不需要任何权限，直接返回true
         String[] roles = annotation.value();
         if (ObjectUtils.isEmpty(roles)) {
@@ -176,21 +154,9 @@ public class AuthUtil {
         }
         Logical logical = annotation.logical();
         if (logical == Logical.OR) {
-            // 如果有任何一个角色，返回true，否则返回false（拥有其一）
-            for (String ro : roles) {
-                if (roleSet.contains(ro)) {
-                    return true;
-                }
-            }
-            return false;
+            return hasAnyRole(roles);
         } else if (logical == Logical.AND) {
-            // 只要有一个角色不是true的，就返回false（同时拥有）
-            for (String ro : roles) {
-                if (!roleSet.contains(ro)) {
-                    return false;
-                }
-            }
-            return true;
+            return hasAllRole(roles);
         } else {
             return false;
         }
@@ -223,6 +189,7 @@ public class AuthUtil {
      */
     public static boolean hasRole(String role) {
         Set<String> roleSet = RoleHolder.getRoleSet();
+        // 当roleSet为空时，说明无任何权限，直接返回false
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
         }
@@ -237,6 +204,7 @@ public class AuthUtil {
      */
     public static boolean hasAllRole(String... roles) {
         Set<String> roleSet = RoleHolder.getRoleSet();
+        // 当roleSet为空时，说明无任何权限，直接返回false
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
         }
@@ -257,6 +225,7 @@ public class AuthUtil {
      */
     public static boolean hasAnyRole(String... roles) {
         Set<String> roleSet = RoleHolder.getRoleSet();
+        // 当roleSet为空时，说明无任何权限，直接返回false
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
         }
@@ -277,6 +246,7 @@ public class AuthUtil {
      */
     public static boolean hasPermission(String permission) {
         Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
         }
@@ -291,6 +261,7 @@ public class AuthUtil {
      */
     public static boolean hasAllPermission(String... permissions) {
         Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
         }
@@ -311,6 +282,7 @@ public class AuthUtil {
      */
     public static boolean hasAnyPermission(String... permissions) {
         Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
         }
@@ -330,7 +302,7 @@ public class AuthUtil {
      * @param element 元素
      * @return true匹配成功 or false匹配失败
      */
-    public static boolean hasElement(Collection<String> list, String element) {
+    private static boolean hasElement(Collection<String> list, String element) {
         // 空集合直接返回false
         if (list == null || list.isEmpty()) {
             return false;
