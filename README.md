@@ -42,7 +42,7 @@ tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.2.1</version>
+    <version>1.2.2</version>
 </dependency>
 ```
 
