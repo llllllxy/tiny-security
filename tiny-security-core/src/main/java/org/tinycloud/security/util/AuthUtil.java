@@ -27,10 +27,8 @@ public class AuthUtil {
      * @return HttpServletRequest
      */
     public static HttpServletRequest getRequest() {
-        HttpServletRequest request = null;
         try {
-            request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-            return request;
+            return ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
         } catch (Exception e) {
             return null;
         }
@@ -42,10 +40,8 @@ public class AuthUtil {
      * @return HttpServletResponse
      */
     public static HttpServletResponse getResponse() {
-        HttpServletResponse response = null;
         try {
-            response = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getResponse();
-            return response;
+            return((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getResponse();
         } catch (Exception e) {
             return null;
         }
