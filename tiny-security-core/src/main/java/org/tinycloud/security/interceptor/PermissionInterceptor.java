@@ -1,6 +1,7 @@
 package org.tinycloud.security.interceptor;
 
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
@@ -70,7 +71,11 @@ public class PermissionInterceptor implements HandlerInterceptor {
 
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
-        if (AuthUtil.checkPermission(method) && AuthUtil.checkRole(method)) {
+        boolean hasPermission = GlobalConfigUtils.getGlobalConfig().getPermCheckMode().equals("url")
+                ? AuthUtil.checkUrlPermission(request)
+                : AuthUtil.checkPermission(method);
+        boolean hasRole = AuthUtil.checkRole(method);
+        if (hasPermission && hasRole) {
             return true;
         } else {
             // 权限和角色校验不通过
