@@ -8,7 +8,7 @@ import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.JwtUtil;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.Objects;
 
