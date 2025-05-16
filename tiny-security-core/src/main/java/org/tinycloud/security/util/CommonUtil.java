@@ -7,7 +7,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
+import java.util.Collection;
 import java.util.concurrent.ThreadLocalRandom;
 
 
@@ -133,15 +133,19 @@ public class CommonUtil {
      * @param requestPath 请求路径
      * @return false未匹配成功 true匹配成功
      */
-    private boolean matchPaths(List<String> configPaths, String requestPath) {
+    public static boolean matchPaths(Collection<String> configPaths, String requestPath) {
         if (CollectionUtils.isEmpty(configPaths) || !StringUtils.hasLength(requestPath)) {
             return false;
         }
         for (String configPath : configPaths) {
-            boolean isPattern = MATCHER.isPattern(configPath);
-            if (isPattern) {
-                if (MATCHER.match(configPath, requestPath)) {
-                    return true;
+            if (configPath.equals(requestPath)) {
+                return true;
+            } else {
+                boolean isPattern = MATCHER.isPattern(configPath);
+                if (isPattern) {
+                    if (MATCHER.match(configPath, requestPath)) {
+                        return true;
+                    }
                 }
             }
         }

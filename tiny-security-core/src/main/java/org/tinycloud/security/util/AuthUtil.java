@@ -41,7 +41,7 @@ public class AuthUtil {
      */
     public static HttpServletResponse getResponse() {
         try {
-            return((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getResponse();
+            return ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getResponse();
         } catch (Exception e) {
             return null;
         }
@@ -92,6 +92,23 @@ public class AuthUtil {
             annotation = method.getDeclaringClass().getAnnotation(Ignore.class);
         }
         return annotation != null;
+    }
+
+
+    /**
+     * url自动匹配权限模式（无需加注解了，只支持权限的校验，不支持角色）
+     *
+     * @param request HttpServletRequest
+     * @return true or false
+     */
+    public static boolean checkUrlPermission(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        // 当permissionSet为空时，说明无任何权限，直接返回false
+        if (permissionSet == null || permissionSet.isEmpty()) {
+            return false;
+        }
+        return CommonUtil.matchPaths(permissionSet, path);
     }
 
 
