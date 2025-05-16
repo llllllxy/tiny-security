@@ -131,7 +131,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         globalConfig.setTimeout(authProperties.getTimeout());
         globalConfig.setTokenName(authProperties.getTokenName());
         globalConfig.setCredentialsStyle(authProperties.getCredentialsStyle());
-        globalConfig.setPermCheckType(authProperties.getPermCheckType());
+        globalConfig.setPermCheckMode(authProperties.getPermCheckMode());
         globalConfig.setJwtSecret(authProperties.getJwtSecret());
         globalConfig.setJwtSubject(authProperties.getJwtSubject());
         GlobalConfigUtils.setGlobalConfig(globalConfig);
