@@ -6,7 +6,7 @@ import java.util.Properties;
 
 /**
  * <p>
- * 获取版本号
+ * 获取pom当前版本号
  * </p>
  *
  * @author liuxingyu01
