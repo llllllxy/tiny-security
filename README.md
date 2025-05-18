@@ -46,6 +46,10 @@ tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框�
 </dependency>
 ```
 
+> 注： `SpringBoot 3.x` 版本，请将 `tiny-security-boot-starter` 修改为 `tiny-security-boot3-starter` 即可。
+
+
+
 ### 2.1.2、yml参数配置项
 
 ```yaml
@@ -68,16 +72,14 @@ tiny-security:
   jwt-subject: tiny-security
 ```
 
-1. 如果使用jdbc，需要导入框架提供的sql脚本（目前只提供了MySQL版本）并集成好jdbcTemplate，
-   导入依赖 `spring-boot-starter-jdbc`，在yml里进行相应配置即可
+1. 使用jdbc做存储容器依赖于`jdbcTemplate`，须导入依赖 `spring-boot-starter-jdbc`，在yml里进行数据库连接的相应配置并导入框架提供的sql脚本到数据库中（目前仅提供了MySQL版本）
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-jdbc</artifactId>
 </dependency>
 ```
-2. 如果使用redis，需要集成好stringRedisTemplate
-   导入依赖 `spring-boot-starter-data-redis` ，在yml里进行相应配置即可
+2. 使用redis做存储容器依赖于`stringRedisTemplate`，须导入依赖 `spring-boot-starter-data-redis` ，并在yml里进行redis连接的相应配置
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -465,3 +467,66 @@ $.ajax({
    }
 ```
 - 删除store-type的配置
+
+
+### 2.5.3、密码加密算法
+框架封装了一些常见的加密算法，可供使用
+1. 摘要算法：
+支持MD5、SHA256和国密SM3算法
+```java
+    new MD5Hash("123456", "323@#@$1234da", 1).toHex();
+    new MD5Hash("123456", "323@#@$1234da").toHex();
+    new MD5Hash("123456").toHex();
+    new MD5Hash("123456", "323@#@$1234da", 2).toHex();
+    new MD5Hash("123456", "323@#@$1234da", 3).toHex();
+    new MD5Hash("123456", "323@#@$1234da", 3).toBase64();
+    
+    new Sha256Hash("123456", "323@#@$1234da", 10).toBase64();
+    new Sha256Hash("123456", "323@#@$1234da").toHex();
+    new Sha256Hash("123456").toHex();
+    new Sha256Hash("123456", "323@#@$1234da", 2).toHex();
+    new Sha256Hash("123456", "323@#@$1234da", 3).toHex();
+    new Sha256Hash("123456", "323@#@$1234da", 3).toBase64();
+
+    new SM3Hash("123456", "323@#@$1234da", 1).toHex();
+    new SM3Hash("123456", "323@#@$1234da").toHex();
+    new SM3Hash("123456").toHex();
+    new SM3Hash("123456", "323@#@$1234da", 2).toHex();
+    new SM3Hash("123456", "323@#@$1234da", 4).toHex();
+    new SM3Hash("123456", "323@#@$1234da").toBase64();
+```
+
+2. 对称加密
+支持AES256-CBC算法
+```java
+    // 原文:
+    String message = "Helloworld!";
+    System.out.println("Message: " + message);
+
+    // 使用方法（密钥长度需要为32字节，iv长度需要为16字节）
+    AESUtil aesUtils = AESUtil.builder().secretKey("1G78Av#yej%WZJ3uiSZRz9oy%UAv4AAA").ivParameter("E%BAAAUTvXfwSuGQ").build();
+
+    // 加密:
+    String encrypted = aesUtils.encrypt(message);
+    System.out.println("加密: " + encrypted);
+
+    // 解密:
+    String decrypted = aesUtils.decrypt(encrypted);
+    System.out.println("解密: " + decrypted);
+```
+
+3. 非对称加密
+支持RSA2048加密
+```java
+    Map<String, String> pair = generateKeyPair();
+    String publicKey = pair.get("publicKey");
+    String privateKey = pair.get("privateKey");
+
+    // 使用公钥加密
+    String encryptedValue = encryptByPublicKey(publicKey, "abcdefg");
+    System.out.println(encryptedValue);
+
+    // 使用私钥解密
+    String decryptedValue = decryptByPrivateKey(privateKey, encryptedValue);
+    System.out.println(decryptedValue);
+```
