@@ -54,7 +54,6 @@ public class PermissionInterceptor implements HandlerInterceptor {
         if (!(handler instanceof HandlerMethod)) {
             return true;
         }
-
         // 判断请求类型，如果是OPTIONS，直接返回
         String options = HttpMethod.OPTIONS.toString();
         if (options.equals(request.getMethod())) {
@@ -65,12 +64,17 @@ public class PermissionInterceptor implements HandlerInterceptor {
             throw new NoPermissionException();
         }
         Method method = ((HandlerMethod) handler).getMethod();
+        // 如果权限模式为注解，并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
+        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode().equals("annotation") && !AuthUtil.hasPermissionAnnotation(method)) {
+            return true;
+        }
+
         Object loginId = AuthenticeHolder.getLoginSubject().getLoginId();
         Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(loginId);
         Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(loginId);
-
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
+
         boolean hasPermission = GlobalConfigUtils.getGlobalConfig().getPermCheckMode().equals("url")
                 ? AuthUtil.checkUrlPermission(request)
                 : AuthUtil.checkPermission(method);
