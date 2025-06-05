@@ -211,6 +211,34 @@ public class AuthUtil {
         return AuthenticeHolder.getLoginSubject() == null ? null : AuthenticeHolder.getLoginSubject().getLoginId();
     }
 
+
+    /**
+     * 获取当前登录用户的loginId, 并转换为 String 类型
+     *
+     * @return 账号id
+     */
+    public static String getLoginIdAsString() {
+        return String.valueOf(getLoginId());
+    }
+
+    /**
+     * 获取当前登录用户的loginId, 并转换为 Integer 类型
+     *
+     * @return 账号id
+     */
+    public static Integer getLoginIdAsInt() {
+        return Integer.parseInt(String.valueOf(getLoginId()));
+    }
+
+    /**
+     * 获取当前登录用户的loginId, 并转换为 Long 类型
+     *
+     * @return 账号id
+     */
+    public static Long getLoginIdAsLong() {
+        return Long.parseLong(String.valueOf(getLoginId()));
+    }
+
     /**
      * 获取当前登录用户的LoginId
      *
