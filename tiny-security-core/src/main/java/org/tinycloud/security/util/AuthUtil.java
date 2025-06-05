@@ -94,6 +94,32 @@ public class AuthUtil {
         return annotation != null;
     }
 
+    /**
+     * 判断是否有权限注解
+     *
+     * @param method Method
+     * @return true有 or false没有
+     */
+    public static boolean hasPermissionAnnotation(Method method) {
+        // 检查方法上的 @RequiresPermissions
+        RequiresPermissions permAnnotation = method.getAnnotation(RequiresPermissions.class);
+        if (permAnnotation != null) {
+            return true;
+        }
+        // 检查类上的 @RequiresPermissions
+        permAnnotation = method.getDeclaringClass().getAnnotation(RequiresPermissions.class);
+        if (permAnnotation != null) {
+            return true;
+        }
+        // 检查方法上的 @RequiresRoles
+        RequiresRoles roleAnnotation = method.getAnnotation(RequiresRoles.class);
+        if (roleAnnotation != null) {
+            return true;
+        }
+        // 检查类上的 @RequiresRoles
+        roleAnnotation = method.getDeclaringClass().getAnnotation(RequiresRoles.class);
+        return roleAnnotation != null;
+    }
 
     /**
      * url自动匹配权限模式（无需加注解了，只支持权限的校验，不支持角色）
@@ -124,7 +150,7 @@ public class AuthUtil {
         if (annotation == null) {
             annotation = method.getDeclaringClass().getAnnotation(RequiresPermissions.class);
         }
-        // 接口上没有注解，说明这个接口无权限控制，直接通过
+        // 接口上没有注解，说明这个接口无需权限控制，直接通过
         if (annotation == null) {
             return true;
         }
