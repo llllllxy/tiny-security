@@ -218,7 +218,7 @@ public class AuthUtil {
      * @return 账号id
      */
     public static String getLoginIdAsString() {
-        return String.valueOf(getLoginId());
+        return getLoginId() == null ? null : String.valueOf(getLoginId());
     }
 
     /**
@@ -227,7 +227,7 @@ public class AuthUtil {
      * @return 账号id
      */
     public static Integer getLoginIdAsInt() {
-        return Integer.parseInt(String.valueOf(getLoginId()));
+        return getLoginId() == null ? null : Integer.parseInt(String.valueOf(getLoginId()));
     }
 
     /**
@@ -236,7 +236,7 @@ public class AuthUtil {
      * @return 账号id
      */
     public static Long getLoginIdAsLong() {
-        return Long.parseLong(String.valueOf(getLoginId()));
+        return getLoginId() == null ? null : Long.parseLong(String.valueOf(getLoginId()));
     }
 
     /**
