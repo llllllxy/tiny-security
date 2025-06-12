@@ -8,6 +8,7 @@ import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Objects;
 
 public abstract class AbstractAuthProvider implements AuthProvider {
     private final static Logger log = LoggerFactory.getLogger(AbstractAuthProvider.class);
@@ -42,23 +43,27 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     }
 
     /**
-     * 获取当前登录用户的loginId
+     * 获取当前登录用户的loginId（未登录时会抛出异常）
      *
      * @return loginId
      */
     @Override
     public Object getLoginId() {
-        return this.getSubject(this.getCredentials()).getLoginId();
+        return this.getLoginSubject().getLoginId();
     }
 
     /**
-     * 获取当前登录用户信息
+     * 获取当前登录用户信息（未登录时会抛出异常）
      *
      * @return LoginSubject
      */
     @Override
     public LoginSubject getLoginSubject() {
-        return this.getSubject(this.getCredentials());
+        LoginSubject subject = this.getSubject(this.getCredentials());
+        if (Objects.isNull(subject)) {
+            throw new UnAuthorizedException();
+        }
+        return subject;
     }
 
     /**
@@ -77,7 +82,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
     }
 
     /**
-     * 校验当前会话是否登录
+     * 校验当前会话是否登录（未登录时会抛出异常）
      *
      * @return true已登录，false未登录
      */
