@@ -68,16 +68,14 @@ tiny-security:
   jwt-subject: tiny-security
 ```
 
-1. 如果使用jdbc，需要导入框架提供的sql脚本（目前只提供了MySQL版本）并集成好jdbcTemplate，
-   导入依赖 `spring-boot-starter-jdbc`，在yml里进行相应配置即可
+1. 使用jdbc做存储容器依赖于`jdbcTemplate`，须导入依赖 `spring-boot-starter-jdbc`，在yml里进行数据库连接的相应配置并导入框架提供的sql脚本到数据库中（目前仅提供了MySQL版本）
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-jdbc</artifactId>
 </dependency>
 ```
-2. 如果使用redis，需要集成好stringRedisTemplate
-   导入依赖 `spring-boot-starter-data-redis` ，在yml里进行相应配置即可
+2. 使用redis做存储容器依赖于`stringRedisTemplate`，须导入依赖 `spring-boot-starter-data-redis` ，并在yml里进行redis连接的相应配置
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -86,7 +84,7 @@ tiny-security:
 ```
 
 ### 2.1.3、配置会话拦截器
- 以`SpringBoot2.+`版本为例, 新建配置类`WebMvcConfig.java`，注册会话拦截器，拦截器的拦截路由规则可自行配置
+以`SpringBoot2.+`版本为例, 新建配置类`WebMvcConfig.java`，注册会话拦截器，拦截器的拦截路由规则可自行配置
 ```java
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
@@ -218,7 +216,7 @@ public class IndexController {
         authProvider.logout(request);
         
         // 不传入request亦可，会自动获取当前的request
-        // authProvider.logout();
+        authProvider.logout();
 
         return Result.ok("退出登录成功！");
     }
@@ -231,14 +229,16 @@ public class IndexController {
 @Autowired
 private AuthProvider authProvider;
 
-// 获取当前登录会话id
+// 获取当前登录会话id（这个方法在无会话时会抛出异常）
 Object loginId = authProvider.getLoginId();
-或者直接调用静态方法
-Object loginId = AuthUtil.getLoginId()
 
-// 获取当前登录会话信息
+// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null）
+Object loginId = AuthUtil.getLoginId();
+
+// 获取当前登录会话信息（这个方法在无会话时会抛出异常）
 LoginSubject LoginSubject = authProvider.getLoginSubject();
-或者直接调用静态方法
+
+// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null）
 LoginSubject LoginSubject = AuthUtil.getLoginSubject();
 ```
 
@@ -250,9 +250,9 @@ LoginSubject LoginSubject = AuthUtil.getLoginSubject();
 @Autowired
 private AuthProvider authProvider;
 
-authProvider.getToken();
-或者
-authProvider.getToken(HttpServletRequest request);
+String token = authProvider.getToken();
+// 或者
+String token = authProvider.getToken(HttpServletRequest request);
 ```
 ---
 
@@ -262,9 +262,9 @@ authProvider.getToken(HttpServletRequest request);
 @Autowired
 private AuthProvider authProvider;
 
-authProvider.getCredentials();
-或者
-authProvider.getCredentials(HttpServletRequest request);
+String credentials = authProvider.getCredentials();
+// 或者
+String credentials = authProvider.getCredentials(HttpServletRequest request);
 ```
 
 ---
@@ -355,7 +355,7 @@ public class IndexController {
 ---
 
 ### 2.3.2、代码方式控制权限
-**1.代码示例：** 
+**1.代码示例：**
 
 ```java
 
@@ -465,3 +465,66 @@ $.ajax({
    }
 ```
 - 删除store-type的配置
+
+
+### 2.5.3、密码加密算法
+框架封装了一些常见的加密算法，可供使用
+1. 摘要算法：
+   支持MD5、SHA256和国密SM3算法
+```java
+    new MD5Hash("123456", "323@#@$1234da", 1).toHex();
+    new MD5Hash("123456", "323@#@$1234da").toHex();
+    new MD5Hash("123456").toHex();
+    new MD5Hash("123456", "323@#@$1234da", 2).toHex();
+    new MD5Hash("123456", "323@#@$1234da", 3).toHex();
+    new MD5Hash("123456", "323@#@$1234da", 3).toBase64();
+    
+    new Sha256Hash("123456", "323@#@$1234da", 10).toBase64();
+    new Sha256Hash("123456", "323@#@$1234da").toHex();
+    new Sha256Hash("123456").toHex();
+    new Sha256Hash("123456", "323@#@$1234da", 2).toHex();
+    new Sha256Hash("123456", "323@#@$1234da", 3).toHex();
+    new Sha256Hash("123456", "323@#@$1234da", 3).toBase64();
+
+    new SM3Hash("123456", "323@#@$1234da", 1).toHex();
+    new SM3Hash("123456", "323@#@$1234da").toHex();
+    new SM3Hash("123456").toHex();
+    new SM3Hash("123456", "323@#@$1234da", 2).toHex();
+    new SM3Hash("123456", "323@#@$1234da", 4).toHex();
+    new SM3Hash("123456", "323@#@$1234da").toBase64();
+```
+
+2. 对称加密
+   支持AES256-CBC算法
+```java
+    // 原文:
+    String message = "Helloworld!";
+    System.out.println("Message: " + message);
+
+    // 使用方法（密钥长度需要为32字节，iv长度需要为16字节）
+    AESUtil aesUtils = AESUtil.builder().secretKey("1G78Av#yej%WZJ3uiSZRz9oy%UAv4AAA").ivParameter("E%BAAAUTvXfwSuGQ").build();
+
+    // 加密:
+    String encrypted = aesUtils.encrypt(message);
+    System.out.println("加密: " + encrypted);
+
+    // 解密:
+    String decrypted = aesUtils.decrypt(encrypted);
+    System.out.println("解密: " + decrypted);
+```
+
+3. 非对称加密
+   支持RSA2048加密
+```java
+    Map<String, String> pair = generateKeyPair();
+    String publicKey = pair.get("publicKey");
+    String privateKey = pair.get("privateKey");
+
+    // 使用公钥加密
+    String encryptedValue = encryptByPublicKey(publicKey, "abcdefg");
+    System.out.println(encryptedValue);
+
+    // 使用私钥解密
+    String decryptedValue = decryptByPrivateKey(privateKey, encryptedValue);
+    System.out.println(decryptedValue);
+```
