@@ -220,7 +220,7 @@ public class IndexController {
         authProvider.logout(request);
         
         // 不传入request亦可，会自动获取当前的request
-        // authProvider.logout();
+        authProvider.logout();
 
         return Result.ok("退出登录成功！");
     }
@@ -233,14 +233,16 @@ public class IndexController {
 @Autowired
 private AuthProvider authProvider;
 
-// 获取当前登录会话id
+// 获取当前登录会话id（这个方法在无会话时会抛出异常）
 Object loginId = authProvider.getLoginId();
-或者直接调用静态方法
-Object loginId = AuthUtil.getLoginId()
 
-// 获取当前登录会话信息
+// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null）
+Object loginId = AuthUtil.getLoginId();
+
+// 获取当前登录会话信息（这个方法在无会话时会抛出异常）
 LoginSubject LoginSubject = authProvider.getLoginSubject();
-或者直接调用静态方法
+
+// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null）
 LoginSubject LoginSubject = AuthUtil.getLoginSubject();
 ```
 
@@ -252,9 +254,9 @@ LoginSubject LoginSubject = AuthUtil.getLoginSubject();
 @Autowired
 private AuthProvider authProvider;
 
-authProvider.getToken();
-或者
-authProvider.getToken(HttpServletRequest request);
+String token = authProvider.getToken();
+// 或者
+String token = authProvider.getToken(HttpServletRequest request);
 ```
 ---
 
@@ -264,9 +266,9 @@ authProvider.getToken(HttpServletRequest request);
 @Autowired
 private AuthProvider authProvider;
 
-authProvider.getCredentials();
-或者
-authProvider.getCredentials(HttpServletRequest request);
+String credentials = authProvider.getCredentials();
+// 或者
+String credentials = authProvider.getCredentials(HttpServletRequest request);
 ```
 
 ---
