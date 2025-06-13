@@ -7,6 +7,7 @@ import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
 import org.tinycloud.security.interceptor.holder.RoleHolder;
 import org.tinycloud.security.interfaces.PermissionInfoInterface;
+import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
@@ -60,7 +61,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
             response.setStatus(HttpServletResponse.SC_OK);
             return true;
         }
-        if (Objects.isNull(AuthenticeHolder.getLoginSubject())) {
+        LoginSubject subject = AuthenticeHolder.getLoginSubject();
+        if (Objects.isNull(subject)) {
             throw new NoPermissionException();
         }
         Method method = ((HandlerMethod) handler).getMethod();
@@ -69,9 +71,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        Object loginId = AuthenticeHolder.getLoginSubject().getLoginId();
-        Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(loginId);
-        Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(loginId);
+        Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(subject);
+        Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(subject);
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
 
