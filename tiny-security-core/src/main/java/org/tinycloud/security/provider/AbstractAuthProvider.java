@@ -8,6 +8,7 @@ import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Map;
 import java.util.Objects;
 
 public abstract class AbstractAuthProvider implements AuthProvider {
@@ -19,8 +20,8 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
      */
     @Override
-    public String login(Object loginId) {
-        String token = this.createAuth(loginId);
+    public String login(Object loginId, Map<String, Object> extraInfo) {
+        String token = this.createAuth(loginId, extraInfo);
         // 设置 Cookie，通过 Cookie 上下文返回给前端
         CookieUtil.setCookie(AuthUtil.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
         return token;
