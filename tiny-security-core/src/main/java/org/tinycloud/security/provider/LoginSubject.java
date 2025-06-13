@@ -1,6 +1,7 @@
 package org.tinycloud.security.provider;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
  * <p>
@@ -18,6 +19,11 @@ public class LoginSubject implements Serializable {
     private Object loginId;
 
     /**
+     * 扩展信息
+     */
+    private Map<String, Object> extraInfo;
+
+    /**
      * 登录时间
      */
     private Long loginTime;
@@ -33,6 +39,14 @@ public class LoginSubject implements Serializable {
 
     public void setLoginId(Object loginId) {
         this.loginId = loginId;
+    }
+
+    public Map<String, Object> getExtraInfo() {
+        return extraInfo;
+    }
+
+    public void setExtraInfo(Map<String, Object> extraInfo) {
+        this.extraInfo = extraInfo;
     }
 
     public Long getLoginTime() {
@@ -55,6 +69,7 @@ public class LoginSubject implements Serializable {
     public String toString() {
         return "LoginSubject{" +
                 "loginId=" + loginId +
+                "extraInfo=" + extraInfo +
                 ", loginTime=" + loginTime +
                 ", loginExpireTime=" + loginExpireTime +
                 '}';

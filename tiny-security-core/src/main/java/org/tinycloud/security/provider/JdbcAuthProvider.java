@@ -123,7 +123,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
      * @return token令牌
      */
     @Override
-    public String createAuth(Object loginId) {
+    public String createAuth(Object loginId, Map<String, Object> extraInfo) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
@@ -132,6 +132,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
 
             LoginSubject subject = new LoginSubject();
+            subject.setExtraInfo(extraInfo);
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
             subject.setLoginTime(currentTime);

@@ -138,9 +138,10 @@ public interface AuthProvider {
      * 创建一个新的token
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @return
+     * @param extraInfo 额外的扩展信息，更灵活
+     * @return jwtToken
      */
-    String createAuth(Object loginId);
+    String createAuth(Object loginId, Map<String, Object> extraInfo);
 
     /**
      * 删除会话（根据token）
@@ -176,7 +177,17 @@ public interface AuthProvider {
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
      */
-    String login(Object loginId);
+    default String login(Object loginId) {
+        return login(loginId, null);
+    }
+
+    /**
+     * 执行登录操作
+     *
+     * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param extraInfo 额外的扩展信息，更灵活
+     */
+    String login(Object loginId, Map<String, Object> extraInfo);
 
     /**
      * 退出登录
