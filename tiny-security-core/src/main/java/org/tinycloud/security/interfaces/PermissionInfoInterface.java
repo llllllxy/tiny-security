@@ -1,5 +1,7 @@
 package org.tinycloud.security.interfaces;
 
+import org.tinycloud.security.provider.LoginSubject;
+
 import java.util.Set;
 
 /**
@@ -12,10 +14,10 @@ public interface PermissionInfoInterface {
     /**
      * 返回一个账号所拥有的权限码集合
      */
-    Set<String> getPermissionSet(Object loginId);
+    Set<String> getPermissionSet(LoginSubject subject);
 
     /**
      * 返回一个账号所拥有的角色标识集合 (权限与角色可分开校验)
      */
-    Set<String> getRoleSet(Object loginId);
+    Set<String> getRoleSet(LoginSubject subject);
 }
