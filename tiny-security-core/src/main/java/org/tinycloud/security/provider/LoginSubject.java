@@ -1,5 +1,6 @@
 package org.tinycloud.security.provider;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Map;
 
@@ -11,6 +12,7 @@ import java.util.Map;
  * @since 2024-09-04 16:50
  */
 public class LoginSubject implements Serializable {
+    @Serial
     private static final long serialVersionUID = -1L;
 
     /**

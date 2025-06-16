@@ -1,6 +1,7 @@
 package org.tinycloud.security.config;
 
 
+import java.io.Serial;
 import java.io.Serializable;
 
 /**
@@ -11,6 +12,9 @@ import java.io.Serializable;
  * @since 2024-04-2024/4/15 23:33
  */
 public class GlobalConfig implements Serializable {
+    @Serial
+    private static final long serialVersionUID = -1L;
+
     /**
      * 是否开启 LOGO 打印
      */
