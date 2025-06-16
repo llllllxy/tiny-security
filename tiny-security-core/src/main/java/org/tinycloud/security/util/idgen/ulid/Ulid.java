@@ -1,5 +1,6 @@
 package org.tinycloud.security.util.idgen.ulid;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Arrays;
@@ -27,6 +28,7 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public final class Ulid implements Serializable, Comparable<Ulid> {
 
+    @Serial
     private static final long serialVersionUID = 2625269413446854731L;
 
     /**
