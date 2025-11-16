@@ -115,8 +115,9 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      * @return token令牌
      */
     @Override
-    public String createAuth(Object loginId,  Map<String, Object> extraInfo) {
+    public String createAuth(Object loginId, Map<String, Object> extraInfo) {
         Assert.notNull(loginId, "The loginId cannot be null!");
+        Assert.isTrue(loginId instanceof Number || loginId instanceof String, "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
         try {
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
             Map<String, String> payload = new HashMap<>();
