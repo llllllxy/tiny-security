@@ -102,11 +102,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
                 long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
-                if (tokenExpireTime < System.currentTimeMillis()) {
-                    return null;
-                } else {
-                    return JsonUtil.readValue(content, LoginSubject.class);
-                }
+                return tokenExpireTime < System.currentTimeMillis() ? null : JsonUtil.readValue(content, LoginSubject.class);
             } else {
                 return null;
             }

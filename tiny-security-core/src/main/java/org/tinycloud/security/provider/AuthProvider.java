@@ -27,18 +27,16 @@ public interface AuthProvider {
      *
      * @param request HttpServletRequest
      * @return String
+     * @throws UnAuthorizedException 获取不到时抛出UnAuthorizedException异常
      */
     default String getToken(HttpServletRequest request) {
         String jwtToken = AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
-        // 第1步：先判断jwtToken是否为空
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
-        // 第2步：校验token的格式是否正确
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            // 去除TOKEN_PREFIX
             jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
-        } else { // token不是以TOKEN_PREFIX开头的，不合格
+        } else {
             throw new UnAuthorizedException();
         }
         return jwtToken;
@@ -48,18 +46,16 @@ public interface AuthProvider {
      * 获取当前会话的token值（jwtToken）
      *
      * @return String
+     * @throws UnAuthorizedException 获取不到时抛出UnAuthorizedException异常
      */
     default String getToken() {
         String jwtToken = AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
-        // 第1步：先判断jwtToken是否为空
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
-        // 第2步：校验token的格式是否正确
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            // 去除TOKEN_PREFIX
             jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
-        } else { // token不是以TOKEN_PREFIX开头的，不合格
+        } else {
             throw new UnAuthorizedException();
         }
         return jwtToken;
@@ -70,6 +66,7 @@ public interface AuthProvider {
      *
      * @param token jwtToken
      * @return 会话凭证
+     * @throws UnAuthorizedException 校验jwtToken失败时抛出UnAuthorizedException异常
      */
     default String getCredentialsByToken(String token) {
         // 校验token是不是伪造的
@@ -85,6 +82,7 @@ public interface AuthProvider {
      * 根据token值（jwtToken）解析得到会话凭证（redis、database、memory里面的key）
      *
      * @return 会话凭证
+     * @throws UnAuthorizedException 校验jwtToken失败时抛出UnAuthorizedException异常
      */
     default String getCredentials() {
         String jwtToken = this.getToken();
@@ -96,6 +94,7 @@ public interface AuthProvider {
      *
      * @param request HttpServletRequest
      * @return 会话凭证
+     * @throws UnAuthorizedException 校验jwtToken失败时抛出UnAuthorizedException异常
      */
     default String getCredentials(HttpServletRequest request) {
         String jwtToken = this.getToken(request);
@@ -103,67 +102,68 @@ public interface AuthProvider {
     }
 
     /**
-     * 刷新credentials
+     * 刷新credentials（不抛出异常）
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @return 是否刷新成功，true刷新成功，false刷新失败
      */
     boolean refreshByCredentials(String credentials);
 
     /**
-     * 刷新credentials，并且重置用户
+     * 刷新credentials，并且重置用户信息（不抛出异常）
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @param subject     登录用户信息
+     * @return 是否刷新成功，true刷新成功，false刷新失败
      */
     boolean refreshByCredentials(String credentials, LoginSubject subject);
 
     /**
-     * 检查credentials是否失效
+     * 检查credentials是否失效，true未失效，false已失效（不抛出异常）
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @return 是否失效，true未失效，false已失效
      */
     boolean checkByCredentials(String credentials);
 
     /**
-     * 获取登录用户信息
+     * 获取登录用户信息，（不抛出异常）
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @return 登录用户信息，失效或获取失败时返回null
      */
     LoginSubject getSubject(String credentials);
 
     /**
      * 创建一个新的token
      *
-     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
      * @param extraInfo 额外的扩展信息，更灵活
-     * @return jwtToken
+     * @return jwtToken， 创建失败时返回null
      */
     String createAuth(Object loginId, Map<String, Object> extraInfo);
 
     /**
-     * 删除会话（根据token）
+     * 删除会话（根据token），（不抛出异常）
      *
-     * @param token
-     * @return
+     * @param token jwtToken
+     * @return 是否删除成功，true删除成功，false删除失败
      */
     boolean deleteByToken(String token);
 
     /**
-     * 删除会话（根据凭证）
+     * 删除会话（根据凭证），（不抛出异常）
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @return 是否删除成功，true删除成功，false删除失败
      */
     boolean deleteByCredentials(String credentials);
 
     /**
-     * 通过loginId删除token---常用于主动让某人下线
+     * 删除会话（根据loginId）常用于主动让某人下线（不抛出异常）
      *
-     * @param loginId
-     * @return
+     * @param loginId 账号id
+     * @return 是否删除成功，true删除成功，false删除失败
      */
     boolean deleteByLoginId(Object loginId);
 
@@ -176,6 +176,7 @@ public interface AuthProvider {
      * 执行登录操作
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @return jwtToken
      */
     default String login(Object loginId) {
         return login(loginId, null);
@@ -186,6 +187,7 @@ public interface AuthProvider {
      *
      * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
      * @param extraInfo 额外的扩展信息，更灵活
+     * @return jwtToken
      */
     String login(Object loginId, Map<String, Object> extraInfo);
 
@@ -236,23 +238,24 @@ public interface AuthProvider {
     }
 
     /**
-     * 获取当前登录用户信息
+     * 获取当前登录用户信息，如果未登录，则抛出异常
      *
      * @return LoginSubject
      */
     LoginSubject getLoginSubject();
 
     /**
-     * 校验当前会话是否登录
+     * 校验当前会话是否登录（不抛出异常）
      *
      * @return true已登录，false未登录
      */
     boolean isLogin();
 
     /**
-     * 检验当前会话是否已经登录, 如果未登录，则抛出异常
+     * 检验当前会话是否已经登录，如果未登录，则抛出异常
      *
-     * @return true已登录，false未登录（会抛出异常）
+     * @return true已登录，未登录抛出UnAuthorizedException异常
+     * @throws UnAuthorizedException 未登录抛出UnAuthorizedException异常
      */
     boolean checkLogin();
     /*============================操作会话结束=============================*/
