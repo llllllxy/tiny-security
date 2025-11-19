@@ -3,6 +3,7 @@ package org.tinycloud.security.provider;
 
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -212,15 +214,23 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     public Set<String> scanKeys(String pattern) {
         Set<String> keys = new HashSet<>();
-        RedisConnection connection = redisTemplate.getConnectionFactory().getConnection();
-        ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
-        try (Cursor<byte[]> cursor = connection.scan(options)) {
-            while (cursor.hasNext()) {
-                keys.add(new String(cursor.next()));
-            }
-        } catch (Exception e) {
-            log.error("RedisAuthProvider scanKeys failed, Exception：", e);
+        // 参数校验：避免空模式扫描全量键
+        if (pattern == null || pattern.trim().isEmpty()) {
+            log.warn("Scan pattern is empty, return empty keys");
+            return keys;
         }
+        redisTemplate.execute((RedisCallback<Void>) connection -> {
+            ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
+            // 执行扫描并获取游标（Cursor<byte[]> 需手动转为 String）
+            try (Cursor<byte[]> cursor = connection.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                }
+            } catch (Exception e) {
+                log.error("Redis scanKeys failed, pattern: {}", pattern, e);
+            }
+            return null;
+        });
         return keys;
     }
 }
