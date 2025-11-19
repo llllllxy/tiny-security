@@ -1,7 +1,8 @@
 package org.tinycloud.security.config;
 
 
-import java.io.Serial;
+import org.tinycloud.security.enums.PermissionMode;
+
 import java.io.Serializable;
 
 /**
@@ -12,9 +13,6 @@ import java.io.Serializable;
  * @since 2024-04-2024/4/15 23:33
  */
 public class GlobalConfig implements Serializable {
-    @Serial
-    private static final long serialVersionUID = -1L;
-
     /**
      * 是否开启 LOGO 打印
      */
@@ -34,7 +32,7 @@ public class GlobalConfig implements Serializable {
 
     private String tableName;
 
-    private String permCheckMode;
+    private PermissionMode permCheckMode;
 
     private String jwtSecret;
 
@@ -104,11 +102,11 @@ public class GlobalConfig implements Serializable {
         this.tableName = tableName;
     }
 
-    public String getPermCheckMode() {
+    public PermissionMode getPermCheckMode() {
         return permCheckMode;
     }
 
-    public void setPermCheckMode(String permCheckMode) {
+    public void setPermCheckMode(PermissionMode permCheckMode) {
         this.permCheckMode = permCheckMode;
     }
 

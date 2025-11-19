@@ -1,6 +1,7 @@
 package org.tinycloud.security;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.tinycloud.security.enums.PermissionMode;
 
 
 /**
@@ -21,7 +22,7 @@ public class AuthProperties {
 
     private String tableName = "t_auth_storage";
 
-    private String permCheckMode = "annotation";
+    private PermissionMode permCheckMode;
 
     private String jwtSecret;
 
@@ -67,11 +68,11 @@ public class AuthProperties {
         this.tableName = tableName;
     }
 
-    public String getPermCheckMode() {
+    public PermissionMode getPermCheckMode() {
         return permCheckMode;
     }
 
-    public void setPermCheckMode(String permCheckMode) {
+    public void setPermCheckMode(PermissionMode permCheckMode) {
         this.permCheckMode = permCheckMode;
     }
 

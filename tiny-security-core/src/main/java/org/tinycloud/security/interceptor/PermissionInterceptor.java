@@ -2,6 +2,7 @@ package org.tinycloud.security.interceptor;
 
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
@@ -66,8 +67,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
             throw new NoPermissionException();
         }
         Method method = ((HandlerMethod) handler).getMethod();
-        // 如果权限模式为注解，并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
-        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode().equals("annotation") && !AuthUtil.hasPermissionAnnotation(method)) {
+        // 如果权限模式为注解并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
+        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasPermissionAnnotation(method)) {
             return true;
         }
 
@@ -76,7 +77,7 @@ public class PermissionInterceptor implements HandlerInterceptor {
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
 
-        boolean hasPermission = GlobalConfigUtils.getGlobalConfig().getPermCheckMode().equals("url")
+        boolean hasPermission = GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.URL
                 ? AuthUtil.checkUrlPermission(request)
                 : AuthUtil.checkPermission(method);
         boolean hasRole = AuthUtil.checkRole(method);
@@ -96,7 +97,6 @@ public class PermissionInterceptor implements HandlerInterceptor {
      */
     @Override
     public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) {
-        // logger.info("PermissionInterceptor -- postHandle -- 执行了");
     }
 
     /*
@@ -104,7 +104,6 @@ public class PermissionInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        // logger.info("PermissionInterceptor -- afterCompletion -- 执行了");
         RoleHolder.clearRoleSet();
         PermissionHolder.clearPermissionSet();
     }
