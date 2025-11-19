@@ -1,3 +1,4 @@
+
 package org.tinycloud.security.interceptor;
 
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -89,7 +90,7 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
                 subject.setLoginExpireTime(currentTime + timeout * 1000L);
                 boolean result = this.getAuthProvider().refreshByCredentials(credentials, subject);
             }
-            // 存入LoginId，以方便后续使用
+            // 存入loginSubject会话信息，以方便后续使用
             AuthenticeHolder.setLoginSubject(subject);
             // 合格不需要拦截，放行
             return true;

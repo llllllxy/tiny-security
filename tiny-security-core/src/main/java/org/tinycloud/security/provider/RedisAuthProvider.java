@@ -1,3 +1,4 @@
+
 package org.tinycloud.security.provider;
 
 import org.springframework.data.redis.connection.RedisConnection;
@@ -42,9 +43,9 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean refreshByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.redisTemplate.expire(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
+            return Boolean.TRUE.equals(this.redisTemplate.expire(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS));
         } catch (Exception e) {
-            log.error("RedisAuthProvider refreshByCredentials failed, Exception：{e}", e);
+            log.error("RedisAuthProvider refreshByCredentials failed, Exception：", e);
             return false;
         }
     }
@@ -63,7 +64,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             this.redisTemplate.opsForValue().set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider refreshByCredentials failed, Exception：{e}", e);
+            log.error("RedisAuthProvider refreshByCredentials failed, Exception：", e);
             return false;
         }
     }
@@ -78,9 +79,9 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return Boolean.TRUE.equals(this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + credentials));
         } catch (Exception e) {
-            log.error("RedisAuthProvider checkByCredentials failed, Exception：{e}", e);
+            log.error("RedisAuthProvider checkByCredentials failed, Exception：", e);
             return false;
         }
     }
@@ -102,7 +103,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
                 return JsonUtil.readValue(content, LoginSubject.class);
             }
         } catch (Exception e) {
-            log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
+            log.error("RedisAuthProvider getSubject failed, Exception：", e);
             return null;
         }
     }
@@ -115,8 +116,9 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      * @return token令牌
      */
     @Override
-    public String createAuth(Object loginId,  Map<String, Object> extraInfo) {
+    public String createAuth(Object loginId, Map<String, Object> extraInfo) {
         Assert.notNull(loginId, "The loginId cannot be null!");
+        Assert.isTrue(loginId instanceof Number || loginId instanceof String, "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
         try {
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
             Map<String, String> payload = new HashMap<>();
@@ -132,7 +134,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             this.redisTemplate.opsForValue().set(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, JsonUtil.writeValueAsString(subject), GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
             return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
         } catch (Exception e) {
-            log.error("RedisAuthProvider createAuth failed, Exception：{e}", e);
+            log.error("RedisAuthProvider createAuth failed, Exception：", e);
             return null;
         }
     }
@@ -148,9 +150,9 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         Assert.hasText(token, "The token cannot be empty!");
         try {
             String credentials = this.getCredentialsByToken(token);
-            return this.redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return Boolean.TRUE.equals(this.redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials));
         } catch (Exception e) {
-            log.error("RedisAuthProvider deleteToken failed, Exception：{e}", e);
+            log.error("RedisAuthProvider deleteToken failed, Exception：", e);
             return false;
         }
     }
@@ -165,15 +167,15 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     public boolean deleteByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return Boolean.TRUE.equals(this.redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + credentials));
         } catch (Exception e) {
-            log.error("RedisAuthProvider deleteByCredentials failed, Exception：{e}", e);
+            log.error("RedisAuthProvider deleteByCredentials failed, Exception：", e);
             return false;
         }
     }
 
     /**
-     * 通过loginId删除token（目前是通过keys命令模糊查询的，数据量特别大时会有性能问题，后续优化）
+     * 通过loginId删除token（通过scan命令模糊查询）
      *
      * @param loginId 身份唯一值
      * @return true成功，false失败
@@ -185,19 +187,18 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             Set<String> keys = this.scanKeys(AuthConsts.AUTH_CREDENTIALS_KEY.concat("*"));
             if (Objects.nonNull(keys) && !keys.isEmpty()) {
                 for (String key : keys) {
-                    String content = redisTemplate.opsForValue().get(key);
+                    String content = this.redisTemplate.opsForValue().get(key);
                     LoginSubject subject = JsonUtil.readValue(content, LoginSubject.class);
-                    if (Objects.nonNull(subject)) {
-                        Object loginIdInRedis = subject.getLoginId();
-                        if (Objects.nonNull(loginIdInRedis) && loginIdInRedis.equals(loginId)) {
-                            redisTemplate.delete(key);
-                        }
+                    if (Objects.nonNull(subject)
+                            && Objects.nonNull(subject.getLoginId())
+                            && subject.getLoginId().equals(loginId)) {
+                        this.redisTemplate.delete(key);
                     }
                 }
             }
             return true;
         } catch (Exception e) {
-            log.error("RedisAuthProvider deleteByLoginId failed, Exception：{e}", e);
+            log.error("RedisAuthProvider deleteByLoginId failed, Exception：", e);
             return false;
         }
     }
@@ -218,7 +219,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
                 keys.add(new String(cursor.next()));
             }
         } catch (Exception e) {
-            log.error("RedisAuthProvider scanKeys failed, Exception：{e}", e);
+            log.error("RedisAuthProvider scanKeys failed, Exception：", e);
         }
         return keys;
     }

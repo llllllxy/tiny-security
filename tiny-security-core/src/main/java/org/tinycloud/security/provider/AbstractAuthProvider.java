@@ -11,6 +11,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * 操作token和会话的抽象类
+ *
+ * @author liuxingyu01
+ * @version 2023-01-06-9:33
+ **/
 public abstract class AbstractAuthProvider implements AuthProvider {
     private final static Logger log = LoggerFactory.getLogger(AbstractAuthProvider.class);
 

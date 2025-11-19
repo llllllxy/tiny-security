@@ -102,11 +102,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
                 long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
-                if (tokenExpireTime < System.currentTimeMillis()) {
-                    return null;
-                } else {
-                    return JsonUtil.readValue(content, LoginSubject.class);
-                }
+                return tokenExpireTime < System.currentTimeMillis() ? null : JsonUtil.readValue(content, LoginSubject.class);
             } else {
                 return null;
             }
@@ -125,6 +121,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     @Override
     public String createAuth(Object loginId, Map<String, Object> extraInfo) {
         Assert.notNull(loginId, "The loginId cannot be null!");
+        Assert.isTrue(loginId instanceof Number || loginId instanceof String, "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
         try {
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
             Map<String, String> payload = new HashMap<>();
