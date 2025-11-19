@@ -56,19 +56,19 @@ tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框�
 tiny-security:
   # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)，如不配置，则默认为single
   store-type: single
-  # token名称 (同时也是cookie名称，适配前后端不分离的模式)
+  # token名称 (同时也是cookie名称以适配前后端不分离的模式)
   token-name: token
   # token有效期 (即会话时长)，单位秒 默认1800秒(30分钟)
   timeout: 1800
-  # credentials凭类型，可配置uuid (默认风格)，snowflake (纯数字风格)，objectid (变种uuid)，random128 (随机128位字符串)，nanoid，ulid
+  # credentials凭证类型，可配置uuid(默认风格)，snowflake(纯数字风格)，objectid(变种uuid)，random128 (随机128位字符串)，nanoid，ulid
   credentials-style: uuid
-  # 当配置为jdbc时，存储token的表名字，默认为t_auth_storage
+  # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
   table-name: t_auth_storage
-  # 权限校验方式，可配置annotation（注解方式）、url（url方式）
-  perm-check-mode: annotation
-  # jwt密钥
+  # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
+  perm-check-mode: ANNOTATION
+  # jwt密钥，不配置则使用默认值
   jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
-  # jwt主题
+  # jwt主题，不配置则使用默认值
   jwt-subject: tiny-security
 ```
 
