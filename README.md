@@ -89,14 +89,11 @@ tiny-security:
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
-    @Autowired
-    private AuthenticeInterceptor authenticeInterceptor;
-
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         
         // 注册会话拦截器
-        registry.addInterceptor(authenticeInterceptor)
+        registry.addInterceptor(new AuthInterceptor())
                 .addPathPatterns("/**")
                 .excludePathPatterns("/login");
     }
@@ -110,14 +107,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
 public class WebMvcConfig implements WebMvcConfigurer {
 
     // 按需要来，如果不需要角色权限控制，可以不配置此拦截器
-    @Autowired
-    private PermissionInterceptor permissionInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
 
         // 注册权限拦截器
-        registry.addInterceptor(permissionInterceptor)
+        registry.addInterceptor(new PermissionInterceptor())
                 .addPathPatterns("/**")
                 .excludePathPatterns("/login");
     }

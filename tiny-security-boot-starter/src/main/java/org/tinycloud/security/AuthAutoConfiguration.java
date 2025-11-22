@@ -4,21 +4,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-
-
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.interceptor.AuthenticeInterceptor;
-import org.tinycloud.security.interceptor.PermissionInterceptor;
 import org.tinycloud.security.interfaces.PermissionInfoInterface;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.provider.JdbcAuthProvider;
@@ -26,7 +26,8 @@ import org.tinycloud.security.provider.RedisAuthProvider;
 import org.tinycloud.security.provider.SingleAuthProvider;
 import org.tinycloud.security.util.VersionUtil;
 
-import java.util.Collection;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * <p>
@@ -36,9 +37,10 @@ import java.util.Collection;
  * @author liuxingyu01
  * @since 2022-12-13 11:45
  **/
+@ConditionalOnClass({HandlerInterceptor.class, WebMvcConfigurer.class})
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-public class AuthAutoConfiguration implements ApplicationContextAware {
+public class AuthAutoConfiguration implements ApplicationContextAware, ApplicationListener<ContextRefreshedEvent> {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
     @Autowired
@@ -50,80 +52,12 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         this.applicationContext = applicationContext;
     }
 
-    /**
-     * 注入redisAuthProvider
-     */
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
-    @Bean
-    public AuthProvider redisAuthProvider() {
-        org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate = getBean(org.springframework.data.redis.core.StringRedisTemplate.class);
-        if (stringRedisTemplate == null) {
-            logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
-            return null;
+    @Override
+    public void onApplicationEvent(ContextRefreshedEvent event) {
+        // 避免重复初始化
+        if (Objects.nonNull(GlobalConfigUtils.getGlobalConfig())) {
+            return;
         }
-        logger.info("RedisAuthProvider is running!");
-        this.setGlobalConfig(authProperties);
-        return new RedisAuthProvider(stringRedisTemplate);
-    }
-
-    /**
-     * 注入jdbcAuthProvider
-     */
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
-    @Bean
-    public AuthProvider jdbcAuthProvider() {
-        org.springframework.jdbc.core.JdbcTemplate jdbcTemplate = getBean(org.springframework.jdbc.core.JdbcTemplate.class);
-        if (jdbcTemplate == null) {
-            logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null!");
-            return null;
-        }
-        logger.info("JdbcAuthProvider is running!");
-        this.setGlobalConfig(authProperties);
-        return new JdbcAuthProvider(jdbcTemplate);
-    }
-
-    /**
-     * 注入singleAuthProvider
-     */
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
-    @Bean
-    public AuthProvider singleAuthProvider() {
-        logger.info("SingleAuthProvider is running!");
-        this.setGlobalConfig(authProperties);
-        return new SingleAuthProvider();
-    }
-
-
-    /**
-     * 添加会话拦截器( 注入AuthStore（可能是redis的，也可能是jdbc的，根据配置来的）)
-     */
-    @Bean
-    public AuthenticeInterceptor authenticeInterceptor(@Autowired AuthProvider authProvider) {
-        if (authProvider != null) {
-            return new AuthenticeInterceptor(authProvider);
-        } else {
-            logger.error("AuthAutoConfiguration: Bean AuthProvider Not Defined!");
-            return null;
-        }
-    }
-
-
-    /**
-     * 添加权限拦截器（当存在bean PermissionInfoInterface时，这个配置才生效）
-     * 注入PermissionInfoInterface
-     */
-    @ConditionalOnBean(PermissionInfoInterface.class)
-    @Bean
-    public PermissionInterceptor permissionInterceptor(@Autowired PermissionInfoInterface permissionInfoInterface) {
-        if (permissionInfoInterface != null) {
-            return new PermissionInterceptor(permissionInfoInterface);
-        } else {
-            logger.error("AuthAutoConfiguration: Bean PermissionInfoInterface Not Defined!");
-            return null;
-        }
-    }
-
-    private void setGlobalConfig(AuthProperties authProperties) {
         GlobalConfig globalConfig = new GlobalConfig();
         globalConfig.setVersion(VersionUtil.getVersion());
         globalConfig.setStoreType(authProperties.getStoreType());
@@ -134,21 +68,56 @@ public class AuthAutoConfiguration implements ApplicationContextAware {
         globalConfig.setPermCheckMode(authProperties.getPermCheckMode());
         globalConfig.setJwtSecret(authProperties.getJwtSecret());
         globalConfig.setJwtSubject(authProperties.getJwtSubject());
+        /* 获取自定义的（ID生成器） */
+        this.getBeanThen(AuthProvider.class, globalConfig::setAuthProvider);
+        /* 获取自定义的（PermissionInfoInterface */
+        this.getBeanThen(PermissionInfoInterface.class, globalConfig::setPermissionInfoInterface);
         GlobalConfigUtils.setGlobalConfig(globalConfig);
+
+        if (logger.isInfoEnabled()) {
+            logger.info("Tiny-Security started successfully, version: {}.", globalConfig.getVersion());
+        }
+    }
+
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
+    @Bean
+    public AuthProvider redisAuthProvider(@Autowired StringRedisTemplate stringRedisTemplate) {
+        if (stringRedisTemplate == null) {
+            logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
+            return null;
+        }
+        logger.info("RedisAuthProvider is running!");
+        return new RedisAuthProvider(stringRedisTemplate);
+    }
+
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
+    @Bean
+    public AuthProvider jdbcAuthProvider(@Autowired JdbcTemplate jdbcTemplate) {
+        if (jdbcTemplate == null) {
+            logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null!");
+            return null;
+        }
+        logger.info("JdbcAuthProvider is running!");
+        return new JdbcAuthProvider(jdbcTemplate);
+    }
+
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
+    @Bean
+    public AuthProvider singleAuthProvider() {
+        logger.info("SingleAuthProvider is running!");
+        return new SingleAuthProvider();
     }
 
     /**
-     * 获取Bean
+     * 根据Class<T>获取Bean
+     *
+     * @param clazz    Class
+     * @param <T>      泛型
+     * @param consumer 操作
      */
-    private <T> T getBean(Class<T> clazz) {
-        T bean = null;
-        Collection<T> beans = applicationContext.getBeansOfType(clazz).values();
-        while (beans.iterator().hasNext()) {
-            bean = beans.iterator().next();
-            if (bean != null) {
-                break;
-            }
+    public <T> void getBeanThen(Class<T> clazz, Consumer<T> consumer) {
+        if (this.applicationContext.getBeanNamesForType(clazz, false, false).length > 0) {
+            consumer.accept(this.applicationContext.getBean(clazz));
         }
-        return bean;
     }
 }
