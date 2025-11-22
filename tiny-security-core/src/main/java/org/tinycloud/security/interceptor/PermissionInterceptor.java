@@ -1,6 +1,11 @@
 package org.tinycloud.security.interceptor;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.exception.NoPermissionException;
@@ -10,12 +15,7 @@ import org.tinycloud.security.interceptor.holder.RoleHolder;
 import org.tinycloud.security.interfaces.PermissionInfoInterface;
 import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
-import org.springframework.http.HttpMethod;
-import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.servlet.ModelAndView;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Set;
@@ -27,24 +27,6 @@ import java.util.Set;
  * @version 2024-03-22-11:23
  **/
 public class PermissionInterceptor implements HandlerInterceptor {
-
-    /**
-     * 权限角色信息
-     */
-    private PermissionInfoInterface permissionInfoInterface;
-
-    public PermissionInfoInterface getPermissionInfoInterface() {
-        return this.permissionInfoInterface;
-    }
-
-    public void setPermissionInfoInterface(PermissionInfoInterface permissionInfoInterface) {
-        this.permissionInfoInterface = permissionInfoInterface;
-    }
-
-    public PermissionInterceptor(PermissionInfoInterface permissionInfoInterface) {
-        this.setPermissionInfoInterface(permissionInfoInterface);
-    }
-
 
     /*
      * 进入controller层之前拦截请求
@@ -71,9 +53,9 @@ public class PermissionInterceptor implements HandlerInterceptor {
         if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasPermissionAnnotation(method)) {
             return true;
         }
-
-        Set<String> roleSet = this.getPermissionInfoInterface().getRoleSet(subject);
-        Set<String> permissionSet = this.getPermissionInfoInterface().getPermissionSet(subject);
+        PermissionInfoInterface permissionInfoInterface = GlobalConfigUtils.getGlobalConfig().getPermissionInfoInterface();
+        Set<String> roleSet = permissionInfoInterface.getRoleSet(subject);
+        Set<String> permissionSet = permissionInfoInterface.getPermissionSet(subject);
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
 

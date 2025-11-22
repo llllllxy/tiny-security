@@ -1,20 +1,20 @@
 
 package org.tinycloud.security.interceptor;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpMethod;
+import org.springframework.util.StringUtils;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
-import org.springframework.http.HttpMethod;
-import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.servlet.ModelAndView;
-import org.springframework.util.StringUtils;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.util.Objects;
 
@@ -24,26 +24,7 @@ import java.util.Objects;
  * @author liuxingyu01
  * @version 2020-03-22-11:23
  **/
-public class AuthenticeInterceptor implements HandlerInterceptor {
-
-    /**
-     * 存储会话的接口
-     */
-    private AuthProvider authProvider;
-
-    public AuthProvider getAuthProvider() {
-        return this.authProvider;
-    }
-
-    public void setAuthProvider(AuthProvider authProvider) {
-        this.authProvider = authProvider;
-    }
-
-
-    public AuthenticeInterceptor(AuthProvider authProvider) {
-        this.setAuthProvider(authProvider);
-    }
-
+public class AuthInterceptor implements HandlerInterceptor {
 
     /*
      * 进入controller层之前拦截请求
@@ -68,16 +49,17 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
         if (AuthUtil.checkIgnore(method)) {
             return true;
         }
+        AuthProvider authProvider = GlobalConfigUtils.getGlobalConfig().getAuthProvider();
 
         // 第一步、先从请求的request里获取传来的credentials值，并且判断credentials值是否为空
-        String credentials = this.getAuthProvider().getCredentials(request);
+        String credentials = authProvider.getCredentials(request);
         if (!StringUtils.hasText(credentials)) {
             // 直接抛出异常的话，就不需要return false了
             throw new UnAuthorizedException();
         }
 
         // 第二步、再判断此token值在会话存储器中是否存在，存在的话说明会话有效，并刷新会话时长
-        LoginSubject subject = this.getAuthProvider().getSubject(credentials);
+        LoginSubject subject = authProvider.getSubject(credentials);
         if (Objects.isNull(subject)) {
             throw new UnAuthorizedException();
         } else {
@@ -88,7 +70,7 @@ public class AuthenticeInterceptor implements HandlerInterceptor {
             if (expireTime - currentTime <= millsCritical) {
                 // 刷新会话缓存时长
                 subject.setLoginExpireTime(currentTime + timeout * 1000L);
-                boolean result = this.getAuthProvider().refreshByCredentials(credentials, subject);
+                boolean result = authProvider.refreshByCredentials(credentials, subject);
             }
             // 存入loginSubject会话信息，以方便后续使用
             AuthenticeHolder.setLoginSubject(subject);
