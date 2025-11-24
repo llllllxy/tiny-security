@@ -380,7 +380,7 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 > 🚨支持使用通配符指定泛权限，例如当一个账号拥有system:user:*的权限时，system:user:add、system:user:delete、system:user:update都将匹配通过
 
 > ⚠️注意
-> 当一个账号拥有 "*" 权限时，可以验证通过任何权限码 （角色认证同理）, 所以请谨慎使用 "*" 权限码
+> 当一个账号拥有 `*` 权限时，可以验证通过任何权限码 （角色认证同理）, 所以请谨慎使用 `*` 权限码
 
 ---
 

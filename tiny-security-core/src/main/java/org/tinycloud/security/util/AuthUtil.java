@@ -1,20 +1,20 @@
 package org.tinycloud.security.util;
 
-import org.springframework.util.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.util.ObjectUtils;
+import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.annotation.Ignore;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.enums.Logical;
 import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
-
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.interceptor.holder.PermissionHolder;
 import org.tinycloud.security.interceptor.holder.RoleHolder;
 import org.tinycloud.security.provider.LoginSubject;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Set;
@@ -123,6 +123,11 @@ public class AuthUtil {
 
     /**
      * url自动匹配权限模式（无需加注解了，只支持权限的校验，不支持角色）
+     * 此处是按照全路径匹配的，所以在设置权限编码时，如有contextPath，则也需要带上contextPath
+     *
+     * <p>
+     *    当一个账号拥有 `/**` 权限时，可以验证通过任何权限路径（超级管理员权限）
+     * </p>
      *
      * @param request HttpServletRequest
      * @return true or false
