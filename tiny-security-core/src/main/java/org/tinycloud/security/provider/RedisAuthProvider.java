@@ -1,19 +1,18 @@
 
 package org.tinycloud.security.provider;
 
-import org.springframework.data.redis.connection.RedisConnection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.JwtUtil;
-import org.tinycloud.security.util.CredentialsGenUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
