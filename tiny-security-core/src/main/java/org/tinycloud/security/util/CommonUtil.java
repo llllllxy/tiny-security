@@ -138,15 +138,8 @@ public class CommonUtil {
             return false;
         }
         for (String configPath : configPaths) {
-            if (configPath.equals(requestPath)) {
+            if (StringUtils.hasLength(configPath) && MATCHER.match(configPath, requestPath)) {
                 return true;
-            } else {
-                boolean isPattern = MATCHER.isPattern(configPath);
-                if (isPattern) {
-                    if (MATCHER.match(configPath, requestPath)) {
-                        return true;
-                    }
-                }
             }
         }
         return false;
