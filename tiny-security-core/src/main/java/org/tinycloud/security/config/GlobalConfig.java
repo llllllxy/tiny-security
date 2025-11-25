@@ -46,6 +46,8 @@ public class GlobalConfig implements Serializable {
 
     private String jwtSubject;
 
+    private Integer maxLogin;
+
     public AuthProvider getAuthProvider() {
         return authProvider;
     }
@@ -148,5 +150,13 @@ public class GlobalConfig implements Serializable {
 
     public void setJwtSubject(String jwtSubject) {
         this.jwtSubject = jwtSubject;
+    }
+
+    public Integer getMaxLogin() {
+        return maxLogin;
+    }
+
+    public void setMaxLogin(Integer maxLogin) {
+        this.maxLogin = maxLogin;
     }
 }

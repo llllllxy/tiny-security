@@ -35,7 +35,7 @@ public interface AuthProvider {
             throw new UnAuthorizedException();
         }
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
+            jwtToken = jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         } else {
             throw new UnAuthorizedException();
         }
@@ -54,7 +54,7 @@ public interface AuthProvider {
             throw new UnAuthorizedException();
         }
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
+            jwtToken = jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         } else {
             throw new UnAuthorizedException();
         }
@@ -69,6 +69,12 @@ public interface AuthProvider {
      * @throws UnAuthorizedException 校验jwtToken失败时抛出UnAuthorizedException异常
      */
     default String getCredentialsByToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            throw new UnAuthorizedException();
+        }
+        if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
+            token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        }
         // 校验token是不是伪造的
         Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
         if (Objects.isNull(claims)) {

@@ -13,11 +13,19 @@ public class AuthConsts {
      */
     public static final String AUTH_CREDENTIALS_KEY = "tiny:security:credentials:";
 
+    /**
+     * Redis 列表 Key 前缀：存储账号对应的所有在线凭证（credentials）
+     */
+    public static final String ONLINE_CREDENTIALS_KEY_PREFIX = "tiny-security:online:credentials:";
+
     // 无权限访问
     public static int CODE_NO_PERMISSION = 403;
 
     // 未登录或会话已失效
     public static int CODE_UNAUTHORIZED = 401;
+
+    // 其他异常
+    public static int CODE_OTHER_ERROR = 500;
 
     public static String JWT_TOKEN_PREFIX = "Bearer ";
 }
