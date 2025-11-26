@@ -126,7 +126,7 @@ public class AuthUtil {
      * 此处是按照全路径匹配的，所以在设置权限编码时，如有contextPath，则也需要带上contextPath
      *
      * <p>
-     *    当一个账号拥有 `/**` 权限时，可以验证通过任何权限路径（超级管理员权限）
+     * 当一个账号拥有 `/**` 权限时，可以验证通过任何权限路径（超级管理员权限）
      * </p>
      *
      * @param request HttpServletRequest
@@ -213,9 +213,9 @@ public class AuthUtil {
      * @return Object
      */
     public static Object getLoginId() {
-        return AuthenticeHolder.getLoginSubject() == null ? null : AuthenticeHolder.getLoginSubject().getLoginId();
+        LoginSubject subject = getLoginSubject();
+        return subject == null ? null : subject.getLoginId();
     }
-
 
     /**
      * 获取当前登录用户的loginId, 并转换为 String 类型
@@ -223,7 +223,8 @@ public class AuthUtil {
      * @return 账号id
      */
     public static String getLoginIdAsString() {
-        return getLoginId() == null ? null : String.valueOf(getLoginId());
+        Object loginId = getLoginId();
+        return loginId == null ? null : String.valueOf(loginId);
     }
 
     /**
@@ -232,7 +233,8 @@ public class AuthUtil {
      * @return 账号id
      */
     public static Integer getLoginIdAsInt() {
-        return getLoginId() == null ? null : Integer.parseInt(String.valueOf(getLoginId()));
+        Object loginId = getLoginId();
+        return loginId == null ? null : Integer.parseInt(String.valueOf(loginId));
     }
 
     /**
@@ -241,7 +243,8 @@ public class AuthUtil {
      * @return 账号id
      */
     public static Long getLoginIdAsLong() {
-        return getLoginId() == null ? null : Long.parseLong(String.valueOf(getLoginId()));
+        Object loginId = getLoginId();
+        return loginId == null ? null : Long.parseLong(String.valueOf(loginId));
     }
 
     /**
