@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.exception.AuthException;
 import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.JwtUtil;
@@ -36,6 +37,44 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         this.initCleanThread();
     }
 
+
+    /**
+     * 统计当前账号的有效在线会话数（未过期）
+     *
+     * @param loginId 账号ID
+     * @return 有效会话数
+     */
+    private int countValidOnlineSessions(Object loginId) {
+        // SQL：统计 login_id 匹配且未过期的记录数
+        String sql = "SELECT COUNT(1) FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE login_id = ? AND credentials_expire_time > ?";
+        try {
+            Long count = jdbcTemplate.queryForObject(sql, Long.class, loginId, System.currentTimeMillis());
+            return count == null ? 0 : count.intValue();
+        } catch (Exception e) {
+            log.error("统计账号{}有效在线会话数失败", loginId, e);
+            return 0; // 异常时默认返回0（避免影响登录，实际业务可调整为抛出异常）
+        }
+    }
+
+    /**
+     * 校验当前在线人数是否超上限
+     *
+     * @param loginId 账号ID
+     * @return true：未超上限；false：已超上限
+     */
+    private boolean checkMaxLoginLimit(Object loginId) {
+        int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
+        if (maxLogin <= 0) {
+            return true; // 为0或者负数表示不限制
+        }
+
+        // 统计有效会话数（自动过滤过期会话，无需额外清理）
+        int currentOnlineCount = countValidOnlineSessions(loginId);
+        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxLogin);
+        return currentOnlineCount < maxLogin;
+    }
+
+
     @Override
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
@@ -59,14 +98,10 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "SELECT credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
-            if (!resultList.isEmpty()) {
-                long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
-                return tokenExpireTime > System.currentTimeMillis();
-            } else {
-                return false;
-            }
+            String sql = "SELECT credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName()
+                    + " WHERE credentials = ? AND credentials_expire_time > ?";
+            List<Map<String, Object>> resultList = this.jdbcTemplate.queryForList(sql, credentials, System.currentTimeMillis());
+            return !resultList.isEmpty();
         } catch (Exception e) {
             log.error("JdbcAuthProvider checkByCredentials failed, Exception: {e}", e);
             return false;
@@ -77,17 +112,17 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "SELECT login_subject, credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
+            String sql = "SELECT login_subject FROM " + GlobalConfigUtils.getGlobalConfig().getTableName()
+                    + " WHERE credentials = ? AND credentials_expire_time > ?";
+            List<Map<String, Object>> resultList = this.jdbcTemplate.queryForList(sql, credentials, System.currentTimeMillis());
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
-                long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
-                return tokenExpireTime < System.currentTimeMillis() ? null : JsonUtil.readValue(content, LoginSubject.class);
+                return JsonUtil.readValue(content, LoginSubject.class);
             } else {
                 return null;
             }
         } catch (Exception e) {
-            log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
+            log.error("JdbcAuthProvider getSubject failed, Exception：{e}", e);
             return null;
         }
     }
@@ -103,11 +138,19 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         Assert.notNull(loginId, "The loginId cannot be null!");
         Assert.isTrue(loginId instanceof Number || loginId instanceof String, "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
         try {
+            // 1. 校验在线人数是否超上限
+            boolean canLogin = this.checkMaxLoginLimit(loginId);
+            if (!canLogin) {
+                throw new AuthException("Maximum concurrent logins ({" + GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins() + "}) " +
+                        "reached for the account; further logins are prohibited!");
+            }
+            // 2. 生成唯一会话凭证（credentials）
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
             Map<String, String> payload = new HashMap<>();
             payload.put("credentials", credentials);
+            // 3. 生成JWT Token（包含credentials）
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
-
+            // 4. 构建登录用户信息（LoginSubject），存储到Database
             LoginSubject subject = new LoginSubject();
             subject.setExtraInfo(extraInfo);
             subject.setLoginId(loginId);
@@ -118,9 +161,11 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             String sql = "INSERT INTO " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) VALUES (?,?,?,?)";
             int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), subject.getLoginExpireTime());
             return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;
+        } catch (AuthException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider createAuth failed, Exception: {e}", e);
-            return null;
+            log.error("JdbcAuthProvider createAuth failed, Exception：", e);
+            throw new AuthException("Failed to create auth. Please retry!", e);
         }
     }
 

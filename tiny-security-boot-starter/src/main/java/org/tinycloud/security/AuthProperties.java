@@ -28,7 +28,7 @@ public class AuthProperties {
 
     private String jwtSubject;
 
-    private Integer maxConcurrentLogins;
+    private Integer maxConcurrentLogins = 0;
 
     public String getStoreType() {
         return storeType;
