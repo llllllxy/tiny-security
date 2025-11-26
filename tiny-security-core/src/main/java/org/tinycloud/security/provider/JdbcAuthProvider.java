@@ -1,15 +1,14 @@
 package org.tinycloud.security.provider;
 
-import org.springframework.util.Assert;
-import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.util.JsonUtil;
-import org.tinycloud.security.util.JwtUtil;
-import org.tinycloud.security.util.CredentialsGenUtil;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.util.Assert;
+import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.util.CredentialsGenUtil;
+import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.util.JwtUtil;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -35,25 +34,6 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         this.jdbcTemplate = jdbcTemplate;
         // 同时初始化定时任务
         this.initCleanThread();
-    }
-
-    /**
-     * 刷新credentials有效时间
-     *
-     * @param credentials 凭证
-     * @return true成功，false失败
-     */
-    @Override
-    public boolean refreshByCredentials(String credentials) {
-        Assert.hasText(credentials, "The credentials cannot be empty!");
-        try {
-            String sql = "UPDATE " + GlobalConfigUtils.getGlobalConfig().getTableName() + " SET credentials_expire_time = ? WHERE credentials = ?";
-            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, credentials);
-            return num > 0;
-        } catch (Exception e) {
-            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
-            return false;
-        }
     }
 
     @Override

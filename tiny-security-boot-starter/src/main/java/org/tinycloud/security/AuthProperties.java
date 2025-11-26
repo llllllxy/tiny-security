@@ -28,6 +28,8 @@ public class AuthProperties {
 
     private String jwtSubject;
 
+    private Integer maxConcurrentLogins;
+
     public String getStoreType() {
         return storeType;
     }
@@ -90,5 +92,13 @@ public class AuthProperties {
 
     public void setJwtSubject(String jwtSubject) {
         this.jwtSubject = jwtSubject;
+    }
+
+    public Integer getMaxConcurrentLogins() {
+        return maxConcurrentLogins;
+    }
+
+    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
+        this.maxConcurrentLogins = maxConcurrentLogins;
     }
 }
