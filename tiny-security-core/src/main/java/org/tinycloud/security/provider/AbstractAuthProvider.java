@@ -1,5 +1,6 @@
 package org.tinycloud.security.provider;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tinycloud.security.config.GlobalConfigUtils;
@@ -7,7 +8,6 @@ import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.Objects;
 
@@ -38,7 +38,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public void logout(HttpServletRequest request) {
-        this.deleteByCredentials(this.getCredentials(request));
+        boolean result = this.deleteByCredentials(this.getCredentials(request));
     }
 
     /**
@@ -46,7 +46,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public void logout() {
-        this.deleteByCredentials(this.getCredentials());
+        boolean result = this.deleteByCredentials(this.getCredentials());
     }
 
     /**

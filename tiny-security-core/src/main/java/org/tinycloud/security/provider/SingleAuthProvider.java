@@ -1,16 +1,17 @@
 package org.tinycloud.security.provider;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.provider.timedcache.LocalMapContainerByConcurrentHashMap;
 import org.tinycloud.security.provider.timedcache.LocalTimeCache;
-import org.tinycloud.security.util.JwtUtil;
 import org.tinycloud.security.util.CredentialsGenUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.tinycloud.security.util.JwtUtil;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 操作token和会话的接口（通过单机内存Map实现，系统重启后数据会丢失）
@@ -31,24 +32,6 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     public SingleAuthProvider() {
         // 同时初始化定时任务
         this.timedCache.initRefreshThread();
-    }
-
-    /**
-     * 刷新凭证
-     *
-     * @param credentials 凭证
-     * @return true成功，false失败
-     */
-    @Override
-    public boolean refreshByCredentials(String credentials) {
-        Assert.hasText(credentials, "The credentials cannot be empty!");
-        try {
-            this.timedCache.updateObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout());
-            return true;
-        } catch (Exception e) {
-            log.error("SingleAuthProvider - refreshCredentials - failed，Exception：{e}", e);
-            return false;
-        }
     }
 
     @Override

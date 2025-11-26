@@ -1,6 +1,6 @@
 package org.tinycloud.security.provider;
 
-
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
@@ -8,7 +8,6 @@ import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.JwtUtil;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import java.util.Objects;
 
@@ -108,14 +107,6 @@ public interface AuthProvider {
     }
 
     /**
-     * 刷新credentials（不抛出异常）
-     *
-     * @param credentials 会话凭证
-     * @return 是否刷新成功，true刷新成功，false刷新失败
-     */
-    boolean refreshByCredentials(String credentials);
-
-    /**
      * 刷新credentials，并且重置用户信息（不抛出异常）
      *
      * @param credentials 会话凭证
@@ -176,7 +167,7 @@ public interface AuthProvider {
     /*============================操作token结束=============================*/
 
 
-    /*============================操作会话开始，此部分在AbstractAuthProvider里予以实现=============================*/
+    /*============================操作会话开始=============================*/
 
     /**
      * 执行登录操作

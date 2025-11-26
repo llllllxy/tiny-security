@@ -46,7 +46,7 @@ public class GlobalConfig implements Serializable {
 
     private String jwtSubject;
 
-    private Integer maxLogin;
+    private Integer maxConcurrentLogins;
 
     public AuthProvider getAuthProvider() {
         return authProvider;
@@ -152,11 +152,11 @@ public class GlobalConfig implements Serializable {
         this.jwtSubject = jwtSubject;
     }
 
-    public Integer getMaxLogin() {
-        return maxLogin;
+    public Integer getMaxConcurrentLogins() {
+        return maxConcurrentLogins;
     }
 
-    public void setMaxLogin(Integer maxLogin) {
-        this.maxLogin = maxLogin;
+    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
+        this.maxConcurrentLogins = maxConcurrentLogins;
     }
 }

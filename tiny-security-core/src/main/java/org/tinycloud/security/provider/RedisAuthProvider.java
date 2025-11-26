@@ -2,7 +2,6 @@ package org.tinycloud.security.provider;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
@@ -17,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 
 /**
@@ -34,10 +34,6 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         this.redisTemplate = redisTemplate;
     }
 
-    private ListOperations<String, String> listOps() {
-        return redisTemplate.opsForList();
-    }
-
     /**
      * 清理账号的无效在线凭证，返回有效凭证列表
      *
@@ -46,32 +42,31 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     private List<String> clearInvalidCredentials(Object loginId) {
         String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId.toString();
         // 获取该账号的所有在线凭证
-        List<String> credentialsList = listOps().range(onlineKey, 0, -1);
+        List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
         if (credentialsList == null || credentialsList.isEmpty()) {
-            redisTemplate.delete(onlineKey);
+            this.redisTemplate.delete(onlineKey);
             return new ArrayList<>();
         }
         // 标记需要删除的无效凭证
         List<String> invalidCredentials = credentialsList.stream()
-                .filter(cred -> !redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + cred))
-                .toList();
+                .filter(cred -> !this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + cred))
+                .collect(Collectors.toList());
         if (!invalidCredentials.isEmpty()) {
             // 批量删除无效凭证（一次Redis操作，而非逐个删除）
             for (String invalidCred : invalidCredentials) {
-                listOps().remove(onlineKey, 1, invalidCred);
+                this.redisTemplate.opsForList().remove(onlineKey, 1, invalidCred);
             }
             // 重新获取清理后的有效列表（确保数据准确）
-            credentialsList = listOps().range(onlineKey, 0, -1);
+            credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
         }
 
         // 兜底：若列表为空，删除Key
         if (credentialsList == null || credentialsList.isEmpty()) {
-            redisTemplate.delete(onlineKey);
+            this.redisTemplate.delete(onlineKey);
             return new ArrayList<>();
         }
         return credentialsList;
     }
-
 
     /**
      * 校验当前在线人数是否超上限
@@ -80,13 +75,13 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      * @return true：未超上限；false：已超上限
      */
     private boolean checkMaxLoginLimit(Object loginId) {
-        int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxLogin();
+        int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
         if (maxLogin <= 0) {
             return true; // 最大人数为0表示不限制
         }
 
         // 清理无效凭证后，获取有效在线数
-        List<String> validCredentials = clearInvalidCredentials(loginId);
+        List<String> validCredentials = this.clearInvalidCredentials(loginId);
         int currentOnlineCount = validCredentials == null ? 0 : validCredentials.size();
 
         log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxLogin);
@@ -101,16 +96,16 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     private void addToOnlineList(Object loginId, String credentials) {
         String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId.toString();
-        listOps().rightPush(onlineKey, credentials);
-        log.info("账号{}新增在线凭证：{}，当前在线数：{}", loginId, credentials, listOps().size(onlineKey));
+        this.redisTemplate.opsForList().rightPush(onlineKey, credentials);
+        log.info("账号{}新增在线凭证：{}，当前在线数：{}", loginId, credentials, this.redisTemplate.opsForList().size(onlineKey));
 
-        // 可选：添加后再次校验人数，若超量则回滚（降低超量影响）
-        int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxLogin();
+        // 添加后再次校验人数，若超量则回滚（降低超量影响）
+        int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
         if (maxLogin > 0) {
-            Long size = listOps().size(onlineKey);
+            Long size = this.redisTemplate.opsForList().size(onlineKey);
             if (size != null && size > maxLogin) {
                 // 回滚：删除刚添加的凭证（仅保留maxLogin个）
-                listOps().remove(onlineKey, 1, credentials);
+                this.redisTemplate.opsForList().remove(onlineKey, 1, credentials);
                 log.warn("账号{}并发登录超量，回滚新增凭证：{}", loginId, credentials);
                 throw new AuthException("Maximum concurrent logins ({" + maxLogin + "}) reached for the account; further logins are prohibited!");
             }
@@ -125,34 +120,14 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
      */
     private void removeFromOnlineList(Object loginId, String credentials) {
         String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId.toString();
-        // 删除列表中1个匹配的凭证（避免重复删除）
-        long removeCount = listOps().remove(onlineKey, 1, credentials);
+        long removeCount = this.redisTemplate.opsForList().remove(onlineKey, 1, credentials);
         if (removeCount > 0) {
             log.info("账号{}移除在线凭证：{}", loginId, credentials);
-            // 若列表为空，删除Key
-            Long size = listOps().size(onlineKey);
+            Long size = this.redisTemplate.opsForList().size(onlineKey);
             if (size != null && size == 0) {
-                redisTemplate.delete(onlineKey);
+                this.redisTemplate.delete(onlineKey);
                 log.info("账号{}所有会话已退出，删除在线列表Key", loginId);
             }
-        }
-    }
-
-
-    /**
-     * 刷新会话
-     *
-     * @param credentials 凭证
-     * @return true成功，false失败
-     */
-    @Override
-    public boolean refreshByCredentials(String credentials) {
-        Assert.hasText(credentials, "The credentials cannot be empty!");
-        try {
-            return this.redisTemplate.expire(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, GlobalConfigUtils.getGlobalConfig().getTimeout(), TimeUnit.SECONDS);
-        } catch (Exception e) {
-            log.error("RedisAuthProvider refreshByCredentials failed, Exception：", e);
-            return false;
         }
     }
 
@@ -214,6 +189,14 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         }
     }
 
+    /**
+     * 执行登录，并返回一个token
+     *
+     * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param extraInfo 额外信息
+     * @return token令牌
+     * @throws AuthException 认证异常
+     */
     @Override
     public String login(Object loginId, Map<String, Object> extraInfo) {
         if (loginId == null) {
@@ -223,7 +206,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             // 1. 校验在线人数是否超上限（无锁，依赖后续回滚兜底）
             boolean canLogin = checkMaxLoginLimit(loginId);
             if (!canLogin) {
-                int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxLogin();
+                int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
                 throw new AuthException("Maximum concurrent logins ({" + maxLogin + "}) reached for the account; further logins are prohibited!");
             }
             // 2. 调用父类登录逻辑（创建token、设置Cookie）
@@ -238,10 +221,12 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
     }
 
     /**
-     * 创建一个新的token
+     * 创建会话，并返回一个token
      *
-     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param extraInfo 额外信息
      * @return token令牌
+     * @throws AuthException 认证异常
      */
     @Override
     public String createAuth(Object loginId, Map<String, Object> extraInfo) {
@@ -328,7 +313,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId.toString();
-            List<String> credentialsList = listOps().range(onlineKey, 0, -1);
+            List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
             if (credentialsList == null || credentialsList.isEmpty()) {
                 log.info("删除账号会话失败：无在线凭证，loginId：{}", loginId);
                 return false;
