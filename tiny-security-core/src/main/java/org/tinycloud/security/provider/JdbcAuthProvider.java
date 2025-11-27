@@ -6,7 +6,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.exception.AuthException;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
+import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.JwtUtil;
@@ -82,7 +83,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, subject.getLoginExpireTime(), JsonUtil.writeValueAsString(subject), credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: ", e);
             return false;
         }
     }
@@ -102,7 +103,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             List<Map<String, Object>> resultList = this.jdbcTemplate.queryForList(sql, credentials, System.currentTimeMillis());
             return !resultList.isEmpty();
         } catch (Exception e) {
-            log.error("JdbcAuthProvider checkByCredentials failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider checkByCredentials failed, Exception: ", e);
             return false;
         }
     }
@@ -121,16 +122,19 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
                 return null;
             }
         } catch (Exception e) {
-            log.error("JdbcAuthProvider getSubject failed, Exception：{e}", e);
+            log.error("JdbcAuthProvider getSubject failed, Exception：", e);
             return null;
         }
     }
 
     /**
-     * 创建一个新的token
+     * 创建会话，并返回一个token
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param extraInfo 额外的扩展信息，更灵活
      * @return token令牌
+     * @throws ConcurrentLoginOverLimitException 并发登录超上限异常
+     * @throws TinySecurityException             其他异常
      */
     @Override
     public String createAuth(Object loginId, Map<String, Object> extraInfo) {
@@ -140,7 +144,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             // 1. 校验在线人数是否超上限
             boolean canLogin = this.checkMaxLoginLimit(loginId);
             if (!canLogin) {
-                throw new AuthException("Maximum concurrent logins ({" + GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins() + "}) " +
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins ({" + GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins() + "}) " +
                         "reached for the account; further logins are prohibited!");
             }
             // 2. 生成唯一会话凭证（credentials）
@@ -160,11 +164,11 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             String sql = "INSERT INTO " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) VALUES (?,?,?,?)";
             int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), subject.getLoginExpireTime());
             return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;
-        } catch (AuthException e) {
+        } catch (ConcurrentLoginOverLimitException e) {
             throw e;
         } catch (Exception e) {
             log.error("JdbcAuthProvider createAuth failed, Exception：", e);
-            throw new AuthException("Failed to create auth. Please retry!", e);
+            throw new TinySecurityException("Failed to create auth. Please retry!", e);
         }
     }
 
@@ -183,7 +187,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteByToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByToken failed, Exception: ", e);
             return false;
         }
     }
@@ -202,7 +206,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteByCredentials failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByCredentials failed, Exception: ", e);
             return false;
         }
     }
@@ -221,7 +225,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, loginId);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteByLoginId failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByLoginId failed, Exception: ", e);
             return false;
         }
     }
@@ -281,7 +285,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, System.currentTimeMillis());
             log.info("JdbcAuthProvider clean num: {}", num);
         } catch (Exception e) {
-            log.error("JdbcAuthProvider clean failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider clean failed, Exception: ", e);
         }
     }
 }
