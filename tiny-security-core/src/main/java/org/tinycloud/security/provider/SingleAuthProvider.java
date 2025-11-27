@@ -5,7 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.exception.AuthException;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
+import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.provider.timedcache.LocalMapContainerByConcurrentHashMap;
 import org.tinycloud.security.provider.timedcache.LocalTimeCache;
 import org.tinycloud.security.util.CredentialsGenUtil;
@@ -184,10 +185,13 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
     }
 
     /**
-     * 创建一个新的token
+     * 创建会话，并返回一个token
      *
-     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @return token
+     * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param extraInfo 额外的扩展信息，更灵活
+     * @return token令牌
+     * @throws ConcurrentLoginOverLimitException 并发登录超过上限异常
+     * @throws TinySecurityException             其他安全异常
      */
     @Override
     public String createAuth(Object loginId, Map<String, Object> extraInfo) {
@@ -197,7 +201,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             // 1. 校验在线人数是否超上限（核心新增逻辑）
             boolean canLogin = this.checkMaxLoginLimit(loginId);
             if (!canLogin) {
-                throw new AuthException("Maximum concurrent logins (" + GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins() + ") reached for the account; further logins are prohibited!");
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins() + ") reached for the account; further logins are prohibited!");
             }
 
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
@@ -217,11 +221,11 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             this.addToOnlineList(loginId, credentials);
 
             return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
-        } catch (AuthException e) {
+        } catch (ConcurrentLoginOverLimitException e) {
             throw e;
         } catch (Exception e) {
             log.error("SingleAuthProvider createAuth failed, Exception：", e);
-            throw new AuthException("Failed to create auth. Please retry!", e);
+            throw new TinySecurityException("Failed to create auth. Please retry!", e);
         }
     }
 

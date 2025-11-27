@@ -3,7 +3,7 @@ package org.tinycloud.security.exception;
 
 import org.tinycloud.security.consts.AuthConsts;
 
-public class AuthException extends RuntimeException {
+public class TinySecurityException extends RuntimeException {
     private static final long serialVersionUID = 2413958299445359500L;
 
     private int code;
@@ -16,17 +16,17 @@ public class AuthException extends RuntimeException {
         return code;
     }
 
-    public AuthException(int code, String message) {
+    public TinySecurityException(int code, String message) {
         super(message);
         this.code = code;
     }
 
-    public AuthException(String message) {
+    public TinySecurityException(String message) {
         super(message);
         this.code = AuthConsts.CODE_OTHER_ERROR;
     }
 
-    public AuthException(String message, Throwable cause) {
+    public TinySecurityException(String message, Throwable cause) {
         super(message, cause);
     }
 }
