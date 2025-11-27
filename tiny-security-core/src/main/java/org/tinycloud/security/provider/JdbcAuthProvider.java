@@ -12,12 +12,12 @@ import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.JwtUtil;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -67,7 +67,6 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         if (maxLogin <= 0) {
             return true; // 为0或者负数表示不限制
         }
-
         // 统计有效会话数（自动过滤过期会话，无需额外清理）
         int currentOnlineCount = countValidOnlineSessions(loginId);
         log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxLogin);
@@ -231,6 +230,19 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
      * 用于定时执行数据清理的线程池
      */
     private volatile ScheduledExecutorService executorService;
+    /**
+     * 基础初始延迟：10分钟（确保实例启动稳定后再执行第一次清理）
+     */
+    private static final long INITIAL_DELAY_BASE = 10 * 60 * 1000;
+    /**
+     * 最大随机延迟：6000秒 = 100分钟（大幅降低碰撞概率）
+     */
+    private static final int RANDOM_DELAY_MAX_SECONDS = 6000;
+    /**
+     * 定时任务执行周期：24小时（毫秒）
+     */
+    private static final long PERIOD = 24 * 60 * 60 * 1000;
+
 
     /**
      * 初始化清理任务，每天凌晨第一秒执行一次
@@ -241,12 +253,12 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             synchronized (JdbcAuthProvider.class) {
                 if (this.executorService == null) {
                     this.executorService = Executors.newScheduledThreadPool(1);
-                    // 获取当前时间
-                    LocalDateTime now = LocalDateTime.now();
-                    // 获取明天凌晨第一秒的时间，如2023-08-25 00:00:01:000
-                    LocalDateTime tomorrow = now.plusDays(1).withHour(0).withMinute(0).withSecond(1).withNano(0);
-                    // 计算初始延迟时间（单位-毫秒）
-                    long initialDelay = ChronoUnit.MILLIS.between(now, tomorrow);
+
+                    // 1. 基础延迟：启动后10分钟执行第一次清理（避免实例刚启动就占用数据库资源） 2. 随机延迟：0-6000秒（100分钟），彻底打散多实例的清理时间
+                    long randomDelaySeconds = ThreadLocalRandom.current().nextInt(RANDOM_DELAY_MAX_SECONDS);
+                    long randomDelayMillis = randomDelaySeconds * 1000; // 转为毫秒
+                    long initialDelay = INITIAL_DELAY_BASE + randomDelayMillis;
+
                     this.executorService.scheduleAtFixedRate(() -> {
                         log.info("JdbcAuthProvider clean execute at: {}", LocalDateTime.now());
                         try {
@@ -255,7 +267,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
                         } catch (Exception e2) {
                             log.error("JdbcAuthProvider cleanThread Exception: {e2}", e2);
                         }
-                    }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
+                    }, initialDelay/*首次延迟多长时间后执行*/, PERIOD/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
                 }
             }
         }
