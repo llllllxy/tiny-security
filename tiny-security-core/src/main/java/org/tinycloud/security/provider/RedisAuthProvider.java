@@ -11,7 +11,7 @@ import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.JwtUtil;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +47,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
         if (credentialsList == null || credentialsList.isEmpty()) {
             this.redisTemplate.delete(onlineKey);
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
         // 2. 标记需要删除的无效凭证
         List<String> invalidCredentials = credentialsList.stream()
@@ -65,7 +65,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         // 5. 兜底：若列表为空，则最终删除Key
         if (credentialsList == null || credentialsList.isEmpty()) {
             this.redisTemplate.delete(onlineKey);
-            return new ArrayList<>();
+            return Collections.emptyList();
         }
         return credentialsList;
     }
@@ -84,7 +84,6 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
         if (maxLogin <= 0) {
             return true; // 为0或者负数表示不限制
         }
-
         // 清理无效凭证后，获取有效在线数
         List<String> validCredentials = this.clearInvalidCredentials(loginId);
         int currentOnlineCount = validCredentials.size();
