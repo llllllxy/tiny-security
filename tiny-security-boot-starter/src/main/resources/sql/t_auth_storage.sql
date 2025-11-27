@@ -11,7 +11,9 @@ CREATE TABLE `t_auth_storage`  (
   `login_subject` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户信息',
   `credentials_expire_time` bigint(20) NOT NULL COMMENT 'credentials过期时间',
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `t_auth_storage_unique_credentials`(`credentials`) USING BTREE COMMENT 'credentials不可重复'
+  UNIQUE INDEX `t_auth_storage_unique_credentials`(`credentials`) USING BTREE COMMENT 'credentials不可重复',
+  INDEX `idx_t_auth_storage_login_id` (`login_id`) USING BTREE COMMENT '优化login_id查询/统计性能',
+  INDEX `idx_t_auth_storage_expire_time` (`credentials_expire_time`) USING BTREE COMMENT '优化过期记录清理性能'
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 SET FOREIGN_KEY_CHECKS = 1;
