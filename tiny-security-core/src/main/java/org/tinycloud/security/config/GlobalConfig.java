@@ -24,7 +24,7 @@ public class GlobalConfig implements Serializable {
     /**
      * 是否开启 LOGO 打印
      */
-    private boolean banner = true;
+    private boolean banner;
 
     private String version;
 
