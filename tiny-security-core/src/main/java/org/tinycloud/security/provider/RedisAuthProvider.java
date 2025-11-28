@@ -222,6 +222,7 @@ public class RedisAuthProvider extends AbstractAuthProvider implements AuthProvi
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
             // 4. 构建登录用户信息（LoginSubject），存储到Redis
             LoginSubject subject = new LoginSubject();
+            subject.setCredentials(credentials);
             subject.setExtraInfo(extraInfo);
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();

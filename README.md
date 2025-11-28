@@ -56,6 +56,8 @@ tiny-security:
    token-name: token
    # token有效期 (即会话时长)，单位秒 默认1800秒(30分钟)
    timeout: 1800
+   # 最大登录并发数，默认不限制
+   max-concurrent-logins: 2
    # credentials凭证类型，可配置uuid(默认风格)，snowflake(纯数字风格)，objectid(变种uuid)，random128 (随机128位字符串)，nanoid，ulid
    credentials-style: uuid
    # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
@@ -128,12 +130,12 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
 
     /**
      * 返回一个账号所拥有的权限码集合
-     * @param loginId，账号id，即你在调用 authProvider.login(id) 时写入的标识值。
+     * @param subject 登录主体，包含loginId、登录凭证等信息
      */
     @Override
-    public Set<String> getPermissionSet(Object loginId) {
+    public Set<String> getPermissionSet(LoginSubject subject) {
         if (logger.isInfoEnabled()) {
-            logger.info("PermissionInfoInterfaceImpl -- getPermissionSet -- loginId = {}", loginId);
+            logger.info("PermissionInfoInterfaceImpl -- getPermissionSet -- subject = {}", subject);
         }
         // 自定义权限编码列表获取逻辑，下面的只是示例
         Set<String> permissionSet = new HashSet<String>() {{
@@ -146,12 +148,12 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
 
     /**
      * 返回一个账号所拥有的角色标识集合 (权限与角色可分开校验)
-     * @param loginId，账号id，即你在调用 authProvider.login(id) 时写入的标识值。
+     * @param subject 登录主体，包含loginId、登录凭证等信息
      */
     @Override
-    public Set<String> getRoleSet(Object loginId) {
+    public Set<String> getRoleSet(LoginSubject subject) {
         if (logger.isInfoEnabled()) {
-            logger.info("PermissionInfoInterfaceImpl -- getRoleSet -- loginId = {}", loginId);
+            logger.info("PermissionInfoInterfaceImpl -- getRoleSet -- subject = {}", subject);
         }
         // 自定义角色编码列表获取逻辑，下面的只是示例
         Set<String> roleSet = new HashSet<String>() {{
@@ -172,7 +174,6 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
 ```java
 @Controller
 public class IndexController {
-    final static Logger logger = LoggerFactory.getLogger(IndexController.class);
     
     @Autowired
     private AuthProvider authProvider;
@@ -185,6 +186,10 @@ public class IndexController {
         // ......
         // 签发token
         String token = authProvider.login(username);
+        
+        // 或者 还可以传入额外的会话信息，例如：用户id、用户名、手机号、邮箱等等
+       // String token = authProvider.login(username, Map.of("userId", entity.getId()));
+       
         return Result.ok("登录成功！", token);
     }
 }
@@ -199,7 +204,6 @@ login方法参数说明：
 ```java
 @Controller
 public class IndexController {
-    final static Logger logger = LoggerFactory.getLogger(IndexController.class);
    
     @Autowired
     private AuthProvider authProvider;
@@ -227,7 +231,7 @@ private AuthProvider authProvider;
 // 获取当前登录会话id（这个方法在无会话时会抛出异常）
 Object loginId = authProvider.getLoginId();
 
-// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null）
+// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null），还可以直接getLoginIdAsString()， getLoginIdAsInt()， getLoginIdAsLong()
 Object loginId = AuthUtil.getLoginId();
 
 // 获取当前登录会话信息（这个方法在无会话时会抛出异常）
@@ -291,7 +295,7 @@ authProvider.deleteTokenByLoginId(loginId);
 
 ## 2.3、权限认证
 
-### 2.3.1、注解方式控制权限
+### 2.3.1、注解方式控制权限和角色
 
 **1.注解解释：**
 
@@ -349,7 +353,7 @@ public class IndexController {
 
 ---
 
-### 2.3.2、代码方式控制权限
+### 2.3.2、代码方式手动控制权限和角色
 **1.代码示例：**
 
 ```java
@@ -374,6 +378,9 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 
 ```
 
+### 2.3.3 直接通过URL控制权限（不支持角色校验）
+PermissionInfoInterfaceImpl实现类里返回的权限编码要和接口URL相匹配（需要带上context-path）
+
 ---
 
 ### 2.3.3、权限通配符的使用
@@ -387,10 +394,12 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 ## 2.4、异常处理
 tiny-security在会话验证失败和权限验证失败的会抛出自定义异常：
 
-| 自定义异常                  | 描述          | 错误信息                          |
-|:----------------------|:-------------|:----------------------------------|
-| UnAuthorizedException | 未登录或会话已失效 | 错误信息“未登录或会话已失效！”，错误码401 |
-| NoPermissionException | 无权限访问（角色或者资源不匹配）  | 错误信息“无权限访问！”，错误码403   |
+| 自定义异常                 | 描述          | 错误信息                     |
+|:----------------------|:-------------|:-------------------------|
+| TinySecurityException | 基础异常 | 错误信息“系统异常！”，错误码500  |
+| UnAuthorizedException | 未登录或会话已失效 | 错误信息“未登录或会话已失效！”，错误码401  |
+| NoPermissionException | 无权限访问（角色或者资源不匹配）  | 错误信息“无权限访问！”，错误码403      |
+| ConcurrentLoginOverLimitException | 并发登录超过限制 | 错误信息“并发登录超过最大限制！”，错误码409 |
 
 需要使用全局异常处理器来捕获异常并进行处理返回JSON数据（或者页面）：
 
@@ -399,27 +408,29 @@ tiny-security在会话验证失败和权限验证失败的会抛出自定义异�
 public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // 捕捉运行时异常
-    @ResponseBody
-    @ExceptionHandler(RuntimeException.class)
-    public Result<Object> handleRuntimeException(Exception e) {
-        logger.error("GlobalExceptionHandler -- RuntimeException = {e}", e);
-        return Result.create(HttpStatus.ERROR, e.getMessage());
-    }
-
-    // 缺少权限异常
-    @ResponseBody
-    @ExceptionHandler(value = NoPermissionException.class)
-    public Result<Object> handleAuthorizationException() {
-        return Result.create(HttpStatus.FORBIDDEN, "接口无权限，请联系系统管理员", null);
-    }
-    
-    // 未登陆异常
-    @ResponseBody
-    @ExceptionHandler(value = UnAuthorizedException.class)
-    public Result<Object> handleAuthenticationException() {
-        return Result.create(HttpStatus.UNAUTHORIZED, "会话已失效，请重新登录", null);
-    }
+   /**
+    * 统一处理 TinySecurityException 及其子类异常（UnAuthorizedException、NoPermissionException、ConcurrentLoginOverLimitException）
+    *
+    * @param e 父类 TinySecurityException（实际接收子类实例）
+    */
+   @ExceptionHandler(TinySecurityException.class)
+   public ApiResult<?> handleAuthException(TinySecurityException e) {
+      // 判断具体异常类型
+      if (e instanceof UnAuthorizedException) {
+         // 未会话异常：使用子类的错误码
+         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+      } else if (e instanceof NoPermissionException) {
+         // 无权限异常：使用子类的错误码
+         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+      } else if (e instanceof ConcurrentLoginOverLimitException) {
+         // 并发登录超过最大限制：使用子类的错误码
+         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+      } else {
+         // 兜底：处理 TinySecurityException 其他可能的子类（避免漏判）
+         log.warn("未明确处理的 TinySecurityException 子类：{}，错误码：{}", e.getClass().getName(), e.getCode());
+         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+      }
+   }
 }
 ```
 
@@ -455,11 +466,16 @@ $.ajax({
 - 注入bean，如下
 ```java
    @Component
+   @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "mongo")
    public class MongoAuthProvider extends AbstractAuthProvider {
         // ...
    }
 ```
-- 删除store-type的配置
+- 配置
+```yaml
+tiny-security:
+  store-type: mongo
+```
 
 
 ### 2.5.3、密码加密算法
@@ -522,4 +538,16 @@ $.ajax({
     // 使用私钥解密
     String decryptedValue = decryptByPrivateKey(privateKey, encryptedValue);
     System.out.println(decryptedValue);
+```
+
+4. 密码哈希算法
+   支持BCrypt算法
+```java
+    // 密码哈希
+    String hashedPassword = BCrypt.hashpw("123456", BCrypt.gensalt());
+    System.out.println(hashedPassword);
+
+    // 密码校验
+    boolean isPasswordMatch = BCrypt.checkpw("123456", hashedPassword);
+    System.out.println(isPasswordMatch);
 ```
