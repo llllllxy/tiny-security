@@ -210,6 +210,7 @@ public class SingleAuthProvider extends AbstractAuthProvider implements AuthProv
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
 
             LoginSubject subject = new LoginSubject();
+            subject.setCredentials(credentials);
             subject.setExtraInfo(extraInfo);
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();

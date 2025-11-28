@@ -155,6 +155,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
             // 4. 构建登录用户信息（LoginSubject），存储到Database
             LoginSubject subject = new LoginSubject();
+            subject.setCredentials(credentials);
             subject.setExtraInfo(extraInfo);
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
