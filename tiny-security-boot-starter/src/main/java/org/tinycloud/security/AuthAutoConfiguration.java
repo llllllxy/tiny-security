@@ -60,6 +60,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware, Applicati
         }
         GlobalConfig globalConfig = new GlobalConfig();
         globalConfig.setVersion(VersionUtil.getVersion());
+        globalConfig.setBanner(authProperties.getBanner());
         globalConfig.setStoreType(authProperties.getStoreType());
         globalConfig.setTableName(authProperties.getTableName());
         globalConfig.setTimeout(authProperties.getTimeout());
