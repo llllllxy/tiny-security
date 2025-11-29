@@ -28,16 +28,37 @@
 
 # 1、简介
 
-tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框架，支持登录认证、权限认证；同时支持token验证和cookie验证；
-支持redis、jdbc和单机session多种会话存储方式（可自行扩展其他存储方式）；前后端分离项目、不分离项目均可使用，功能完善、使用简单，文档清晰，让认证鉴权这件事变得更加简单！
+tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认证框架，致力于让认证鉴权变得简单高效。
+核心特性
+- 支持登录认证与权限认证双重保障
+- 兼容 token 验证与 cookie 验证两种模式
+- 提供多种会话存储方案：redis、jdbc 和单机 session（支持自定义会话存储）
+- 无缝适配前后端分离与不分离项目
+- 完善的文档，包括使用说明、API文档、最佳实践等
 
 ---
 
-# 2、使用
+# 2、快速入门
 
 ## 2.1、SpringBoot集成
 
-### 2.1.1、引入依赖
+### 2.1.1 环境准备
+- JDK 8 及以上版本
+- SpringBoot 2.x 或 3.x 项目
+
+### 2.1.2 引入依赖
+根据 SpringBoot 版本选择对应的 starter：
+
+**SpringBoot 2.x**
+```xml
+<dependency>
+    <groupId>top.lxyccc</groupId>
+    <artifactId>tiny-security-boot2-starter</artifactId>
+    <version>1.2.5</version>
+</dependency>
+```
+
+**SpringBoot 3.x**
 ```xml
 <dependency>
     <groupId>top.lxyccc</groupId>
@@ -46,7 +67,7 @@ tiny-security是一个基于SpringBoot开发的轻量级Java Web权限认证框�
 </dependency>
 ```
 
-### 2.1.2、yml参数配置项
+### 2.1.3 配置参数
 
 ```yaml
 tiny-security:
@@ -70,14 +91,25 @@ tiny-security:
    jwt-subject: tiny-security
 ```
 
-1. 使用jdbc做存储容器依赖于`jdbcTemplate`，须导入依赖 `spring-boot-starter-jdbc`，在yml里进行数据库连接的相应配置并导入框架提供的sql脚本到数据库中（目前仅提供了MySQL版本）
+### 2.1.4 会话存储配置
+- 当`store-type`配置为`jdbc`时，需要配置数据库连接信息，并导入框架提供的sql脚本到数据库中（目前仅提供了MySQL版本）
+- 当`store-type`配置为`redis`时，需要配置redis连接信息
+
+
+1. **使用jdbc做会话存储容器**
+
+>  依赖于`jdbcTemplate`，须导入依赖 `spring-boot-starter-jdbc`，在yml里进行数据库连接的相应配置并导入框架提供的sql脚本（目前仅提供了MySQL版本）
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-jdbc</artifactId>
 </dependency>
 ```
-2. 使用redis做存储容器依赖于`stringRedisTemplate`，须导入依赖 `spring-boot-starter-data-redis` ，并在yml里进行redis连接的相应配置
+
+
+2. **使用redis做会话存储容器**
+
+>  依赖于`stringRedisTemplate`，须导入依赖 `spring-boot-starter-data-redis` ，并在yml里进行redis连接的相应配置
 ```xml
 <dependency>
     <groupId>org.springframework.boot</groupId>
@@ -85,8 +117,9 @@ tiny-security:
 </dependency>
 ```
 
-### 2.1.3、配置会话拦截器
-以`SpringBoot2.+`版本为例, 新建配置类`WebMvcConfig.java`，注册会话拦截器，拦截器的拦截路由规则可自行配置
+
+### 2.1.5 注册会话拦截器
+以`SpringBoot2.+`版本为例, 创建`WebMvcConfig`配置类，注册`会话拦截器`，拦截路由规则可自行配置
 ```java
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
@@ -102,26 +135,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
 }
 ```
 
-### 2.1.4、配置权限角色拦截器（可选）
-以`SpringBoot2.+`版本为例, 在配置类`WebMvcConfig.java`内，注册权限角色拦截器，拦截器的拦截路由规则可自行配置
+如需基于权限角色的权限控制，可额外注册`权限角色拦截器`：
 ```java
-@Configuration
-public class WebMvcConfig implements WebMvcConfigurer {
-
-    // 按需要来，如果不需要角色权限控制，可以不配置此拦截器
-
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-
-        // 注册权限拦截器
-        registry.addInterceptor(new PermissionInterceptor())
-                .addPathPatterns("/**")
-                .excludePathPatterns("/login");
-    }
-}
+// 权限角色拦截器（可选）
+registry.addInterceptor(new PermissionInterceptor())
+        .addPathPatterns("/**")
+        .excludePathPatterns("/login");
 ```
 
-使用权限角色拦截器，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码列表获取的业务逻辑（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理），例如以下代码：
+使用权限角色拦截器，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码数据（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理）：
 ```java
 @Component
 public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
@@ -139,8 +161,8 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
         }
         // 自定义权限编码列表获取逻辑，下面的只是示例
         Set<String> permissionSet = new HashSet<String>() {{
-            add("权限1");
-            add("权限2");
+            add("user:read");
+            add("user:write");
         }};
 
         return permissionSet;
@@ -157,8 +179,8 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
         }
         // 自定义角色编码列表获取逻辑，下面的只是示例
         Set<String> roleSet = new HashSet<String>() {{
-            add("角色1");
-            add("角色2");
+            add("admin");
+            add("user");
         }};
         return roleSet;
     }
@@ -167,31 +189,39 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
 
 ---
 
-## 2.2 会话认证
+## 2.2、会话认证
 
-### 2.2.1、登录签发token，创建会话
+### 2.2.1 登录认证，创建会话
 
 ```java
-@Controller
-public class IndexController {
+@RestController
+public class LoginController  {
     
     @Autowired
     private AuthProvider authProvider;
-
-    @ResponseBody
+    
     @PostMapping("/login")
     public Result<Object> login(@RequestParam("username") String username,
                                 @RequestParam("password") String password) {
-        // 你的登录验证逻辑
-        // ......
-        // 签发token
+        // 1. 你的登录验证逻辑，例如：校验用户名密码是否正确
+        if (!verifyUser(username, password)) {
+            return Result.fail("用户名或密码错误！");
+        }
+        
+        // 2. 签发token（loginId建议使用用户ID或用户名，需保证全局唯一）
         String token = authProvider.login(username);
         
-        // 或者 还可以传入额外的会话信息，例如：用户id、用户名、手机号、邮箱等等
+        // 或额外携带其他会话信息，例如：用户id、用户名、手机号、邮箱等等
        // String token = authProvider.login(username, Map.of("userId", entity.getId()));
        
         return Result.ok("登录成功！", token);
     }
+
+   // 自定义用户校验
+   private boolean verifyUser(String username, String password) {
+      // 实际项目中对接数据库验证
+      return "admin".equals(username) && "123456".equals(password);
+   }
 }
 ```
 login方法参数说明：
@@ -199,7 +229,7 @@ login方法参数说明：
 
 ---
 
-### 2.2.2、退出登录，注销会话
+### 2.2.2 退出登录，注销会话
 
 ```java
 @Controller
@@ -215,67 +245,70 @@ public class IndexController {
         authProvider.logout(request);
         
         // 不传入request亦可，会自动获取当前的request
-        authProvider.logout();
+        // authProvider.logout();
 
         return Result.ok("退出登录成功！");
     }
 }
 ```
 
-### 2.2.3、获取当前登录会话
+### 2.2.3 获取当前登录会话
 ```java
-// 注入authProvider
 @Autowired
 private AuthProvider authProvider;
 
-// 获取当前登录会话id（这个方法在无会话时会抛出异常）
+// 获取登录ID，无会话时会抛出异常
 Object loginId = authProvider.getLoginId();
+String loginIdStr = authProvider.getLoginIdAsString();
+Long loginIdLong = authProvider.getLoginIdAsLong();
 
-// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null），还可以直接getLoginIdAsString()， getLoginIdAsInt()， getLoginIdAsLong()
+
+// 获取登录主体信息，无会话时会抛出异常
+LoginSubject LoginSubject = authProvider.getLoginSubject();
+```
+
+也可使用静态工具类 `AuthUtil`：
+```java
+// （这个方法在无会话时不会抛出异常，而是返回null），还可以直接getLoginIdAsString()， getLoginIdAsInt()， getLoginIdAsLong()
 Object loginId = AuthUtil.getLoginId();
 
-// 获取当前登录会话信息（这个方法在无会话时会抛出异常）
-LoginSubject LoginSubject = authProvider.getLoginSubject();
 
-// 或者直接调用静态方法（这个方法在无会话时不会抛出异常，而是返回null）
+// （这个方法在无会话时不会抛出异常，而是返回null）
 LoginSubject LoginSubject = AuthUtil.getLoginSubject();
 ```
 
 ---
 
-### 2.2.4、获取当前登录用户token
+### 2.2.4 获取当前登录用户token
 ```java
-// 注入authProvider
 @Autowired
 private AuthProvider authProvider;
 
 String token = authProvider.getToken();
 // 或者
-String token = authProvider.getToken(HttpServletRequest request);
+String token = authProvider.getToken(HttpServletRequest);
 ```
 ---
 
-### 2.2.5、获取当前登录用户凭证（对应redis或database里的唯一键）
+### 2.2.5 获取当前登录用户凭证（对应redis或database里的唯一键）
 ```java
-// 注入authProvider
 @Autowired
 private AuthProvider authProvider;
 
 String credentials = authProvider.getCredentials();
 // 或者
-String credentials = authProvider.getCredentials(HttpServletRequest request);
+String credentials = authProvider.getCredentials(HttpServletRequest);
 ```
 
 ---
 
-### 2.2.6、使用会话验证忽略注解 `@Ignore`
+### 2.2.6 使用会话验证忽略注解 `@Ignore`
 在Controller的方法或类上面添加`@Ignore`注解可排除框架会话拦截，即表示调用接口不用传递token了。
 
 ---
 
-### 2.2.7、会话主动注销
+### 2.2.7 会话主动注销
 ```java
-// 注入authProvider
 @Autowired
 private AuthProvider authProvider;
 
@@ -295,7 +328,7 @@ authProvider.deleteTokenByLoginId(loginId);
 
 ## 2.3、权限认证
 
-### 2.3.1、注解方式控制权限和角色
+### 2.3.1 注解方式控制权限和角色
 
 **1.注解解释：**
 
@@ -353,7 +386,7 @@ public class IndexController {
 
 ---
 
-### 2.3.2、代码方式手动控制权限和角色
+### 2.3.2 代码方式手动控制权限和角色
 **1.代码示例：**
 
 ```java
@@ -383,7 +416,7 @@ PermissionInfoInterfaceImpl实现类里返回的权限编码要和接口URL相�
 
 ---
 
-### 2.3.3、权限通配符的使用
+### 2.3.3 权限通配符的使用
 > 🚨支持使用通配符指定泛权限，例如当一个账号拥有system:user:*的权限时，system:user:add、system:user:delete、system:user:update都将匹配通过
 
 > ⚠️注意
@@ -438,7 +471,7 @@ public class GlobalExceptionHandler {
 
 ## 2.5、其他更多用法
 
-### 2.5.1、前端传递token
+### 2.5.1 前端传递token
 1. 放在参数里面用`token`传递：
 ```javascript
 $.get("/xxx", { "token": token }, function(data) {
@@ -459,7 +492,7 @@ $.ajax({
 
 ---
 
-### 2.5.2、自定义AuthProvider
+### 2.5.2 自定义AuthProvider
 框架内置了JdbcAuthProvider、RedisAuthProvider和SingleAuthProvider三种会话实现，
 如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘文件、MongoDB中，只需以下三步即可：
 - 继承org.tinycloud.security.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，
@@ -478,7 +511,7 @@ tiny-security:
 ```
 
 
-### 2.5.3、密码加密算法
+### 2.5.3 密码加密算法
 框架封装了一些常见的加密算法，可供使用
 1. 摘要算法：
    支持MD5、SHA256和国密SM3算法

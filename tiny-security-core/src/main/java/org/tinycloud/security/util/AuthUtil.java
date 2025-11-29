@@ -51,6 +51,7 @@ public class AuthUtil {
     /**
      * 获取用户token
      *
+     * @param tokenName token名称
      * @return token
      */
     public static String getToken(String tokenName) {
@@ -62,11 +63,14 @@ public class AuthUtil {
     /**
      * 获取用户token
      *
+     * @param request   HttpServletRequest
+     * @param tokenName token名称
      * @return token
      */
     public static String getToken(HttpServletRequest request, String tokenName) {
-        // 从请求中获取token，先从Header里取，取不到的话再从cookie里取（适配前后端分离的模式）
+        // 从请求中获取token，先从Header里取
         String token = request.getHeader(tokenName);
+        // 取不到的话再从cookie里取（适配前后端分离的模式）
         if (!StringUtils.hasText(token)) {
             token = CookieUtil.getCookie(request, tokenName);
         }
