@@ -5,6 +5,7 @@ import java.util.Map;
 
 /**
  * <p>
+ *     登录主体，包含登录账号id、登录凭证等信息
  * </p>
  *
  * @author liuxingyu01
@@ -14,7 +15,7 @@ public class LoginSubject implements Serializable {
     private static final long serialVersionUID = -1L;
 
     /**
-     * 租户ID
+     * 登录账号ID
      */
     private Object loginId;
 
@@ -32,6 +33,11 @@ public class LoginSubject implements Serializable {
      * 登录过期时间
      */
     private Long loginExpireTime;
+
+    /**
+     * 登录凭证
+     */
+    private String credentials;
 
     public Object getLoginId() {
         return loginId;
@@ -65,6 +71,14 @@ public class LoginSubject implements Serializable {
         this.loginExpireTime = loginExpireTime;
     }
 
+    public String getCredentials() {
+        return credentials;
+    }
+
+    public void setCredentials(String credentials) {
+        this.credentials = credentials;
+    }
+
     @Override
     public String toString() {
         return "LoginSubject{" +
@@ -72,6 +86,7 @@ public class LoginSubject implements Serializable {
                 "extraInfo=" + extraInfo +
                 ", loginTime=" + loginTime +
                 ", loginExpireTime=" + loginExpireTime +
+                ", credentials=" + credentials +
                 '}';
     }
 }

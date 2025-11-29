@@ -12,6 +12,8 @@ import org.tinycloud.security.enums.PermissionMode;
 @ConfigurationProperties(prefix = "tiny-security")
 public class AuthProperties {
 
+    private Boolean banner = true;
+
     private String storeType = "single";
 
     private String tokenName = "token";
@@ -27,6 +29,16 @@ public class AuthProperties {
     private String jwtSecret;
 
     private String jwtSubject;
+
+    private Integer maxConcurrentLogins = 0;
+
+    public Boolean getBanner() {
+        return banner;
+    }
+
+    public void setBanner(Boolean banner) {
+        this.banner = banner;
+    }
 
     public String getStoreType() {
         return storeType;
@@ -90,5 +102,13 @@ public class AuthProperties {
 
     public void setJwtSubject(String jwtSubject) {
         this.jwtSubject = jwtSubject;
+    }
+
+    public Integer getMaxConcurrentLogins() {
+        return maxConcurrentLogins;
+    }
+
+    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
+        this.maxConcurrentLogins = maxConcurrentLogins;
     }
 }

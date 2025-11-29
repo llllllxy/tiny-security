@@ -1,6 +1,5 @@
 package org.tinycloud.security.provider;
 
-
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
@@ -35,7 +34,7 @@ public interface AuthProvider {
             throw new UnAuthorizedException();
         }
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
+            jwtToken = jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         } else {
             throw new UnAuthorizedException();
         }
@@ -54,7 +53,7 @@ public interface AuthProvider {
             throw new UnAuthorizedException();
         }
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
+            jwtToken = jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         } else {
             throw new UnAuthorizedException();
         }
@@ -69,6 +68,12 @@ public interface AuthProvider {
      * @throws UnAuthorizedException 校验jwtToken失败时抛出UnAuthorizedException异常
      */
     default String getCredentialsByToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            throw new UnAuthorizedException();
+        }
+        if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
+            token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        }
         // 校验token是不是伪造的
         Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
         if (Objects.isNull(claims)) {
@@ -100,14 +105,6 @@ public interface AuthProvider {
         String jwtToken = this.getToken(request);
         return getCredentialsByToken(jwtToken);
     }
-
-    /**
-     * 刷新credentials（不抛出异常）
-     *
-     * @param credentials 会话凭证
-     * @return 是否刷新成功，true刷新成功，false刷新失败
-     */
-    boolean refreshByCredentials(String credentials);
 
     /**
      * 刷新credentials，并且重置用户信息（不抛出异常）
@@ -170,7 +167,7 @@ public interface AuthProvider {
     /*============================操作token结束=============================*/
 
 
-    /*============================操作会话开始，此部分在AbstractAuthProvider里予以实现=============================*/
+    /*============================操作会话开始=============================*/
 
     /**
      * 执行登录操作

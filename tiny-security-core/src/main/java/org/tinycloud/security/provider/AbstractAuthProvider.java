@@ -38,7 +38,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public void logout(HttpServletRequest request) {
-        this.deleteByCredentials(this.getCredentials(request));
+        boolean result = this.deleteByCredentials(this.getCredentials(request));
     }
 
     /**
@@ -46,7 +46,7 @@ public abstract class AbstractAuthProvider implements AuthProvider {
      */
     @Override
     public void logout() {
-        this.deleteByCredentials(this.getCredentials());
+        boolean result = this.deleteByCredentials(this.getCredentials());
     }
 
     /**

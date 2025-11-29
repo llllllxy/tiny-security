@@ -60,6 +60,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware, Applicati
         }
         GlobalConfig globalConfig = new GlobalConfig();
         globalConfig.setVersion(VersionUtil.getVersion());
+        globalConfig.setBanner(authProperties.getBanner());
         globalConfig.setStoreType(authProperties.getStoreType());
         globalConfig.setTableName(authProperties.getTableName());
         globalConfig.setTimeout(authProperties.getTimeout());
@@ -68,6 +69,7 @@ public class AuthAutoConfiguration implements ApplicationContextAware, Applicati
         globalConfig.setPermCheckMode(authProperties.getPermCheckMode());
         globalConfig.setJwtSecret(authProperties.getJwtSecret());
         globalConfig.setJwtSubject(authProperties.getJwtSubject());
+        globalConfig.setMaxConcurrentLogins(authProperties.getMaxConcurrentLogins());
         /* 获取自定义的（ID生成器） */
         this.getBeanThen(AuthProvider.class, globalConfig::setAuthProvider);
         /* 获取自定义的（PermissionInfoInterface */

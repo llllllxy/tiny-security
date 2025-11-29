@@ -1,23 +1,24 @@
 package org.tinycloud.security.provider;
 
-import org.springframework.util.Assert;
-import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.util.JsonUtil;
-import org.tinycloud.security.util.JwtUtil;
-import org.tinycloud.security.util.CredentialsGenUtil;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.util.Assert;
+import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
+import org.tinycloud.security.exception.TinySecurityException;
+import org.tinycloud.security.util.CredentialsGenUtil;
+import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.util.JwtUtil;
 
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -37,24 +38,42 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
         this.initCleanThread();
     }
 
+
     /**
-     * 刷新credentials有效时间
+     * 统计当前账号的有效在线会话数（未过期）
      *
-     * @param credentials 凭证
-     * @return true成功，false失败
+     * @param loginId 账号ID
+     * @return 有效会话数
      */
-    @Override
-    public boolean refreshByCredentials(String credentials) {
-        Assert.hasText(credentials, "The credentials cannot be empty!");
+    private int countValidOnlineSessions(Object loginId) {
+        // SQL：统计 login_id 匹配且未过期的记录数
+        String sql = "SELECT COUNT(1) FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE login_id = ? AND credentials_expire_time > ?";
         try {
-            String sql = "UPDATE " + GlobalConfigUtils.getGlobalConfig().getTableName() + " SET credentials_expire_time = ? WHERE credentials = ?";
-            int num = jdbcTemplate.update(sql, System.currentTimeMillis() + GlobalConfigUtils.getGlobalConfig().getTimeout() * 1000, credentials);
-            return num > 0;
+            Long count = jdbcTemplate.queryForObject(sql, Long.class, loginId, System.currentTimeMillis());
+            return count == null ? 0 : count.intValue();
         } catch (Exception e) {
-            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
-            return false;
+            log.error("统计账号{}有效在线会话数失败", loginId, e);
+            return 0; // 异常时默认返回0（避免影响登录，实际业务可调整为抛出异常）
         }
     }
+
+    /**
+     * 校验当前在线人数是否超上限
+     *
+     * @param loginId 账号ID
+     * @return true：未超上限；false：已超上限
+     */
+    private boolean checkMaxLoginLimit(Object loginId) {
+        int maxLogin = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
+        if (maxLogin <= 0) {
+            return true; // 为0或者负数表示不限制
+        }
+        // 统计有效会话数（自动过滤过期会话，无需额外清理）
+        int currentOnlineCount = countValidOnlineSessions(loginId);
+        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxLogin);
+        return currentOnlineCount < maxLogin;
+    }
+
 
     @Override
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
@@ -64,7 +83,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, subject.getLoginExpireTime(), JsonUtil.writeValueAsString(subject), credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider refreshByCredentials failed, Exception: ", e);
             return false;
         }
     }
@@ -79,16 +98,12 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "SELECT credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
-            if (!resultList.isEmpty()) {
-                long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
-                return tokenExpireTime > System.currentTimeMillis();
-            } else {
-                return false;
-            }
+            String sql = "SELECT credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName()
+                    + " WHERE credentials = ? AND credentials_expire_time > ?";
+            List<Map<String, Object>> resultList = this.jdbcTemplate.queryForList(sql, credentials, System.currentTimeMillis());
+            return !resultList.isEmpty();
         } catch (Exception e) {
-            log.error("JdbcAuthProvider checkByCredentials failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider checkByCredentials failed, Exception: ", e);
             return false;
         }
     }
@@ -97,38 +112,50 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            String sql = "SELECT login_subject, credentials_expire_time FROM " + GlobalConfigUtils.getGlobalConfig().getTableName() + " WHERE credentials = ?";
-            List<Map<String, Object>> resultList = jdbcTemplate.queryForList(sql, credentials);
+            String sql = "SELECT login_subject FROM " + GlobalConfigUtils.getGlobalConfig().getTableName()
+                    + " WHERE credentials = ? AND credentials_expire_time > ?";
+            List<Map<String, Object>> resultList = this.jdbcTemplate.queryForList(sql, credentials, System.currentTimeMillis());
             if (!resultList.isEmpty()) {
                 String content = resultList.get(0).get("login_subject").toString();
-                long tokenExpireTime = Long.parseLong(resultList.get(0).get("credentials_expire_time").toString());
-                return tokenExpireTime < System.currentTimeMillis() ? null : JsonUtil.readValue(content, LoginSubject.class);
+                return JsonUtil.readValue(content, LoginSubject.class);
             } else {
                 return null;
             }
         } catch (Exception e) {
-            log.error("RedisAuthProvider getSubject failed, Exception：{e}", e);
+            log.error("JdbcAuthProvider getSubject failed, Exception：", e);
             return null;
         }
     }
 
     /**
-     * 创建一个新的token
+     * 创建会话，并返回一个token
      *
      * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
+     * @param extraInfo 额外的扩展信息，更灵活
      * @return token令牌
+     * @throws ConcurrentLoginOverLimitException 并发登录超上限异常
+     * @throws TinySecurityException             其他异常
      */
     @Override
     public String createAuth(Object loginId, Map<String, Object> extraInfo) {
         Assert.notNull(loginId, "The loginId cannot be null!");
         Assert.isTrue(loginId instanceof Number || loginId instanceof String, "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
         try {
+            // 1. 校验在线人数是否超上限
+            boolean canLogin = this.checkMaxLoginLimit(loginId);
+            if (!canLogin) {
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins ({" + GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins() + "}) " +
+                        "reached for the account; further logins are prohibited!");
+            }
+            // 2. 生成唯一会话凭证（credentials）
             String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
             Map<String, String> payload = new HashMap<>();
             payload.put("credentials", credentials);
+            // 3. 生成JWT Token（包含credentials）
             String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
-
+            // 4. 构建登录用户信息（LoginSubject），存储到Database
             LoginSubject subject = new LoginSubject();
+            subject.setCredentials(credentials);
             subject.setExtraInfo(extraInfo);
             subject.setLoginId(loginId);
             long currentTime = System.currentTimeMillis();
@@ -138,9 +165,11 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             String sql = "INSERT INTO " + GlobalConfigUtils.getGlobalConfig().getTableName() + " (credentials,login_id,login_subject,credentials_expire_time) VALUES (?,?,?,?)";
             int num = jdbcTemplate.update(sql, credentials, String.valueOf(loginId), JsonUtil.writeValueAsString(subject), subject.getLoginExpireTime());
             return num > 0 ? AuthConsts.JWT_TOKEN_PREFIX + jwtToken : null;
+        } catch (ConcurrentLoginOverLimitException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider createAuth failed, Exception: {e}", e);
-            return null;
+            log.error("JdbcAuthProvider createAuth failed, Exception：", e);
+            throw new TinySecurityException("Failed to create auth. Please retry!", e);
         }
     }
 
@@ -159,7 +188,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteByToken failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByToken failed, Exception: ", e);
             return false;
         }
     }
@@ -178,7 +207,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, credentials);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteByCredentials failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByCredentials failed, Exception: ", e);
             return false;
         }
     }
@@ -197,7 +226,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, loginId);
             return num > 0;
         } catch (Exception e) {
-            log.error("JdbcAuthProvider deleteByLoginId failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider deleteByLoginId failed, Exception: ", e);
             return false;
         }
     }
@@ -206,6 +235,19 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
      * 用于定时执行数据清理的线程池
      */
     private volatile ScheduledExecutorService executorService;
+    /**
+     * 基础初始延迟：10分钟（确保实例启动稳定后再执行第一次清理）
+     */
+    private static final long INITIAL_DELAY_BASE = 10 * 60 * 1000;
+    /**
+     * 最大随机延迟：6000秒 = 100分钟（大幅降低碰撞概率）
+     */
+    private static final int RANDOM_DELAY_MAX_SECONDS = 6000;
+    /**
+     * 定时任务执行周期：24小时（毫秒）
+     */
+    private static final long PERIOD = 24 * 60 * 60 * 1000;
+
 
     /**
      * 初始化清理任务，每天凌晨第一秒执行一次
@@ -216,12 +258,12 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             synchronized (JdbcAuthProvider.class) {
                 if (this.executorService == null) {
                     this.executorService = Executors.newScheduledThreadPool(1);
-                    // 获取当前时间
-                    LocalDateTime now = LocalDateTime.now();
-                    // 获取明天凌晨第一秒的时间，如2023-08-25 00:00:01:000
-                    LocalDateTime tomorrow = now.plusDays(1).withHour(0).withMinute(0).withSecond(1).withNano(0);
-                    // 计算初始延迟时间（单位-毫秒）
-                    long initialDelay = ChronoUnit.MILLIS.between(now, tomorrow);
+
+                    // 1. 基础延迟：启动后10分钟执行第一次清理（避免实例刚启动就占用数据库资源） 2. 随机延迟：0-6000秒（100分钟），彻底打散多实例的清理时间
+                    long randomDelaySeconds = ThreadLocalRandom.current().nextInt(RANDOM_DELAY_MAX_SECONDS);
+                    long randomDelayMillis = randomDelaySeconds * 1000; // 转为毫秒
+                    long initialDelay = INITIAL_DELAY_BASE + randomDelayMillis;
+
                     this.executorService.scheduleAtFixedRate(() -> {
                         log.info("JdbcAuthProvider clean execute at: {}", LocalDateTime.now());
                         try {
@@ -230,7 +272,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
                         } catch (Exception e2) {
                             log.error("JdbcAuthProvider cleanThread Exception: {e2}", e2);
                         }
-                    }, initialDelay/*首次延迟多长时间后执行*/, 24 * 60 * 60 * 1000/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
+                    }, initialDelay/*首次延迟多长时间后执行*/, PERIOD/*定时任务间隔时间，这里设置的是24小时*/, TimeUnit.MILLISECONDS);
                 }
             }
         }
@@ -244,7 +286,7 @@ public class JdbcAuthProvider extends AbstractAuthProvider implements AuthProvid
             int num = jdbcTemplate.update(sql, System.currentTimeMillis());
             log.info("JdbcAuthProvider clean num: {}", num);
         } catch (Exception e) {
-            log.error("JdbcAuthProvider clean failed, Exception: {e}", e);
+            log.error("JdbcAuthProvider clean failed, Exception: ", e);
         }
     }
 }

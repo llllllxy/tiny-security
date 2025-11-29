@@ -24,7 +24,7 @@ public class GlobalConfig implements Serializable {
     /**
      * 是否开启 LOGO 打印
      */
-    private boolean banner = true;
+    private boolean banner;
 
     private String version;
 
@@ -45,6 +45,8 @@ public class GlobalConfig implements Serializable {
     private String jwtSecret;
 
     private String jwtSubject;
+
+    private Integer maxConcurrentLogins;
 
     public AuthProvider getAuthProvider() {
         return authProvider;
@@ -148,5 +150,13 @@ public class GlobalConfig implements Serializable {
 
     public void setJwtSubject(String jwtSubject) {
         this.jwtSubject = jwtSubject;
+    }
+
+    public Integer getMaxConcurrentLogins() {
+        return maxConcurrentLogins;
+    }
+
+    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
+        this.maxConcurrentLogins = maxConcurrentLogins;
     }
 }
