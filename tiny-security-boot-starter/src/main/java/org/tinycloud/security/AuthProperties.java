@@ -32,6 +32,17 @@ public class AuthProperties {
 
     private Integer maxConcurrentLogins = 0;
 
+    /**
+     * 拦截路径，多个路径用逗号分隔
+     */
+    private String[] addPath = new String[]{"/**"};
+
+    /**
+     * 排除拦截路径，多个路径用逗号分隔
+     */
+    private String[] excludePath = new String[]{};
+
+
     public Boolean getBanner() {
         return banner;
     }
@@ -110,5 +121,21 @@ public class AuthProperties {
 
     public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
         this.maxConcurrentLogins = maxConcurrentLogins;
+    }
+
+    public String[] getAddPath() {
+        return addPath;
+    }
+
+    public void setAddPath(String[] addPath) {
+        this.addPath = addPath;
+    }
+
+    public String[] getExcludePath() {
+        return excludePath;
+    }
+
+    public void setExcludePath(String[] excludePath) {
+        this.excludePath = excludePath;
     }
 }

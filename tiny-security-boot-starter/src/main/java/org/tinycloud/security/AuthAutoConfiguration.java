@@ -16,9 +16,12 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.interceptor.AuthInterceptor;
+import org.tinycloud.security.interceptor.PermissionInterceptor;
 import org.tinycloud.security.interfaces.PermissionInfoInterface;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.provider.JdbcAuthProvider;
@@ -40,16 +43,34 @@ import java.util.function.Consumer;
 @ConditionalOnClass({HandlerInterceptor.class, WebMvcConfigurer.class})
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-public class AuthAutoConfiguration implements ApplicationContextAware, ApplicationListener<ContextRefreshedEvent> {
+public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationContextAware, ApplicationListener<ContextRefreshedEvent> {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
     @Autowired
     private AuthProperties authProperties;
+
     private ApplicationContext applicationContext;
 
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
+    }
+
+    /**
+     * 添加拦截器
+     */
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // 注册会话拦截器
+        registry.addInterceptor(new AuthInterceptor())
+                .addPathPatterns(authProperties.getAddPath())
+                .excludePathPatterns(authProperties.getExcludePath())
+                .order(-2);
+        // 注册权限拦截器
+        registry.addInterceptor(new PermissionInterceptor())
+                .addPathPatterns(authProperties.getAddPath())
+                .excludePathPatterns(authProperties.getExcludePath())
+                .order(-1);
     }
 
     @Override
