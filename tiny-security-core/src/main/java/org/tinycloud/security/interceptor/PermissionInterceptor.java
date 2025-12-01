@@ -17,6 +17,7 @@ import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 
@@ -54,8 +55,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
             return true;
         }
         PermissionInfoInterface permissionInfoInterface = GlobalConfigUtils.getGlobalConfig().getPermissionInfoInterface();
-        Set<String> roleSet = permissionInfoInterface.getRoleSet(subject);
-        Set<String> permissionSet = permissionInfoInterface.getPermissionSet(subject);
+        Set<String> roleSet = permissionInfoInterface != null ? permissionInfoInterface.getRoleSet(subject) : Collections.emptySet();
+        Set<String> permissionSet = permissionInfoInterface != null ? permissionInfoInterface.getPermissionSet(subject) : Collections.emptySet();
         RoleHolder.setRoleSet(roleSet);
         PermissionHolder.setPermissionSet(permissionSet);
 
