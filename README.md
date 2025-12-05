@@ -54,7 +54,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot2-starter</artifactId>
-    <version>1.2.5</version>
+    <version>1.2.6</version>
 </dependency>
 ```
 
@@ -63,7 +63,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.2.5</version>
+    <version>1.2.6</version>
 </dependency>
 ```
 
@@ -89,6 +89,14 @@ tiny-security:
    jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
    # jwt主题，不配置则使用默认值
    jwt-subject: tiny-security
+   # 要拦截的路径，默认拦截所有路径
+   add-path: /**
+   # 要排除的路径，默认不排除任何路径
+   exclude-path:
+      - /auth/login
+      - /auth/getCode
+      - /auth/register
+      - /auth/sendEmail
 ```
 
 ### 2.1.4 会话存储配置
@@ -118,31 +126,7 @@ tiny-security:
 ```
 
 
-### 2.1.5 注册会话拦截器
-以`SpringBoot2.+`版本为例, 创建`WebMvcConfig`配置类，注册`会话拦截器`，拦截路由规则可自行配置
-```java
-@Configuration
-public class WebMvcConfig implements WebMvcConfigurer {
-
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        
-        // 注册会话拦截器
-        registry.addInterceptor(new AuthInterceptor())
-                .addPathPatterns("/**")
-                .excludePathPatterns("/login");
-    }
-}
-```
-
-如需基于权限角色的权限控制，可额外注册`权限角色拦截器`：
-```java
-// 权限角色拦截器（可选）
-registry.addInterceptor(new PermissionInterceptor())
-        .addPathPatterns("/**")
-        .excludePathPatterns("/login");
-```
-
+### 2.1.5 实现PermissionInfoInterface接口
 使用权限角色拦截器，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码数据（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理）：
 ```java
 @Component
