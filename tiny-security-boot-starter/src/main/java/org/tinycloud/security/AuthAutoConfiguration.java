@@ -66,11 +66,13 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
                 .addPathPatterns(authProperties.getAddPath())
                 .excludePathPatterns(authProperties.getExcludePath())
                 .order(-2);
-        // 注册权限拦截器
-        registry.addInterceptor(new PermissionInterceptor())
-                .addPathPatterns(authProperties.getAddPath())
-                .excludePathPatterns(authProperties.getExcludePath())
-                .order(-1);
+        // 注册权限拦截器（选择性）
+        if (authProperties.getPermCheckEnabled()) {
+            registry.addInterceptor(new PermissionInterceptor())
+                    .addPathPatterns(authProperties.getAddPath())
+                    .excludePathPatterns(authProperties.getExcludePath())
+                    .order(-1);
+        }
     }
 
     @Override

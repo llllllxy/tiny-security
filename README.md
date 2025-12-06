@@ -83,6 +83,8 @@ tiny-security:
    credentials-style: uuid
    # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
    table-name: t_auth_storage
+   # 是否开启权限(角色)校验，默认false不开启，开启后需要实现PermissionInfoInterface接口
+   perm-check-enabled: true
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
    # jwt密钥，不配置则使用默认值
@@ -127,7 +129,8 @@ tiny-security:
 
 
 ### 2.1.5 实现PermissionInfoInterface接口
-使用权限角色拦截器，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码数据（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理）：
+>  如需开启权限(角色)校验，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码数据（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理）
+
 ```java
 @Component
 public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
