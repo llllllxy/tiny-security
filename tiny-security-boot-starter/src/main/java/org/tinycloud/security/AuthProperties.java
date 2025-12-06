@@ -25,7 +25,7 @@ public class AuthProperties {
 
     private String tableName = "t_auth_storage";
 
-    private Boolean permCheckEnabled = false;
+    private Boolean authorizationEnabled = false;
 
     private PermissionMode permCheckMode;
 
@@ -94,12 +94,12 @@ public class AuthProperties {
         this.tableName = tableName;
     }
 
-    public Boolean getPermCheckEnabled() {
-        return permCheckEnabled;
+    public Boolean getAuthorizationEnabled() {
+        return authorizationEnabled;
     }
 
-    public void setPermCheckEnabled(Boolean permCheckEnabled) {
-        this.permCheckEnabled = permCheckEnabled;
+    public void setAuthorizationEnabled(Boolean authorizationEnabled) {
+        this.authorizationEnabled = authorizationEnabled;
     }
 
     public PermissionMode getPermCheckMode() {

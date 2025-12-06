@@ -83,8 +83,8 @@ tiny-security:
    credentials-style: uuid
    # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
    table-name: t_auth_storage
-   # 是否开启权限(角色)校验，默认false不开启，开启后需要实现PermissionInfoInterface接口
-   perm-check-enabled: true
+   # 是否开启权限(角色)校验，默认false不开启，开启后需要实现AuthorizationInfoGet接口
+   authorization-enabled: true
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
    # jwt密钥，不配置则使用默认值
@@ -128,12 +128,12 @@ tiny-security:
 ```
 
 
-### 2.1.5 实现PermissionInfoInterface接口
->  如需开启权限(角色)校验，还需要实现`PermissionInfoInterface`接口，提供权限和角色编码数据（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理）
+### 2.1.5 实现AuthorizationInfoGet接口
+>  如需开启权限(角色)校验，还需要实现`AuthorizationInfoGet`接口，提供权限和角色编码数据（框架没有对权限和角色标记码进行缓存，如需缓存请自行处理）
 
 ```java
 @Component
-public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
+public class AuthorizationInfoGetImpl implements AuthorizationInfoGet {
     private final static Logger logger = LoggerFactory.getLogger(PermissionInfoInterfaceImpl.class);
 
 
@@ -144,7 +144,7 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
     @Override
     public Set<String> getPermissionSet(LoginSubject subject) {
         if (logger.isInfoEnabled()) {
-            logger.info("PermissionInfoInterfaceImpl -- getPermissionSet -- subject = {}", subject);
+            logger.info("AuthorizationInfoGet -- getPermissionSet -- subject = {}", subject);
         }
         // 自定义权限编码列表获取逻辑，下面的只是示例
         Set<String> permissionSet = new HashSet<String>() {{
@@ -162,7 +162,7 @@ public class PermissionInfoInterfaceImpl implements PermissionInfoInterface {
     @Override
     public Set<String> getRoleSet(LoginSubject subject) {
         if (logger.isInfoEnabled()) {
-            logger.info("PermissionInfoInterfaceImpl -- getRoleSet -- subject = {}", subject);
+            logger.info("AuthorizationInfoGet -- getRoleSet -- subject = {}", subject);
         }
         // 自定义角色编码列表获取逻辑，下面的只是示例
         Set<String> roleSet = new HashSet<String>() {{

@@ -10,9 +10,8 @@ import org.tinycloud.security.annotation.Ignore;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.enums.Logical;
-import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
-import org.tinycloud.security.interceptor.holder.PermissionHolder;
-import org.tinycloud.security.interceptor.holder.RoleHolder;
+import org.tinycloud.security.interceptor.holder.AuthenticationHolder;
+import org.tinycloud.security.interceptor.holder.AuthorizationHolder;
 import org.tinycloud.security.provider.LoginSubject;
 
 import java.lang.reflect.Method;
@@ -138,7 +137,7 @@ public class AuthUtil {
      */
     public static boolean checkUrlPermission(HttpServletRequest request) {
         String path = request.getRequestURI();
-        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        Set<String> permissionSet = AuthorizationHolder.getPermissionSet();
         // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
@@ -257,7 +256,7 @@ public class AuthUtil {
      * @return Object
      */
     public static LoginSubject getLoginSubject() {
-        return AuthenticeHolder.getLoginSubject();
+        return AuthenticationHolder.getLoginSubject();
     }
 
 
@@ -267,7 +266,7 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean hasRole(String role) {
-        Set<String> roleSet = RoleHolder.getRoleSet();
+        Set<String> roleSet = AuthorizationHolder.getRoleSet();
         // 当roleSet为空时，说明无任何权限，直接返回false
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
@@ -282,7 +281,7 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean hasAllRole(String... roles) {
-        Set<String> roleSet = RoleHolder.getRoleSet();
+        Set<String> roleSet = AuthorizationHolder.getRoleSet();
         // 当roleSet为空时，说明无任何权限，直接返回false
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
@@ -303,7 +302,7 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean hasAnyRole(String... roles) {
-        Set<String> roleSet = RoleHolder.getRoleSet();
+        Set<String> roleSet = AuthorizationHolder.getRoleSet();
         // 当roleSet为空时，说明无任何权限，直接返回false
         if (roleSet == null || roleSet.isEmpty()) {
             return false;
@@ -324,7 +323,7 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean hasPermission(String permission) {
-        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        Set<String> permissionSet = AuthorizationHolder.getPermissionSet();
         // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
@@ -339,7 +338,7 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean hasAllPermission(String... permissions) {
-        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        Set<String> permissionSet = AuthorizationHolder.getPermissionSet();
         // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
@@ -360,7 +359,7 @@ public class AuthUtil {
      * @return true or false
      */
     public static boolean hasAnyPermission(String... permissions) {
-        Set<String> permissionSet = PermissionHolder.getPermissionSet();
+        Set<String> permissionSet = AuthorizationHolder.getPermissionSet();
         // 当permissionSet为空时，说明无任何权限，直接返回false
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
