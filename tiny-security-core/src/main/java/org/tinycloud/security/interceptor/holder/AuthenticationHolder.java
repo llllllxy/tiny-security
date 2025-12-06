@@ -10,7 +10,7 @@ import java.util.Objects;
  * @author liuxingyu01
  * @version 2022-06-14 13:58
  **/
-public class AuthenticeHolder {
+public class AuthenticationHolder {
     private final static ThreadLocal<LoginSubject> authentice = new ThreadLocal<>();
 
     public static LoginSubject getLoginSubject() {

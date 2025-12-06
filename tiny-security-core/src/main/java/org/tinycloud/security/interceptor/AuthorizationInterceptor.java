@@ -9,10 +9,9 @@ import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.exception.NoPermissionException;
-import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
-import org.tinycloud.security.interceptor.holder.PermissionHolder;
-import org.tinycloud.security.interceptor.holder.RoleHolder;
-import org.tinycloud.security.interfaces.PermissionInfoInterface;
+import org.tinycloud.security.interceptor.holder.AuthenticationHolder;
+import org.tinycloud.security.interceptor.holder.AuthorizationHolder;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 
@@ -27,7 +26,7 @@ import java.util.Set;
  * @author liuxingyu01
  * @version 2024-03-22-11:23
  **/
-public class PermissionInterceptor implements HandlerInterceptor {
+public class AuthorizationInterceptor implements HandlerInterceptor {
 
     /*
      * 进入controller层之前拦截请求
@@ -45,7 +44,7 @@ public class PermissionInterceptor implements HandlerInterceptor {
             response.setStatus(HttpServletResponse.SC_OK);
             return true;
         }
-        LoginSubject subject = AuthenticeHolder.getLoginSubject();
+        LoginSubject subject = AuthenticationHolder.getLoginSubject();
         if (Objects.isNull(subject)) {
             throw new NoPermissionException();
         }
@@ -54,11 +53,11 @@ public class PermissionInterceptor implements HandlerInterceptor {
         if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasPermissionAnnotation(method)) {
             return true;
         }
-        PermissionInfoInterface permissionInfoInterface = GlobalConfigUtils.getGlobalConfig().getPermissionInfoInterface();
-        Set<String> roleSet = permissionInfoInterface != null ? permissionInfoInterface.getRoleSet(subject) : Collections.emptySet();
-        Set<String> permissionSet = permissionInfoInterface != null ? permissionInfoInterface.getPermissionSet(subject) : Collections.emptySet();
-        RoleHolder.setRoleSet(roleSet);
-        PermissionHolder.setPermissionSet(permissionSet);
+        AuthorizationInfoGet AuthorizationInfoGet = GlobalConfigUtils.getGlobalConfig().getAuthorizationInfoGet();
+        Set<String> roleSet = AuthorizationInfoGet != null ? AuthorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
+        Set<String> permissionSet = AuthorizationInfoGet != null ? AuthorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
+        AuthorizationHolder.setRoleSet(roleSet);
+        AuthorizationHolder.setPermissionSet(permissionSet);
 
         boolean hasPermission = GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.URL
                 ? AuthUtil.checkUrlPermission(request)
@@ -87,8 +86,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        RoleHolder.clearRoleSet();
-        PermissionHolder.clearPermissionSet();
+        AuthorizationHolder.clearRoleSet();
+        AuthorizationHolder.clearPermissionSet();
     }
 
 }
