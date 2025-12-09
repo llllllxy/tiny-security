@@ -1,6 +1,6 @@
-package org.tinycloud.security.util.secure;
+package org.tinycloud.security.util.secure.sm3;
 
-import org.tinycloud.security.util.secure.sm3.SM3Digest;
+import org.tinycloud.security.util.secure.HexUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -124,6 +124,16 @@ public class SM3Hash {
         return hashedBytes;
     }
 
+
+    /**
+     * 将将byte[]转为16进制字符串
+     *
+     * @return 16进制字符串
+     */
+    public byte[] toBytes() {
+        byte[] resultBytes = this.SM3Encode(this.source, this.salt, this.iterations);
+        return resultBytes;
+    }
 
     /**
      * 将将byte[]转为16进制字符串
