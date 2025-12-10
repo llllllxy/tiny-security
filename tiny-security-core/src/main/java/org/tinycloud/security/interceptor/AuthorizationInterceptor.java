@@ -21,7 +21,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 用户权限验证拦截器
+ * 用户权限角色验证拦截器
  *
  * @author liuxingyu01
  * @version 2024-03-22-11:23
@@ -50,7 +50,7 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
         }
         Method method = ((HandlerMethod) handler).getMethod();
         // 如果权限模式为注解并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
-        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasPermissionAnnotation(method)) {
+        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
             return true;
         }
         AuthorizationInfoGet AuthorizationInfoGet = GlobalConfigUtils.getGlobalConfig().getAuthorizationInfoGet();

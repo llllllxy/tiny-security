@@ -103,7 +103,7 @@ public class AuthUtil {
      * @param method Method
      * @return true有 or false没有
      */
-    public static boolean hasPermissionAnnotation(Method method) {
+    public static boolean hasAuthorizationAnnotation(Method method) {
         // 检查方法上的 @RequiresPermissions
         RequiresPermissions permAnnotation = method.getAnnotation(RequiresPermissions.class);
         if (permAnnotation != null) {
