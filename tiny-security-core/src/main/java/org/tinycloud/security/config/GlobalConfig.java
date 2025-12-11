@@ -2,7 +2,7 @@ package org.tinycloud.security.config;
 
 
 import org.tinycloud.security.enums.PermissionMode;
-import org.tinycloud.security.interfaces.PermissionInfoInterface;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
 
 import java.io.Serializable;
@@ -19,7 +19,7 @@ public class GlobalConfig implements Serializable {
 
     private AuthProvider authProvider;
 
-    private PermissionInfoInterface permissionInfoInterface;
+    private AuthorizationInfoGet authorizationInfoGet;
 
     /**
      * 是否开启 LOGO 打印
@@ -56,12 +56,12 @@ public class GlobalConfig implements Serializable {
         this.authProvider = authProvider;
     }
 
-    public PermissionInfoInterface getPermissionInfoInterface() {
-        return permissionInfoInterface;
+    public AuthorizationInfoGet getAuthorizationInfoGet() {
+        return authorizationInfoGet;
     }
 
-    public void setPermissionInfoInterface(PermissionInfoInterface permissionInfoInterface) {
-        this.permissionInfoInterface = permissionInfoInterface;
+    public void setAuthorizationInfoGet(AuthorizationInfoGet authorizationInfoGet) {
+        this.authorizationInfoGet = authorizationInfoGet;
     }
 
     public boolean isBanner() {

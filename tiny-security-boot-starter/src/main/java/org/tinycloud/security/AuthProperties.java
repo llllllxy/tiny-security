@@ -6,6 +6,7 @@ import org.tinycloud.security.enums.PermissionMode;
 
 /**
  * tiny-security映射配置类--映射yml里面的配置
+ *
  * @author liuxingyu01
  * @since 2023-01-06-9:33
  **/
@@ -23,6 +24,8 @@ public class AuthProperties {
     private String credentialsStyle = "uuid";
 
     private String tableName = "t_auth_storage";
+
+    private Boolean authorizationEnabled = false;
 
     private PermissionMode permCheckMode;
 
@@ -89,6 +92,14 @@ public class AuthProperties {
 
     public void setTableName(String tableName) {
         this.tableName = tableName;
+    }
+
+    public Boolean getAuthorizationEnabled() {
+        return authorizationEnabled;
+    }
+
+    public void setAuthorizationEnabled(Boolean authorizationEnabled) {
+        this.authorizationEnabled = authorizationEnabled;
     }
 
     public PermissionMode getPermCheckMode() {

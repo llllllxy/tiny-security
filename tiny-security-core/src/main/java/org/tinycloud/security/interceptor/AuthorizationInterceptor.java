@@ -1,5 +1,7 @@
 package org.tinycloud.security.interceptor;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -7,27 +9,24 @@ import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.exception.NoPermissionException;
-import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
-import org.tinycloud.security.interceptor.holder.PermissionHolder;
-import org.tinycloud.security.interceptor.holder.RoleHolder;
-import org.tinycloud.security.interfaces.PermissionInfoInterface;
+import org.tinycloud.security.interceptor.holder.AuthenticationHolder;
+import org.tinycloud.security.interceptor.holder.AuthorizationHolder;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * 用户权限验证拦截器
+ * 用户权限角色验证拦截器
  *
  * @author liuxingyu01
  * @version 2024-03-22-11:23
  **/
-public class PermissionInterceptor implements HandlerInterceptor {
+public class AuthorizationInterceptor implements HandlerInterceptor {
 
     /*
      * 进入controller层之前拦截请求
@@ -45,20 +44,20 @@ public class PermissionInterceptor implements HandlerInterceptor {
             response.setStatus(HttpServletResponse.SC_OK);
             return true;
         }
-        LoginSubject subject = AuthenticeHolder.getLoginSubject();
+        LoginSubject subject = AuthenticationHolder.getLoginSubject();
         if (Objects.isNull(subject)) {
             throw new NoPermissionException();
         }
         Method method = ((HandlerMethod) handler).getMethod();
         // 如果权限模式为注解并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
-        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasPermissionAnnotation(method)) {
+        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
             return true;
         }
-        PermissionInfoInterface permissionInfoInterface = GlobalConfigUtils.getGlobalConfig().getPermissionInfoInterface();
-        Set<String> roleSet = permissionInfoInterface != null ? permissionInfoInterface.getRoleSet(subject) : Collections.emptySet();
-        Set<String> permissionSet = permissionInfoInterface != null ? permissionInfoInterface.getPermissionSet(subject) : Collections.emptySet();
-        RoleHolder.setRoleSet(roleSet);
-        PermissionHolder.setPermissionSet(permissionSet);
+        AuthorizationInfoGet AuthorizationInfoGet = GlobalConfigUtils.getGlobalConfig().getAuthorizationInfoGet();
+        Set<String> roleSet = AuthorizationInfoGet != null ? AuthorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
+        Set<String> permissionSet = AuthorizationInfoGet != null ? AuthorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
+        AuthorizationHolder.setRoleSet(roleSet);
+        AuthorizationHolder.setPermissionSet(permissionSet);
 
         boolean hasPermission = GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.URL
                 ? AuthUtil.checkUrlPermission(request)
@@ -87,8 +86,8 @@ public class PermissionInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        RoleHolder.clearRoleSet();
-        PermissionHolder.clearPermissionSet();
+        AuthorizationHolder.clearRoleSet();
+        AuthorizationHolder.clearPermissionSet();
     }
 
 }

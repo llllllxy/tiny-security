@@ -20,9 +20,9 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.interceptor.AuthInterceptor;
-import org.tinycloud.security.interceptor.PermissionInterceptor;
-import org.tinycloud.security.interfaces.PermissionInfoInterface;
+import org.tinycloud.security.interceptor.AuthenticationInterceptor;
+import org.tinycloud.security.interceptor.AuthorizationInterceptor;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.provider.JdbcAuthProvider;
 import org.tinycloud.security.provider.RedisAuthProvider;
@@ -62,15 +62,17 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         // 注册会话拦截器
-        registry.addInterceptor(new AuthInterceptor())
+        registry.addInterceptor(new AuthenticationInterceptor())
                 .addPathPatterns(authProperties.getAddPath())
                 .excludePathPatterns(authProperties.getExcludePath())
                 .order(-2);
-        // 注册权限拦截器
-        registry.addInterceptor(new PermissionInterceptor())
-                .addPathPatterns(authProperties.getAddPath())
-                .excludePathPatterns(authProperties.getExcludePath())
-                .order(-1);
+        // 注册权限拦截器（选择性）
+        if (authProperties.getAuthorizationEnabled()) {
+            registry.addInterceptor(new AuthorizationInterceptor())
+                    .addPathPatterns(authProperties.getAddPath())
+                    .excludePathPatterns(authProperties.getExcludePath())
+                    .order(-1);
+        }
     }
 
     @Override
@@ -93,8 +95,8 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         globalConfig.setMaxConcurrentLogins(authProperties.getMaxConcurrentLogins());
         /* 获取自定义的（ID生成器） */
         this.getBeanThen(AuthProvider.class, globalConfig::setAuthProvider);
-        /* 获取自定义的（PermissionInfoInterface */
-        this.getBeanThen(PermissionInfoInterface.class, globalConfig::setPermissionInfoInterface);
+        /* 获取自定义的（AuthorizationInfoGetInterface */
+        this.getBeanThen(AuthorizationInfoGet.class, globalConfig::setAuthorizationInfoGet);
         GlobalConfigUtils.setGlobalConfig(globalConfig);
 
         if (logger.isInfoEnabled()) {

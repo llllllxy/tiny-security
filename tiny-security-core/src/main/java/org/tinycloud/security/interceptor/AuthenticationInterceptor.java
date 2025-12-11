@@ -1,6 +1,8 @@
 
 package org.tinycloud.security.interceptor;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
 import org.springframework.util.StringUtils;
 import org.springframework.web.method.HandlerMethod;
@@ -8,13 +10,11 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.UnAuthorizedException;
-import org.tinycloud.security.interceptor.holder.AuthenticeHolder;
+import org.tinycloud.security.interceptor.holder.AuthenticationHolder;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.provider.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Method;
 import java.util.Objects;
 
@@ -24,7 +24,7 @@ import java.util.Objects;
  * @author liuxingyu01
  * @version 2020-03-22-11:23
  **/
-public class AuthInterceptor implements HandlerInterceptor {
+public class AuthenticationInterceptor implements HandlerInterceptor {
 
     /*
      * 进入controller层之前拦截请求
@@ -73,7 +73,7 @@ public class AuthInterceptor implements HandlerInterceptor {
                 boolean result = authProvider.refreshByCredentials(credentials, subject);
             }
             // 存入loginSubject会话信息，以方便后续使用
-            AuthenticeHolder.setLoginSubject(subject);
+            AuthenticationHolder.setLoginSubject(subject);
             // 合格不需要拦截，放行
             return true;
         }
@@ -93,6 +93,6 @@ public class AuthInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        AuthenticeHolder.clearLoginId();
+        AuthenticationHolder.clearLoginId();
     }
 }
