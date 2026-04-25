@@ -8,6 +8,9 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 
@@ -145,4 +148,22 @@ public class CommonUtil {
         return false;
     }
 
+
+    /**
+     * 合并两个字符串数组并去除重复元素
+     *
+     * @param arr1 第一个字符串数组
+     * @param arr2 第二个字符串数组
+     * @return 合并后去重的字符串数组，如果两个数组都为null则返回空数组
+     */
+    public static String[] mergeAndDeduplicate(String[] arr1, String[] arr2) {
+        Set<String> set = new LinkedHashSet<>();
+        if (arr1 != null && arr1.length > 0) {
+            Collections.addAll(set, arr1);
+        }
+        if (arr2 != null && arr2.length > 0) {
+            Collections.addAll(set, arr2);
+        }
+        return set.toArray(new String[0]);
+    }
 }

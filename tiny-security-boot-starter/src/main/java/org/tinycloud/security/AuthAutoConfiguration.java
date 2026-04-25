@@ -63,13 +63,13 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
     public void addInterceptors(InterceptorRegistry registry) {
         // 注册会话拦截器
         registry.addInterceptor(new AuthenticationInterceptor())
-                .addPathPatterns(authProperties.getAddPath())
+                .addPathPatterns(authProperties.getIncludePath())
                 .excludePathPatterns(authProperties.getExcludePath())
                 .order(-2);
         // 注册权限拦截器（选择性）
         if (authProperties.getAuthorizationEnabled()) {
             registry.addInterceptor(new AuthorizationInterceptor())
-                    .addPathPatterns(authProperties.getAddPath())
+                    .addPathPatterns(authProperties.getIncludePath())
                     .excludePathPatterns(authProperties.getExcludePath())
                     .order(-1);
         }
