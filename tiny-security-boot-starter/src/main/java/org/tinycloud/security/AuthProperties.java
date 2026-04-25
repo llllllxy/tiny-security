@@ -2,6 +2,7 @@ package org.tinycloud.security;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.tinycloud.security.enums.PermissionMode;
+import org.tinycloud.security.util.CommonUtil;
 
 
 /**
@@ -36,9 +37,15 @@ public class AuthProperties {
     private Integer maxConcurrentLogins = 0;
 
     /**
+     * 拦截路径，多个路径用逗号分隔，已过期，请使用 includePath
+     */
+    @Deprecated
+    private String[] addPath;
+
+    /**
      * 拦截路径，多个路径用逗号分隔
      */
-    private String[] addPath = new String[]{"/**"};
+    private String[] includePath;
 
     /**
      * 排除拦截路径，多个路径用逗号分隔
@@ -134,12 +141,27 @@ public class AuthProperties {
         this.maxConcurrentLogins = maxConcurrentLogins;
     }
 
+    @Deprecated
     public String[] getAddPath() {
         return addPath;
     }
 
+    @Deprecated
     public void setAddPath(String[] addPath) {
         this.addPath = addPath;
+    }
+
+    public String[] getIncludePath() {
+        String[] mergedPaths = CommonUtil.mergeAndDeduplicate(this.includePath, this.addPath);
+        // 如果合并后的路径为空，默认返回"/**"，拦截所有路径
+        if (mergedPaths == null || mergedPaths.length == 0) {
+            return new String[]{"/**"};
+        }
+        return mergedPaths;
+    }
+
+    public void setIncludePath(String[] includePath) {
+        this.includePath = includePath;
     }
 
     public String[] getExcludePath() {
