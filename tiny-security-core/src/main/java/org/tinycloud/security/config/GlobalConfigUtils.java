@@ -41,6 +41,13 @@ public class GlobalConfigUtils {
     }
 
     /**
+     * 清理全局配置（主要用于测试场景）
+     */
+    public static void clearGlobalConfig() {
+        GLOBAL_CONFIG.clear();
+    }
+
+    /**
      * <p>
      * 输出banner
      * <p/>

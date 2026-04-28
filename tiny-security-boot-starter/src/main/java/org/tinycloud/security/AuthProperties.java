@@ -37,6 +37,11 @@ public class AuthProperties {
     private Integer maxConcurrentLogins = 0;
 
     /**
+     * 是否开启框架默认异常翻译（ControllerAdvice）
+     */
+    private Boolean exceptionTranslationEnabled = true;
+
+    /**
      * 拦截路径，多个路径用逗号分隔，已过期，请使用 includePath
      */
     @Deprecated
@@ -139,6 +144,14 @@ public class AuthProperties {
 
     public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
         this.maxConcurrentLogins = maxConcurrentLogins;
+    }
+
+    public Boolean getExceptionTranslationEnabled() {
+        return exceptionTranslationEnabled;
+    }
+
+    public void setExceptionTranslationEnabled(Boolean exceptionTranslationEnabled) {
+        this.exceptionTranslationEnabled = exceptionTranslationEnabled;
     }
 
     @Deprecated

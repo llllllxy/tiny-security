@@ -1,0 +1,221 @@
+package org.tinycloud.security.session;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.Assert;
+import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
+import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.provider.timedcache.LocalMapContainerByConcurrentHashMap;
+import org.tinycloud.security.provider.timedcache.LocalTimeCache;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+
+/**
+ * 单机内存会话仓储实现
+ *
+ * @author liuxingyu01
+ * @since 2026-04-28
+ */
+public class SingleSessionRepository implements SessionRepository {
+    private static final Logger log = LoggerFactory.getLogger(SingleSessionRepository.class);
+
+    /**
+     * 维护会话核心内存缓存（线程安全）
+     */
+    private final LocalTimeCache timedCache = new LocalTimeCache(
+            new LocalMapContainerByConcurrentHashMap<>(),
+            new LocalMapContainerByConcurrentHashMap<>()
+    );
+
+    /**
+     * key: loginId（转为String），value: 该账号的所有在线凭证列表
+     */
+    private final Map<String, List<String>> loginIdToCredentialsMap = new ConcurrentHashMap<>();
+
+    /**
+     * 构造单机内存会话仓储并启动过期清理线程。
+     */
+    public SingleSessionRepository() {
+        this.timedCache.initRefreshThread();
+    }
+
+    /**
+     * 保存会话并记录在线凭证。
+     */
+    @Override
+    public boolean save(LoginSubject subject, int timeoutSeconds, int maxConcurrentLogins) {
+        Assert.notNull(subject, "The subject cannot be null!");
+        Assert.hasText(subject.getCredentials(), "The credentials cannot be empty!");
+        Assert.notNull(subject.getLoginId(), "The loginId cannot be null!");
+        try {
+            boolean canLogin = checkMaxLoginLimit(subject.getLoginId(), maxConcurrentLogins);
+            if (!canLogin) {
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
+            }
+            this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
+            this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
+            return true;
+        } catch (ConcurrentLoginOverLimitException ex) {
+            throw ex;
+        } catch (Exception e) {
+            log.error("SingleSessionRepository save failed, Exception：", e);
+            return false;
+        }
+    }
+
+    /**
+     * 检查指定凭证是否有效。
+     */
+    @Override
+    public boolean checkByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return timeout > 0;
+        } catch (Exception e) {
+            log.error("SingleSessionRepository checkByCredentials failed, Exception：", e);
+            return false;
+        }
+    }
+
+    /**
+     * 根据凭证读取登录主体。
+     */
+    @Override
+    public LoginSubject getSubject(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            if (timeout <= 0) {
+                return null;
+            }
+            Object content = this.timedCache.getObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return content == null ? null : (LoginSubject) content;
+        } catch (Exception e) {
+            log.error("SingleSessionRepository getSubject failed, Exception：", e);
+            return null;
+        }
+    }
+
+    /**
+     * 刷新指定凭证会话。
+     */
+    @Override
+    public boolean refreshByCredentials(String credentials, LoginSubject subject, int timeoutSeconds) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials, subject, timeoutSeconds);
+            return true;
+        } catch (Exception e) {
+            log.error("SingleSessionRepository refreshByCredentials failed, Exception：", e);
+            return false;
+        }
+    }
+
+    /**
+     * 删除指定凭证会话。
+     */
+    @Override
+    public boolean deleteByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            LoginSubject subject = this.getSubject(credentials);
+            if (subject != null) {
+                this.removeFromOnlineList(subject.getLoginId(), credentials);
+            }
+            this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return true;
+        } catch (Exception e) {
+            log.error("SingleSessionRepository deleteByCredentials failed, Exception：", e);
+            return false;
+        }
+    }
+
+    /**
+     * 删除指定账号下全部会话。
+     */
+    @Override
+    public boolean deleteByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        try {
+            String loginIdStr = String.valueOf(loginId);
+            List<String> credentialsList = this.loginIdToCredentialsMap.getOrDefault(loginIdStr, Collections.emptyList());
+            for (String cred : credentialsList) {
+                this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+            }
+            this.loginIdToCredentialsMap.remove(loginIdStr);
+            return true;
+        } catch (Exception e) {
+            log.error("SingleSessionRepository deleteByLoginId failed, Exception：", e);
+            return false;
+        }
+    }
+
+    /**
+     * 统计指定账号有效在线会话数，并清理失效凭证索引。
+     */
+    @Override
+    public int countValidOnlineSessions(Object loginId) {
+        String loginIdStr = String.valueOf(loginId);
+        List<String> credentialsList = this.loginIdToCredentialsMap.getOrDefault(loginIdStr, Collections.emptyList());
+        if (credentialsList.isEmpty()) {
+            return 0;
+        }
+        List<String> validCredentials = credentialsList.stream()
+                .filter(cred -> {
+                    String cacheKey = AuthConsts.AUTH_CREDENTIALS_KEY + cred;
+                    long timeout = this.timedCache.getObjectTimeout(cacheKey);
+                    return timeout > 0;
+                })
+                .collect(Collectors.toList());
+        if (validCredentials.size() != credentialsList.size()) {
+            if (validCredentials.isEmpty()) {
+                this.loginIdToCredentialsMap.remove(loginIdStr);
+            } else {
+                this.loginIdToCredentialsMap.put(loginIdStr, validCredentials);
+            }
+        }
+        return validCredentials.size();
+    }
+
+    /**
+     * 判断账号是否达到并发登录上限。
+     */
+    private boolean checkMaxLoginLimit(Object loginId, int maxConcurrentLogins) {
+        if (maxConcurrentLogins <= 0) {
+            return true;
+        }
+        int currentOnlineCount = countValidOnlineSessions(loginId);
+        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
+        return currentOnlineCount < maxConcurrentLogins;
+    }
+
+    /**
+     * 将凭证加入账号在线列表。
+     */
+    private void addToOnlineList(Object loginId, String credentials) {
+        String loginIdStr = String.valueOf(loginId);
+        loginIdToCredentialsMap.computeIfAbsent(loginIdStr, k -> new CopyOnWriteArrayList<>()).add(credentials);
+    }
+
+    /**
+     * 从账号在线列表中移除凭证。
+     */
+    private void removeFromOnlineList(Object loginId, String credentials) {
+        String loginIdStr = String.valueOf(loginId);
+        List<String> credentialsList = loginIdToCredentialsMap.get(loginIdStr);
+        if (credentialsList == null || credentialsList.isEmpty()) {
+            return;
+        }
+        boolean removed = credentialsList.remove(credentials);
+        if (removed && credentialsList.isEmpty()) {
+            loginIdToCredentialsMap.remove(loginIdStr);
+        }
+    }
+}
