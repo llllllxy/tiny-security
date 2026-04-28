@@ -28,5 +28,6 @@ public class TinySecurityException extends RuntimeException {
 
     public TinySecurityException(String message, Throwable cause) {
         super(message, cause);
+        this.code = AuthConsts.CODE_OTHER_ERROR;
     }
 }
