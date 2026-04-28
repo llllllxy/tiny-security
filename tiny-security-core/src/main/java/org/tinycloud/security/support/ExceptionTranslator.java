@@ -1,9 +1,7 @@
 package org.tinycloud.security.support;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.tinycloud.security.exception.TinySecurityException;
-
-import java.util.Map;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * tiny-security 异常翻译器接口
@@ -14,11 +12,11 @@ import java.util.Map;
 public interface ExceptionTranslator {
 
     /**
-     * 将 tiny-security 异常翻译成可序列化的响应体
+     * 将 tiny-security 异常翻译为 HTTP 响应。
      *
      * @param request 当前请求
+     * @param response 当前响应
      * @param ex      异常信息
-     * @return 响应体
      */
-    Map<String, Object> translate(HttpServletRequest request, TinySecurityException ex);
+    void translate(HttpServletRequest request, HttpServletResponse response, Exception ex);
 }

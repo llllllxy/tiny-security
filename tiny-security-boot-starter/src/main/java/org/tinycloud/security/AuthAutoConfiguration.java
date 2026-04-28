@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -32,15 +33,15 @@ import org.tinycloud.security.event.SpringSecurityEventPublisher;
 import org.tinycloud.security.interceptor.AuthenticationInterceptor;
 import org.tinycloud.security.interceptor.AuthorizationInterceptor;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.session.SessionRepository;
+import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.JdbcSessionRepository;
 import org.tinycloud.security.session.RedisSessionRepository;
+import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.session.SingleSessionRepository;
-import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.util.VersionUtil;
-import org.tinycloud.security.web.TinySecurityExceptionHandler;
 import org.tinycloud.security.support.DefaultExceptionTranslator;
 import org.tinycloud.security.support.ExceptionTranslator;
+import org.tinycloud.security.support.TinySecurityHandlerExceptionResolver;
+import org.tinycloud.security.util.VersionUtil;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -243,15 +244,15 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
 
     @Bean
     @ConditionalOnProperty(name = "tiny-security.exception-translation-enabled", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean(TinySecurityExceptionHandler.class)
+    @ConditionalOnMissingBean(name = "tinySecurityHandlerExceptionResolver")
     /**
-     * 注册默认 tiny-security 异常处理器。
+     * 注册默认 tiny-security 异常解析器。
      *
      * @param exceptionTranslator 异常翻译器
-     * @return 异常处理器
+     * @return 异常解析器
      */
-    public TinySecurityExceptionHandler tinySecurityExceptionHandler(ExceptionTranslator exceptionTranslator) {
-        return new TinySecurityExceptionHandler(exceptionTranslator);
+    public HandlerExceptionResolver tinySecurityHandlerExceptionResolver(ExceptionTranslator exceptionTranslator) {
+        return new TinySecurityHandlerExceptionResolver(exceptionTranslator);
     }
 
     /**
