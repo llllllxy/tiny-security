@@ -1,9 +1,14 @@
 package org.tinycloud.security.config;
 
 
+import org.tinycloud.security.authentication.AuthenticationManager;
+import org.tinycloud.security.authorization.AuthorizationManager;
+import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
+import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
+import org.tinycloud.security.session.SessionRepository;
 
 import java.io.Serializable;
 
@@ -18,6 +23,16 @@ import java.io.Serializable;
 public class GlobalConfig implements Serializable {
 
     private AuthProvider authProvider;
+
+    private SessionRepository sessionRepository;
+
+    private AuthenticationManager authenticationManager;
+
+    private AuthorizationManager authorizationManager;
+
+    private SecurityContextRepository securityContextRepository;
+
+    private SecurityEventPublisher securityEventPublisher;
 
     private AuthorizationInfoGet authorizationInfoGet;
 
@@ -54,6 +69,46 @@ public class GlobalConfig implements Serializable {
 
     public void setAuthProvider(AuthProvider authProvider) {
         this.authProvider = authProvider;
+    }
+
+    public SessionRepository getSessionRepository() {
+        return sessionRepository;
+    }
+
+    public void setSessionRepository(SessionRepository sessionRepository) {
+        this.sessionRepository = sessionRepository;
+    }
+
+    public AuthenticationManager getAuthenticationManager() {
+        return authenticationManager;
+    }
+
+    public void setAuthenticationManager(AuthenticationManager authenticationManager) {
+        this.authenticationManager = authenticationManager;
+    }
+
+    public AuthorizationManager getAuthorizationManager() {
+        return authorizationManager;
+    }
+
+    public void setAuthorizationManager(AuthorizationManager authorizationManager) {
+        this.authorizationManager = authorizationManager;
+    }
+
+    public SecurityContextRepository getSecurityContextRepository() {
+        return securityContextRepository;
+    }
+
+    public void setSecurityContextRepository(SecurityContextRepository securityContextRepository) {
+        this.securityContextRepository = securityContextRepository;
+    }
+
+    public SecurityEventPublisher getSecurityEventPublisher() {
+        return securityEventPublisher;
+    }
+
+    public void setSecurityEventPublisher(SecurityEventPublisher securityEventPublisher) {
+        this.securityEventPublisher = securityEventPublisher;
     }
 
     public AuthorizationInfoGet getAuthorizationInfoGet() {

@@ -4,15 +4,14 @@ package org.tinycloud.security.interceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpMethod;
-import org.springframework.util.StringUtils;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
+import org.tinycloud.security.authentication.AuthenticationManager;
 import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.exception.UnAuthorizedException;
-import org.tinycloud.security.interceptor.holder.AuthenticationHolder;
-import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.SecurityContext;
+import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
@@ -49,34 +48,11 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         if (AuthUtil.checkIgnore(method)) {
             return true;
         }
-        AuthProvider authProvider = GlobalConfigUtils.getGlobalConfig().getAuthProvider();
-
-        // 第一步、先从请求的request里获取传来的credentials值，并且判断credentials值是否为空
-        String credentials = authProvider.getCredentials(request);
-        if (!StringUtils.hasText(credentials)) {
-            // 直接抛出异常的话，就不需要return false了
-            throw new UnAuthorizedException();
-        }
-
-        // 第二步、再判断此token值在会话存储器中是否存在，存在的话说明会话有效，并刷新会话时长
-        LoginSubject subject = authProvider.getSubject(credentials);
-        if (Objects.isNull(subject)) {
-            throw new UnAuthorizedException();
-        } else {
-            long expireTime = subject.getLoginExpireTime();
-            long currentTime = System.currentTimeMillis();
-            int timeout = GlobalConfigUtils.getGlobalConfig().getTimeout();
-            long millsCritical = (long) (timeout * 1000L * 0.8);
-            if (expireTime - currentTime <= millsCritical) {
-                // 刷新会话缓存时长
-                subject.setLoginExpireTime(currentTime + timeout * 1000L);
-                boolean result = authProvider.refreshByCredentials(credentials, subject);
-            }
-            // 存入loginSubject会话信息，以方便后续使用
-            AuthenticationHolder.setLoginSubject(subject);
-            // 合格不需要拦截，放行
-            return true;
-        }
+        SecurityContext context = resolveAuthenticationManager().authenticate(request);
+        // 存入安全上下文，以方便后续使用
+        resolveSecurityContextRepository().saveContext(context, request, response);
+        // 合格不需要拦截，放行
+        return true;
     }
 
 
@@ -93,6 +69,22 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        AuthenticationHolder.clearLoginId();
+        resolveSecurityContextRepository().clearContext(arg0, arg1);
+    }
+
+    private AuthenticationManager resolveAuthenticationManager() {
+        AuthenticationManager authenticationManager = GlobalConfigUtils.getGlobalConfig().getAuthenticationManager();
+        if (Objects.isNull(authenticationManager)) {
+            throw new TinySecurityException("AuthenticationManager not initialized!");
+        }
+        return authenticationManager;
+    }
+
+    private SecurityContextRepository resolveSecurityContextRepository() {
+        SecurityContextRepository repository = GlobalConfigUtils.getGlobalConfig().getSecurityContextRepository();
+        if (Objects.isNull(repository)) {
+            throw new TinySecurityException("SecurityContextRepository not initialized!");
+        }
+        return repository;
     }
 }

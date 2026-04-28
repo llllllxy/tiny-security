@@ -38,6 +38,17 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 
 ---
 
+# 1.1、V2兼容架构（演进中）
+
+从 `1.2.7` 的演进版本开始，框架在不破坏原有 `AuthProvider` 使用方式的前提下，逐步引入 V2 分层：
+- `SessionRepository`：会话读写抽象层（当前默认由 `AuthProvider` 适配）
+- `AuthenticationManager`：认证管理器（负责凭证校验与会话刷新）
+- `AuthorizationManager`：授权管理器（负责注解/URL 权限决策）
+
+当前仍兼容原有 API，用于平滑迁移。你可以继续使用既有接入代码，同时按需扩展上述三个组件。
+
+---
+
 # 2、快速入门
 
 ## 2.1、SpringBoot集成
@@ -75,7 +86,8 @@ tiny-security:
    store-type: single
    # token名称 (同时也是cookie名称以适配前后端不分离的模式)
    token-name: token
-   # token有效期 (即会话时长)，单位秒 默认1800秒(30分钟)
+   # 会话有效期（会话存储中的subject有效时长），单位秒，默认1800秒(30分钟)
+   # 注意：当前版本JWT自身过期时间固定为30天（用于防伪校验），后续版本将支持配置化
    timeout: 1800
    # 最大登录并发数，默认不限制
    max-concurrent-logins: 2
@@ -85,6 +97,8 @@ tiny-security:
    table-name: t_auth_storage
    # 是否开启权限(角色)校验，默认false不开启，开启后需要实现AuthorizationInfoGet接口
    authorization-enabled: true
+   # 是否启用框架默认异常翻译器（自动将框架异常转换为JSON响应），默认true
+   exception-translation-enabled: true
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
    # jwt密钥，不配置则使用默认值
@@ -211,6 +225,7 @@ public class LoginController  {
    }
 }
 ```
+> 注意：`login` 返回的 `token` 默认已带 `Bearer ` 前缀（例如 `Bearer eyJ...`），前端传递时应原样携带。
 login方法参数说明：
 - loginId  登录的账号id，建议的数据类型：long | int | String，建议为用户id，不可以传入复杂类型，如：User、Admin 等等
 
@@ -250,8 +265,9 @@ String loginIdStr = authProvider.getLoginIdAsString();
 Long loginIdLong = authProvider.getLoginIdAsLong();
 
 
-// 获取登录主体信息，无会话时会抛出异常
-LoginSubject LoginSubject = authProvider.getLoginSubject();
+// 获取登录安全上下文，无会话时会抛出异常
+SecurityContext securityContext = authProvider.getSecurityContext();
+LoginSubject loginSubject = securityContext.getLoginSubject();
 ```
 
 也可使用静态工具类 `AuthUtil`：
@@ -261,7 +277,8 @@ Object loginId = AuthUtil.getLoginId();
 
 
 // （这个方法在无会话时不会抛出异常，而是返回null）
-LoginSubject LoginSubject = AuthUtil.getLoginSubject();
+SecurityContext securityContext = AuthUtil.getLoginSubject();
+LoginSubject loginSubject = securityContext == null ? null : securityContext.getLoginSubject();
 ```
 
 ---
@@ -362,7 +379,7 @@ public class IndexController {
     @ResponseBody
     @GetMapping("/testRole")
     public Result<Object> testRole() {
-        logger.info("LoginSubject = {}", authProvider.getLoginSubject());
+        logger.info("SecurityContext = {}", authProvider.getSecurityContext());
         logger.info("authProvider.getLoginId() = {}", authProvider.getLoginId());
         logger.info("AuthUtil.getLoginId() = {}", AuthUtil.getLoginId());
         logger.info("token = {}", authProvider.getToken());
@@ -421,7 +438,9 @@ tiny-security在会话验证失败和权限验证失败的会抛出自定义异�
 | NoPermissionException | 无权限访问（角色或者资源不匹配）  | 错误信息“无权限访问！”，错误码403      |
 | ConcurrentLoginOverLimitException | 并发登录超过限制 | 错误信息“并发登录超过最大限制！”，错误码409 |
 
-需要使用全局异常处理器来捕获异常并进行处理返回JSON数据（或者页面）：
+默认情况下，框架已内置异常翻译器，会自动将上述异常转换为JSON响应（可通过 `tiny-security.exception-translation-enabled=false` 关闭）。
+
+如果你希望完全自定义返回结构，也可以自己编写全局异常处理器来接管返回：
 
 ```java
 @ControllerAdvice
@@ -470,6 +489,7 @@ $.get("/xxx", { "token": token }, function(data) {
 $.ajax({
    url: "/xxx", 
    beforeSend: function(xhr) {
+       // token应包含Bearer前缀，例如：Bearer eyJ...
        xhr.setRequestHeader("token", token);
    },
    success: function(data){ }
@@ -479,18 +499,52 @@ $.ajax({
 
 ---
 
-### 2.5.2 自定义AuthProvider
-框架内置了JdbcAuthProvider、RedisAuthProvider和SingleAuthProvider三种会话实现，
-如果仍然无法满足你的需求，或者你想存在其他什么地方，比如存在磁盘文件、MongoDB中，只需以下三步即可：
-- 继承org.tinycloud.security.provider.AbstractAuthProvider抽象类， 实现里面的抽象方法，
-- 注入bean，如下
+### 2.5.2 自定义SessionRepository
+框架内置了 `JdbcSessionRepository`、`RedisSessionRepository` 和 `SingleSessionRepository` 三种会话仓储实现。
+如果你想把会话存储到其他介质（例如 MongoDB），可以自定义 `SessionRepository`：
+
 ```java
-   @Component
-   @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "mongo")
-   public class MongoAuthProvider extends AbstractAuthProvider {
-        // ...
-   }
+@Component
+@ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "mongo")
+public class MongoSessionRepository implements SessionRepository {
+    @Override
+    public boolean save(LoginSubject subject, int timeoutSeconds, int maxConcurrentLogins) {
+        // 保存会话
+        return true;
+    }
+
+    @Override
+    public boolean checkByCredentials(String credentials) {
+        return false;
+    }
+
+    @Override
+    public LoginSubject getSubject(String credentials) {
+        return null;
+    }
+
+    @Override
+    public boolean refreshByCredentials(String credentials, LoginSubject subject, int timeoutSeconds) {
+        return true;
+    }
+
+    @Override
+    public boolean deleteByCredentials(String credentials) {
+        return true;
+    }
+
+    @Override
+    public boolean deleteByLoginId(Object loginId) {
+        return true;
+    }
+
+    @Override
+    public int countValidOnlineSessions(Object loginId) {
+        return 0;
+    }
+}
 ```
+
 - 配置
 ```yaml
 tiny-security:
@@ -571,3 +625,66 @@ tiny-security:
     boolean isPasswordMatch = BCrypt.checkpw("123456", hashedPassword);
     System.out.println(isPasswordMatch);
 ```
+
+### 2.5.4 监听安全事件
+框架内置了安全事件发布器，默认会发布以下事件：
+- `LoginSuccessEvent`：登录成功事件
+- `LoginFailureEvent`：登录失败事件
+- `AuthorizationFailureEvent`：鉴权失败事件
+
+#### 方式一：使用 Spring `@EventListener` 监听（推荐）
+框架默认使用 Spring 事件总线发布安全事件，你可以直接监听：
+
+```java
+@Component
+public class SecurityEventListener {
+
+    @EventListener
+    public void onLoginSuccess(org.tinycloud.security.event.LoginSuccessEvent event) {
+        System.out.println("登录成功: " + event.getLoginId());
+    }
+
+    @EventListener
+    public void onLoginFailure(org.tinycloud.security.event.LoginFailureEvent event) {
+        System.out.println("登录失败: " + event.getLoginId() + ", reason=" + event.getErrorMessage());
+    }
+
+    @EventListener
+    public void onAuthorizationFailure(org.tinycloud.security.event.AuthorizationFailureEvent event) {
+        System.out.println("鉴权失败: " + event.getLoginId() + ", path=" + event.getRequestPath());
+    }
+}
+```
+
+#### 方式二：自定义 `SecurityEventPublisher`
+如果你想把事件发送到消息队列、审计平台或日志系统，可以自定义 `SecurityEventPublisher` Bean。
+当项目里存在自定义 Bean 时，会自动覆盖框架默认实现：
+
+```java
+@Configuration
+public class SecurityEventConfig {
+
+    @Bean
+    public SecurityEventPublisher securityEventPublisher() {
+        return new SecurityEventPublisher() {
+            @Override
+            public void publishLoginSuccess(LoginSuccessEvent event) {
+                // 例如：发送到MQ或写入审计日志
+                System.out.println("[AUDIT] 登录成功: " + event.getLoginId() + ", time=" + event.getTimestamp());
+            }
+
+            @Override
+            public void publishLoginFailure(LoginFailureEvent event) {
+                System.out.println("[AUDIT] 登录失败: " + event.getLoginId() + ", reason=" + event.getErrorMessage());
+            }
+
+            @Override
+            public void publishAuthorizationFailure(AuthorizationFailureEvent event) {
+                System.out.println("[AUDIT] 鉴权失败: " + event.getLoginId() + ", path=" + event.getRequestPath());
+            }
+        };
+    }
+}
+```
+
+> 提示：你也可以保留默认发布器，再通过 `@EventListener` 监听并转发到外部系统，这样代码更简洁。
