@@ -124,14 +124,14 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         }
     }
 
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
-    @Bean
     /**
      * 注册 Redis 会话仓储。
      *
      * @param stringRedisTemplate Redis 模板
      * @return 会话仓储
      */
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
+    @Bean
     public SessionRepository redisSessionRepository(@Autowired StringRedisTemplate stringRedisTemplate) {
         if (stringRedisTemplate == null) {
             logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
@@ -141,14 +141,14 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         return new RedisSessionRepository(stringRedisTemplate);
     }
 
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
-    @Bean
     /**
      * 注册 JDBC 会话仓储。
      *
      * @param jdbcTemplate JDBC 模板
      * @return 会话仓储
      */
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
+    @Bean
     public SessionRepository jdbcSessionRepository(@Autowired JdbcTemplate jdbcTemplate) {
         if (jdbcTemplate == null) {
             logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null!");
@@ -158,32 +158,30 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         return new JdbcSessionRepository(jdbcTemplate, authProperties.getTableName());
     }
 
-    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
-    @Bean
     /**
      * 注册单机内存会话仓储。
      *
      * @return 会话仓储
      */
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
+    @Bean
     public SessionRepository singleSessionRepository() {
         logger.info("SingleSessionRepository is running!");
         return new SingleSessionRepository();
     }
 
-    @Bean
-    @ConditionalOnMissingBean(AuthProvider.class)
     /**
      * 注册默认 AuthProvider 外观实现。
      *
      * @param sessionRepository 会话仓储
      * @return AuthProvider
      */
+    @Bean
+    @ConditionalOnMissingBean(AuthProvider.class)
     public AuthProvider authProvider(SessionRepository sessionRepository) {
         return new AuthProvider(sessionRepository);
     }
 
-    @Bean
-    @ConditionalOnMissingBean(AuthenticationManager.class)
     /**
      * 注册默认认证管理器。
      *
@@ -191,66 +189,68 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
      * @param sessionRepository 会话仓储
      * @return 认证管理器
      */
+    @Bean
+    @ConditionalOnMissingBean(AuthenticationManager.class)
     public AuthenticationManager authenticationManager(AuthProvider authProvider, SessionRepository sessionRepository) {
         Integer timeout = authProperties.getTimeout();
         return new DefaultAuthenticationManager(authProvider, sessionRepository, timeout == null ? 1800 : timeout);
     }
 
-    @Bean
-    @ConditionalOnMissingBean(AuthorizationManager.class)
     /**
      * 注册默认授权管理器。
      *
      * @param authorizationInfoGet 授权信息提供器
      * @return 授权管理器
      */
+    @Bean
+    @ConditionalOnMissingBean(AuthorizationManager.class)
     public AuthorizationManager authorizationManager(@Autowired(required = false) AuthorizationInfoGet authorizationInfoGet) {
         return new DefaultAuthorizationManager(authProperties.getPermCheckMode(), authorizationInfoGet);
     }
 
-    @Bean
-    @ConditionalOnMissingBean(ExceptionTranslator.class)
     /**
      * 注册默认异常翻译器。
      *
      * @return 异常翻译器
      */
+    @Bean
+    @ConditionalOnMissingBean(ExceptionTranslator.class)
     public ExceptionTranslator exceptionTranslator() {
         return new DefaultExceptionTranslator();
     }
 
-    @Bean
-    @ConditionalOnMissingBean(SecurityContextRepository.class)
     /**
      * 注册默认安全上下文仓储。
      *
      * @return 安全上下文仓储
      */
+    @Bean
+    @ConditionalOnMissingBean(SecurityContextRepository.class)
     public SecurityContextRepository securityContextRepository() {
         return new ThreadLocalSecurityContextRepository();
     }
 
-    @Bean
-    @ConditionalOnMissingBean(SecurityEventPublisher.class)
     /**
      * 注册基于 Spring 的安全事件发布器。
      *
      * @param applicationEventPublisher Spring 事件发布器
      * @return 安全事件发布器
      */
+    @Bean
+    @ConditionalOnMissingBean(SecurityEventPublisher.class)
     public SecurityEventPublisher securityEventPublisher(org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         return new SpringSecurityEventPublisher(applicationEventPublisher);
     }
 
-    @Bean
-    @ConditionalOnProperty(name = "tiny-security.exception-translation-enabled", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean(name = "tinySecurityHandlerExceptionResolver")
     /**
      * 注册默认 tiny-security 异常解析器。
      *
      * @param exceptionTranslator 异常翻译器
      * @return 异常解析器
      */
+    @Bean
+    @ConditionalOnProperty(name = "tiny-security.exception-translation-enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean(name = "tinySecurityHandlerExceptionResolver")
     public HandlerExceptionResolver tinySecurityHandlerExceptionResolver(ExceptionTranslator exceptionTranslator) {
         return new TinySecurityHandlerExceptionResolver(exceptionTranslator);
     }
@@ -268,3 +268,4 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         }
     }
 }
+
