@@ -4,7 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * 安全上下文仓储（当前默认使用 ThreadLocal）
+ * 安全上下文仓储接口定义，默认实现为 ThreadLocalSecurityContextRepository
  *
  * @author liuxingyu01
  * @since 2026-04-28

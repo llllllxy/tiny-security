@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.time.LocalDateTime;

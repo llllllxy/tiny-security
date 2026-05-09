@@ -6,7 +6,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.session.SessionRepository;
 
 import java.util.concurrent.ConcurrentHashMap;

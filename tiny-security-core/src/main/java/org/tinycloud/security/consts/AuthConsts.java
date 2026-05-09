@@ -3,6 +3,7 @@ package org.tinycloud.security.consts;
 
 /**
  * 系统常量类
+ *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
@@ -18,17 +19,28 @@ public class AuthConsts {
      */
     public static final String ONLINE_CREDENTIALS_KEY_PREFIX = "tiny:security:online:";
 
-    // 无权限访问
+    /**
+     * 无权限访问
+     */
     public static int CODE_NO_PERMISSION = 403;
 
-    // 未登录或会话已失效
+    /**
+     * 未登录或会话已失效
+     */
     public static int CODE_UNAUTHORIZED = 401;
 
-    // 并发登录超量
+    /**
+     * 并发登录超量
+     */
     public static int CODE_CONCURRENT_LOGIN_OVER_LIMIT = 409;
 
-    // 其他异常
+    /**
+     * 其他异常
+     */
     public static int CODE_OTHER_ERROR = 500;
 
+    /**
+     * JWT 令牌前缀
+     */
     public static String JWT_TOKEN_PREFIX = "Bearer ";
 }

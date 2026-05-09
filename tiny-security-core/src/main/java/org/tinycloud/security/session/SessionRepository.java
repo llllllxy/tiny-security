@@ -1,6 +1,6 @@
 package org.tinycloud.security.session;
 
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 
 /**
  * 会话仓储接口
