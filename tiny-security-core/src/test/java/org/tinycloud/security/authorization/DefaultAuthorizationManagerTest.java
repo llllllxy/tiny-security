@@ -10,11 +10,11 @@ import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -27,7 +27,7 @@ class DefaultAuthorizationManagerTest {
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextHolder.clearContext();
         RequestContextHolder.resetRequestAttributes();
         GlobalConfigUtils.clearGlobalConfig();
     }

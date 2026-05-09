@@ -13,10 +13,10 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.context.SecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.session.SessionRepository;
 
 import java.lang.reflect.Method;
@@ -32,7 +32,7 @@ class AuthenticationInterceptorTest {
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextHolder.clearContext();
         GlobalConfigUtils.clearGlobalConfig();
     }
 
@@ -59,7 +59,7 @@ class AuthenticationInterceptorTest {
         );
 
         assertTrue(allowed);
-        assertEquals("user-1", SecurityContextHolder.getContext().getLoginSubject().getLoginId());
+        assertEquals("user-1", ThreadLocalSecurityContextHolder.getContext().getLoginSubject().getLoginId());
     }
 
     @Test
@@ -188,18 +188,18 @@ class AuthenticationInterceptorTest {
 
         @Override
         public SecurityContext loadContext(HttpServletRequest request) {
-            return SecurityContextHolder.getContext();
+            return ThreadLocalSecurityContextHolder.getContext();
         }
 
         @Override
         public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
-            SecurityContextHolder.setContext(context);
+            ThreadLocalSecurityContextHolder.setContext(context);
         }
 
         @Override
         public void clearContext(HttpServletRequest request, HttpServletResponse response) {
             clearCount.incrementAndGet();
-            SecurityContextHolder.clearContext();
+            ThreadLocalSecurityContextHolder.clearContext();
         }
     }
 }

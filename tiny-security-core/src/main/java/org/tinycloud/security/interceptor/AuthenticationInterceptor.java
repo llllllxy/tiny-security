@@ -48,9 +48,9 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         if (AuthUtil.checkIgnore(method)) {
             return true;
         }
-        SecurityContext context = resolveAuthenticationManager().authenticate(request);
+        SecurityContext context = this.resolveAuthenticationManager().authenticate(request);
         // 存入安全上下文，以方便后续使用
-        resolveSecurityContextRepository().saveContext(context, request, response);
+        this.resolveSecurityContextRepository().saveContext(context, request, response);
         // 合格不需要拦截，放行
         return true;
     }
@@ -69,7 +69,7 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        resolveSecurityContextRepository().clearContext(arg0, arg1);
+        this.resolveSecurityContextRepository().clearContext(arg0, arg1);
     }
 
     private AuthenticationManager resolveAuthenticationManager() {

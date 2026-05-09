@@ -40,7 +40,7 @@ public class TinySecurityHandlerExceptionResolver implements HandlerExceptionRes
         if (!(ex instanceof TinySecurityException)) {
             return null;
         }
-        exceptionTranslator.translate(request, response, ex);
+        this.exceptionTranslator.translate(request, response, ex);
         return new ModelAndView();
     }
 

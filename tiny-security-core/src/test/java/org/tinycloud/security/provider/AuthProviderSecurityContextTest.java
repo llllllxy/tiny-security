@@ -5,8 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
@@ -27,7 +28,7 @@ class AuthProviderSecurityContextTest {
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextHolder.clearContext();
         GlobalConfigUtils.clearGlobalConfig();
         RequestContextHolder.resetRequestAttributes();
     }
@@ -38,7 +39,7 @@ class AuthProviderSecurityContextTest {
     @Test
     void shouldReturnExistingSecurityContextWhenContextAlreadyExists() {
         SecurityContext existingContext = buildContext("existing-user");
-        SecurityContextHolder.setContext(existingContext);
+        ThreadLocalSecurityContextHolder.setContext(existingContext);
         bindRequestAndRepository();
 
         AuthProvider authProvider = new AuthProvider(new ThrowingSessionRepository());

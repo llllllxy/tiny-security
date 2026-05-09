@@ -126,10 +126,10 @@ public class JsonUtil {
 
     /**
      * 类型转换
-     * @param fromValue
-     * @param toValueType
-     * @param <T>
-     * @return
+     * @param fromValue 源对象
+     * @param toValueType 目标对象类型
+     * @param <T> 目标对象
+     * @return 目标对象
      */
     public static <T> T convertValue(Object fromValue, Class<T> toValueType) {
         return objectMapper.convertValue(fromValue, toValueType);
