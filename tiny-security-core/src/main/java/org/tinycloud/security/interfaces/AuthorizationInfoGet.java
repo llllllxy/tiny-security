@@ -1,6 +1,6 @@
 package org.tinycloud.security.interfaces;
 
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 
 import java.util.Set;
 

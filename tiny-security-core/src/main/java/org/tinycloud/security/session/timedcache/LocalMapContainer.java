@@ -1,4 +1,4 @@
-package org.tinycloud.security.provider.timedcache;
+package org.tinycloud.security.session.timedcache;
 
 import java.util.Set;
 

@@ -2,10 +2,9 @@ package org.tinycloud.security.authorization;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextHolder;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
@@ -47,17 +46,17 @@ public class DefaultAuthorizationManager implements AuthorizationManager {
             context = new SecurityContext();
         }
         LoginSubject subject = context.getLoginSubject();
-        if (permissionMode == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
+        if (this.permissionMode == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
             return AuthorizationDecision.grant();
         }
 
-        Set<String> roleSet = authorizationInfoGet != null ? authorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
-        Set<String> permissionSet = authorizationInfoGet != null ? authorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
+        Set<String> roleSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
+        Set<String> permissionSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
+        // 保存角色权限数据，引用传递，所以修改后会被保存到安全上下文中
         context.setRoleSet(roleSet);
         context.setPermissionSet(permissionSet);
-        SecurityContextHolder.setContext(context);
 
-        boolean hasPermission = permissionMode == PermissionMode.URL
+        boolean hasPermission = this.permissionMode == PermissionMode.URL
                 ? AuthUtil.checkUrlPermission(request)
                 : AuthUtil.checkPermission(method);
         boolean hasRole = AuthUtil.checkRole(method);

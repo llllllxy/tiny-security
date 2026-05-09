@@ -6,7 +6,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.util.Collections;

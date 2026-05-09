@@ -18,7 +18,7 @@ import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
@@ -53,22 +53,21 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
         if (AuthUtil.checkIgnore(method)) {
             return true;
         }
-        SecurityContext context = resolveSecurityContextRepository().loadContext(request);
-        LoginSubject subject = context == null ? null : context.getLoginSubject();
+        SecurityContext context = this.resolveSecurityContextRepository().loadContext(request);
+        LoginSubject subject = (context == null ? null : context.getLoginSubject());
         if (Objects.isNull(subject)) {
             // 未登录属于认证失败，返回401语义更准确
             throw new UnAuthorizedException();
         }
         // 如果权限模式为注解并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
-        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION
-                && !AuthUtil.hasAuthorizationAnnotation(method)) {
+        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
             return true;
         }
-        AuthorizationDecision decision = resolveAuthorizationManager().authorize(request, method, context);
+        AuthorizationDecision decision = this.resolveAuthorizationManager().authorize(request, method, context);
         if (decision.isGranted()) {
             return true;
         } else {
-            resolveSecurityEventPublisher().publishAuthorizationFailure(new AuthorizationFailureEvent(
+            this.resolveSecurityEventPublisher().publishAuthorizationFailure(new AuthorizationFailureEvent(
                     subject.getLoginId(),
                     request.getRequestURI(),
                     method.getName(),

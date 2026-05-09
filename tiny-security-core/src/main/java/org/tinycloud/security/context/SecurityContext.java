@@ -1,7 +1,5 @@
 package org.tinycloud.security.context;
 
-import org.tinycloud.security.provider.LoginSubject;
-
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Collections;

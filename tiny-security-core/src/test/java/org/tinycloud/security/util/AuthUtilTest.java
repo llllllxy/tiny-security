@@ -10,9 +10,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.SecurityContextRepository;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -22,7 +22,7 @@ class AuthUtilTest {
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextHolder.clearContext();
         GlobalConfigUtils.clearGlobalConfig();
         RequestContextHolder.resetRequestAttributes();
     }
@@ -30,7 +30,7 @@ class AuthUtilTest {
     @Test
     void shouldPreferSecurityContextRepositoryWhenCustomRepositoryIsConfigured() {
         SecurityContext holderContext = createContext("holder-user");
-        SecurityContextHolder.setContext(holderContext);
+        ThreadLocalSecurityContextHolder.setContext(holderContext);
 
         SecurityContext repositoryContext = createContext("repo-user");
         GlobalConfig globalConfig = new GlobalConfig();
@@ -49,7 +49,7 @@ class AuthUtilTest {
     @Test
     void shouldReturnNullWhenNoRequestContext() {
         SecurityContext holderContext = createContext("holder-user");
-        SecurityContextHolder.setContext(holderContext);
+        ThreadLocalSecurityContextHolder.setContext(holderContext);
 
         SecurityContext actual = AuthUtil.getSecurityContext();
         assertNull(actual);
