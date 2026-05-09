@@ -6,10 +6,10 @@ package org.tinycloud.security.context;
  * @author liuxingyu01
  * @since 2026-04-28
  */
-public class SecurityContextHolder {
+public class ThreadLocalSecurityContextHolder {
     private static final ThreadLocal<SecurityContext> CONTEXT_HOLDER = new ThreadLocal<>();
 
-    private SecurityContextHolder() {
+    private ThreadLocalSecurityContextHolder() {
     }
 
     /**

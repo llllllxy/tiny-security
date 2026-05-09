@@ -8,6 +8,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.event.LoginFailureEvent;

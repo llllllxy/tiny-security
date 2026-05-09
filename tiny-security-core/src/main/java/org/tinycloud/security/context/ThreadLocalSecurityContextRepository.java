@@ -18,7 +18,7 @@ public class ThreadLocalSecurityContextRepository implements SecurityContextRepo
      */
     @Override
     public SecurityContext loadContext(HttpServletRequest request) {
-        return SecurityContextHolder.getContext();
+        return ThreadLocalSecurityContextHolder.getContext();
     }
 
     /**
@@ -30,7 +30,7 @@ public class ThreadLocalSecurityContextRepository implements SecurityContextRepo
      */
     @Override
     public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
-        SecurityContextHolder.setContext(context);
+        ThreadLocalSecurityContextHolder.setContext(context);
     }
 
     /**
@@ -41,6 +41,6 @@ public class ThreadLocalSecurityContextRepository implements SecurityContextRepo
      */
     @Override
     public void clearContext(HttpServletRequest request, HttpServletResponse response) {
-        SecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextHolder.clearContext();
     }
 }

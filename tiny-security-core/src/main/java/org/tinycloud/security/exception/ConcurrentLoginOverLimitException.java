@@ -2,6 +2,8 @@ package org.tinycloud.security.exception;
 
 import org.tinycloud.security.consts.AuthConsts;
 
+import java.io.Serial;
+
 /**
  * <p>
  * 并发登录超过最大限制异常
@@ -11,6 +13,8 @@ import org.tinycloud.security.consts.AuthConsts;
  * @since 2025/11/27 21:58
  */
 public class ConcurrentLoginOverLimitException extends TinySecurityException {
+    @Serial
+    private static final long serialVersionUID = 8109117719383003890L;
 
     public ConcurrentLoginOverLimitException() {
         super(AuthConsts.CODE_CONCURRENT_LOGIN_OVER_LIMIT, "并发登录超过最大限制!");

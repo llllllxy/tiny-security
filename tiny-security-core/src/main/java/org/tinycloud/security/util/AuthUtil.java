@@ -13,7 +13,7 @@ import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.enums.Logical;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 
 import java.lang.reflect.Method;
 import java.util.Collection;

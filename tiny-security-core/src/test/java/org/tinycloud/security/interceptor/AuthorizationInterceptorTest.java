@@ -11,7 +11,7 @@ import org.tinycloud.security.authorization.DefaultAuthorizationManager;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
@@ -21,7 +21,7 @@ import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.provider.LoginSubject;
+import org.tinycloud.security.context.LoginSubject;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -35,7 +35,7 @@ class AuthorizationInterceptorTest {
 
     @AfterEach
     void tearDown() {
-        SecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextHolder.clearContext();
         GlobalConfigUtils.clearGlobalConfig();
     }
 
@@ -59,7 +59,7 @@ class AuthorizationInterceptorTest {
         subject.setLoginId("user-1");
         SecurityContext context = new SecurityContext();
         context.setLoginSubject(subject);
-        SecurityContextHolder.setContext(context);
+        ThreadLocalSecurityContextHolder.setContext(context);
 
         boolean allowed = new AuthorizationInterceptor().preHandle(
                 request(),
@@ -87,7 +87,7 @@ class AuthorizationInterceptorTest {
         subject.setLoginId("user-1");
         SecurityContext context = new SecurityContext();
         context.setLoginSubject(subject);
-        SecurityContextHolder.setContext(context);
+        ThreadLocalSecurityContextHolder.setContext(context);
         CapturingSecurityEventPublisher eventPublisher = new CapturingSecurityEventPublisher();
         initGlobalConfig(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), eventPublisher);
 
