@@ -5,16 +5,16 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>top.lxyccc</groupId>
-        <artifactId>tiny-security-parent3</artifactId>
+        <artifactId>tiny-security-parent</artifactId>
         <version>${revision}</version>
     </parent>
 
-    <artifactId>tiny-security-boot3-starter</artifactId>
-    <name>tiny-security-boot3-starter</name>
+    <artifactId>tiny-security-boot-starter</artifactId>
+    <name>tiny-security-boot-starter</name>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -44,7 +44,7 @@
         </dependency>
         <dependency>
             <groupId>top.lxyccc</groupId>
-            <artifactId>tiny-security-core3</artifactId>
+            <artifactId>tiny-security-core</artifactId>
         </dependency>
     </dependencies>
 </project>

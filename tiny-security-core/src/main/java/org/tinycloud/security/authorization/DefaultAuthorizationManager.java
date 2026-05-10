@@ -1,6 +1,6 @@
 package org.tinycloud.security.authorization;
 
-import jakarta.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletRequest;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
