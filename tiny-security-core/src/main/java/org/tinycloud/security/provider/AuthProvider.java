@@ -270,12 +270,21 @@ public class AuthProvider {
     }
 
     /**
+     * 从安全上下文获取当前登录用户。
+     *
+     * @return 登录账号ID
+     */
+    public LoginSubject getLoginSubject() {
+        return this.getSecurityContext().getLoginSubject();
+    }
+
+    /**
      * 从安全上下文获取当前登录账号ID。
      *
      * @return 登录账号ID
      */
     public Object getLoginId() {
-        return this.getSecurityContext().getLoginSubject().getLoginId();
+        return this.getLoginSubject().getLoginId();
     }
 
     /**
