@@ -1,7 +1,7 @@
 package org.tinycloud.security.context;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 /**
  * 安全上下文仓储接口定义，默认实现为 ThreadLocalSecurityContextRepository
