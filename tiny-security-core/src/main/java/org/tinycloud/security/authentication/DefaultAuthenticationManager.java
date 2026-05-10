@@ -1,6 +1,6 @@
 package org.tinycloud.security.authentication;
 
-import jakarta.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletRequest;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.context.SecurityContext;
