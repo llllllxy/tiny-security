@@ -264,10 +264,8 @@ Object loginId = authProvider.getLoginId();
 String loginIdStr = authProvider.getLoginIdAsString();
 Long loginIdLong = authProvider.getLoginIdAsLong();
 
-
 // 获取登录安全上下文，无会话时会抛出异常
-SecurityContext securityContext = authProvider.getSecurityContext();
-LoginSubject loginSubject = securityContext.getLoginSubject();
+LoginSubject loginSubject = authProvider.getLoginSubject();
 ```
 
 也可使用静态工具类 `AuthUtil`：
@@ -275,9 +273,8 @@ LoginSubject loginSubject = securityContext.getLoginSubject();
 // （这个方法在无会话时不会抛出异常，而是返回null），还可以直接getLoginIdAsString()， getLoginIdAsInt()， getLoginIdAsLong()
 Object loginId = AuthUtil.getLoginId();
 
-
 // （这个方法在无会话时不会抛出异常，而是返回null）
-SecurityContext securityContext = AuthUtil.getLoginSubject();
+SecurityContext securityContext = AuthUtil.getSecurityContext();
 LoginSubject loginSubject = securityContext == null ? null : securityContext.getLoginSubject();
 ```
 
