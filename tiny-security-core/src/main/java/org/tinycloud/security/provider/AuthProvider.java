@@ -6,9 +6,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.context.SecurityContextUtils;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.NoopSecurityEventPublisher;
@@ -16,10 +17,10 @@ import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JwtUtil;
+import org.tinycloud.security.web.WebRequestUtils;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken(HttpServletRequest request) {
-        String jwtToken = AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
+        String jwtToken = WebRequestUtils.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -69,7 +70,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken() {
-        String jwtToken = AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
+        String jwtToken = WebRequestUtils.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -239,7 +240,7 @@ public class AuthProvider {
     public String login(Object loginId, Map<String, Object> extraInfo) {
         try {
             String token = this.createAuth(loginId, extraInfo);
-            CookieUtil.setCookie(AuthUtil.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
+            CookieUtil.setCookie(WebRequestUtils.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
             resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
             return token;
         } catch (RuntimeException ex) {
@@ -312,7 +313,7 @@ public class AuthProvider {
      */
     public SecurityContext getSecurityContext() {
         // 优先复用拦截器阶段已建立的上下文，避免重复构建
-        SecurityContext context = AuthUtil.getSecurityContext();
+        SecurityContext context = SecurityContextUtils.getSecurityContext();
         if (context != null && context.getLoginSubject() != null) {
             return context;
         }
