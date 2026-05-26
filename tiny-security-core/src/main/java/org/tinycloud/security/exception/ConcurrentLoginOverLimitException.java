@@ -2,7 +2,6 @@ package org.tinycloud.security.exception;
 
 import org.tinycloud.security.consts.AuthConsts;
 
-import java.io.Serial;
 
 /**
  * <p>
@@ -13,7 +12,6 @@ import java.io.Serial;
  * @since 2025/11/27 21:58
  */
 public class ConcurrentLoginOverLimitException extends TinySecurityException {
-    @Serial
     private static final long serialVersionUID = 8109117719383003890L;
 
     public ConcurrentLoginOverLimitException() {
