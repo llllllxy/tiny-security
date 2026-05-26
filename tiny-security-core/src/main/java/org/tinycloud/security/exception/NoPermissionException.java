@@ -3,13 +3,10 @@ package org.tinycloud.security.exception;
 
 import org.tinycloud.security.consts.AuthConsts;
 
-import java.io.Serial;
-
 /**
  * 无权限访问-异常
  */
 public class NoPermissionException extends TinySecurityException {
-    @Serial
     private static final long serialVersionUID = 8109117719383003895L;
 
     public NoPermissionException() {

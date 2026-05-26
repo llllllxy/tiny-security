@@ -1,6 +1,5 @@
 package org.tinycloud.security.authorization;
 
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.util.ObjectUtils;
 import org.tinycloud.security.annotation.AnnotationUtils;
 import org.tinycloud.security.annotation.RequiresPermissions;
@@ -8,6 +7,7 @@ import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.enums.Logical;
 import org.tinycloud.security.util.CommonUtil;
 
+import javax.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Set;

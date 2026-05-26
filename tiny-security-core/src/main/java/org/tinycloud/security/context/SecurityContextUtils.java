@@ -1,9 +1,9 @@
 package org.tinycloud.security.context;
 
-import jakarta.servlet.http.HttpServletRequest;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.web.WebRequestUtils;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.Set;
 
 /**

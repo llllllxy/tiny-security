@@ -1,6 +1,5 @@
 package org.tinycloud.security.context;
 
-import java.io.Serial;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.Set;
@@ -12,7 +11,6 @@ import java.util.Set;
  * @since 2026-04-28
  */
 public class SecurityContext implements Serializable {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private LoginSubject loginSubject;
