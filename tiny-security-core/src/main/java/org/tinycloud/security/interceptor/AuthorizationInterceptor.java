@@ -6,9 +6,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
+import org.tinycloud.security.annotation.AnnotationUtils;
 import org.tinycloud.security.authorization.AuthorizationDecision;
 import org.tinycloud.security.authorization.AuthorizationManager;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
@@ -18,8 +20,6 @@ import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
-import org.tinycloud.security.context.LoginSubject;
-import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
 import java.util.Objects;
@@ -50,7 +50,7 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
         }
         Method method = ((HandlerMethod) handler).getMethod();
         // 与认证拦截器保持一致：被 @Ignore 标注的接口直接放行
-        if (AuthUtil.checkIgnore(method)) {
+        if (AnnotationUtils.checkIgnore(method)) {
             return true;
         }
         SecurityContext context = this.resolveSecurityContextRepository().loadContext(request);
@@ -60,7 +60,8 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
             throw new UnAuthorizedException();
         }
         // 如果权限模式为注解并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
-        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
+        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION
+                && !AnnotationUtils.hasAuthorizationAnnotation(method)) {
             return true;
         }
         AuthorizationDecision decision = this.resolveAuthorizationManager().authorize(request, method, context);
