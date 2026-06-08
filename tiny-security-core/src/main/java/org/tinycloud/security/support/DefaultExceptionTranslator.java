@@ -1,7 +1,5 @@
 package org.tinycloud.security.support;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
@@ -10,6 +8,8 @@ import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.util.JsonUtil;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -70,8 +70,11 @@ public class DefaultExceptionTranslator implements ExceptionTranslator {
     }
 
     private int resolveCode(Exception ex, int status) {
-        if (ex instanceof TinySecurityException tinySecurityException && tinySecurityException.getCode() > 0) {
-            return tinySecurityException.getCode();
+        if (ex instanceof TinySecurityException) {
+            TinySecurityException tinySecurityException = (TinySecurityException) ex;
+            if (tinySecurityException.getCode() > 0) {
+                return tinySecurityException.getCode();
+            }
         }
         if (status == HttpServletResponse.SC_UNAUTHORIZED) {
             return AuthConsts.CODE_UNAUTHORIZED;

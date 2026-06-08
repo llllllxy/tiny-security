@@ -7,12 +7,12 @@ import org.springframework.http.HttpMethod;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
+import org.tinycloud.security.annotation.AnnotationUtils;
 import org.tinycloud.security.authentication.AuthenticationManager;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.exception.TinySecurityException;
-import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
 import java.util.Objects;
@@ -45,7 +45,7 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
 
         // 检查是否忽略会话验证
         Method method = ((HandlerMethod) handler).getMethod();
-        if (AuthUtil.checkIgnore(method)) {
+        if (AnnotationUtils.checkIgnore(method)) {
             return true;
         }
         SecurityContext context = this.resolveAuthenticationManager().authenticate(request);

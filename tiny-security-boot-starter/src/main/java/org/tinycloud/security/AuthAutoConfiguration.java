@@ -2,14 +2,13 @@ package org.tinycloud.security;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,7 +43,6 @@ import org.tinycloud.security.support.TinySecurityHandlerExceptionResolver;
 import org.tinycloud.security.util.VersionUtil;
 
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * <p>
@@ -57,18 +55,32 @@ import java.util.function.Consumer;
 @ConditionalOnClass({HandlerInterceptor.class, WebMvcConfigurer.class})
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationContextAware, ApplicationListener<ContextRefreshedEvent> {
+public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListener<ContextRefreshedEvent> {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
     @Autowired
     private AuthProperties authProperties;
 
-    private ApplicationContext applicationContext;
+    @Autowired
+    private ObjectProvider<SessionRepository> sessionRepositoryProvider;
 
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        this.applicationContext = applicationContext;
-    }
+    @Autowired
+    private ObjectProvider<AuthProvider> authProviderProvider;
+
+    @Autowired
+    private ObjectProvider<AuthenticationManager> authenticationManagerProvider;
+
+    @Autowired
+    private ObjectProvider<AuthorizationManager> authorizationManagerProvider;
+
+    @Autowired
+    private ObjectProvider<SecurityContextRepository> securityContextRepositoryProvider;
+
+    @Autowired
+    private ObjectProvider<SecurityEventPublisher> securityEventPublisherProvider;
+
+    @Autowired
+    private ObjectProvider<AuthorizationInfoGet> authorizationInfoGetProvider;
 
     /**
      * 添加拦截器
@@ -109,14 +121,14 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         globalConfig.setMaxConcurrentLogins(authProperties.getMaxConcurrentLogins());
         /* 获取自定义的（ID生成器） */
 
-        this.getBeanThen(SessionRepository.class, globalConfig::setSessionRepository);
-        this.getBeanThen(AuthProvider.class, globalConfig::setAuthProvider);
-        this.getBeanThen(AuthenticationManager.class, globalConfig::setAuthenticationManager);
-        this.getBeanThen(AuthorizationManager.class, globalConfig::setAuthorizationManager);
-        this.getBeanThen(SecurityContextRepository.class, globalConfig::setSecurityContextRepository);
-        this.getBeanThen(SecurityEventPublisher.class, globalConfig::setSecurityEventPublisher);
+        sessionRepositoryProvider.ifAvailable(globalConfig::setSessionRepository);
+        authProviderProvider.ifAvailable(globalConfig::setAuthProvider);
+        authenticationManagerProvider.ifAvailable(globalConfig::setAuthenticationManager);
+        authorizationManagerProvider.ifAvailable(globalConfig::setAuthorizationManager);
+        securityContextRepositoryProvider.ifAvailable(globalConfig::setSecurityContextRepository);
+        securityEventPublisherProvider.ifAvailable(globalConfig::setSecurityEventPublisher);
         /* 获取自定义的（AuthorizationInfoGetInterface */
-        this.getBeanThen(AuthorizationInfoGet.class, globalConfig::setAuthorizationInfoGet);
+        authorizationInfoGetProvider.ifAvailable(globalConfig::setAuthorizationInfoGet);
         GlobalConfigUtils.setGlobalConfig(globalConfig);
 
         if (logger.isInfoEnabled()) {
@@ -131,11 +143,13 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
      * @return 会话仓储
      */
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "redis")
+    @ConditionalOnClass(StringRedisTemplate.class)
+    @ConditionalOnBean(StringRedisTemplate.class)
+    @ConditionalOnMissingBean(SessionRepository.class)
     @Bean
     public SessionRepository redisSessionRepository(@Autowired StringRedisTemplate stringRedisTemplate) {
         if (stringRedisTemplate == null) {
-            logger.error("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
-            return null;
+            throw new IllegalStateException("AuthAutoConfiguration: Bean StringRedisTemplate is null!");
         }
         logger.info("RedisSessionRepository is running!");
         return new RedisSessionRepository(stringRedisTemplate);
@@ -148,11 +162,13 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
      * @return 会话仓储
      */
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "jdbc")
+    @ConditionalOnClass(JdbcTemplate.class)
+    @ConditionalOnBean(JdbcTemplate.class)
+    @ConditionalOnMissingBean(SessionRepository.class)
     @Bean
     public SessionRepository jdbcSessionRepository(@Autowired JdbcTemplate jdbcTemplate) {
         if (jdbcTemplate == null) {
-            logger.error("AuthAutoConfiguration: Bean JdbcTemplate is null!");
-            return null;
+            throw new IllegalStateException("AuthAutoConfiguration: Bean JdbcTemplate is null!");
         }
         logger.info("JdbcSessionRepository is running!");
         return new JdbcSessionRepository(jdbcTemplate, authProperties.getTableName());
@@ -163,6 +179,7 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
      *
      * @return 会话仓储
      */
+    @ConditionalOnMissingBean(SessionRepository.class)
     @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "single", matchIfMissing = true)
     @Bean
     public SessionRepository singleSessionRepository() {
@@ -255,17 +272,5 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationConte
         return new TinySecurityHandlerExceptionResolver(exceptionTranslator);
     }
 
-    /**
-     * 根据Class<T>获取Bean
-     *
-     * @param clazz    Class
-     * @param <T>      泛型
-     * @param consumer 操作
-     */
-    public <T> void getBeanThen(Class<T> clazz, Consumer<T> consumer) {
-        if (this.applicationContext.getBeanNamesForType(clazz, false, false).length > 0) {
-            consumer.accept(this.applicationContext.getBean(clazz));
-        }
-    }
 }
 
