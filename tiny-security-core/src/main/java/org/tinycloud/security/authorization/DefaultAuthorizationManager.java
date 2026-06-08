@@ -1,11 +1,11 @@
 package org.tinycloud.security.authorization;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.tinycloud.security.annotation.AnnotationUtils;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.context.LoginSubject;
-import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -46,7 +46,7 @@ public class DefaultAuthorizationManager implements AuthorizationManager {
             context = new SecurityContext();
         }
         LoginSubject subject = context.getLoginSubject();
-        if (this.permissionMode == PermissionMode.ANNOTATION && !AuthUtil.hasAuthorizationAnnotation(method)) {
+        if (this.permissionMode == PermissionMode.ANNOTATION && !AnnotationUtils.hasAuthorizationAnnotation(method)) {
             return AuthorizationDecision.grant();
         }
 
@@ -57,9 +57,9 @@ public class DefaultAuthorizationManager implements AuthorizationManager {
         context.setPermissionSet(permissionSet);
 
         boolean hasPermission = this.permissionMode == PermissionMode.URL
-                ? AuthUtil.checkUrlPermission(request)
-                : AuthUtil.checkPermission(method);
-        boolean hasRole = AuthUtil.checkRole(method);
+                ? AuthorizationEvaluator.checkUrlPermission(request, permissionSet)
+                : AuthorizationEvaluator.checkPermission(method, permissionSet);
+        boolean hasRole = AuthorizationEvaluator.checkRole(method, roleSet);
         return hasPermission && hasRole ? AuthorizationDecision.grant() : AuthorizationDecision.deny();
     }
 }
