@@ -1,12 +1,11 @@
 package org.tinycloud.security.authorization;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.util.ObjectUtils;
+import org.springframework.util.*;
 import org.tinycloud.security.annotation.AnnotationUtils;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.enums.Logical;
-import org.tinycloud.security.util.CommonUtil;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
@@ -19,6 +18,12 @@ import java.util.Set;
  * @since 2026-05-26
  */
 public final class AuthorizationEvaluator {
+
+    /**
+     * AntPathMatcher 中的方法是线程安全的，通常建议在应用中共享同一个实例以减少开销：
+     */
+    private static final PathMatcher MATCHER = new AntPathMatcher();
+
 
     /**
      * 禁止实例化授权计算工具类。
@@ -41,7 +46,7 @@ public final class AuthorizationEvaluator {
         if (permissionSet == null || permissionSet.isEmpty()) {
             return false;
         }
-        return CommonUtil.matchPaths(permissionSet, path);
+        return matchPaths(permissionSet, path);
     }
 
     /**
@@ -209,7 +214,87 @@ public final class AuthorizationEvaluator {
             return true;
         }
         for (String pattern : list) {
-            if (CommonUtil.vagueMatch(pattern, element)) {
+            if (vagueMatch(pattern, element)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 字符串模糊匹配
+     * <p> example:
+     * <p> user* user-add   --  true
+     * <p> user* art-add    --  false
+     * <p> art.* art.add    --  true
+     * <p> art.* art-add    --  false
+     *
+     * @param pattern 表达式
+     * @param str     待匹配的字符串
+     * @return 是否可以匹配
+     */
+    public static boolean vagueMatch(String pattern, String str) {
+        // 两者均为 null 时，直接返回 true
+        if (pattern == null && str == null) {
+            return true;
+        }
+        // 两者其一为 null 时，直接返回 false
+        if (pattern == null || str == null) {
+            return false;
+        }
+        // 如果表达式不带有*号，则只需简单equals即可 (这样可以使速度提升200倍左右)
+        if (!pattern.contains("*")) {
+            return pattern.equals(str);
+        }
+        // 深入匹配
+        return vagueMatchMethod(pattern, str);
+    }
+
+    /**
+     * 字符串模糊匹配
+     *
+     * @param pattern 表达式
+     * @param str     待匹配的字符串
+     * @return 是否可以匹配
+     */
+    private static boolean vagueMatchMethod(String pattern, String str) {
+        int m = str.length();
+        int n = pattern.length();
+        boolean[][] dp = new boolean[m + 1][n + 1];
+        dp[0][0] = true;
+        for (int i = 1; i <= n; ++i) {
+            if (pattern.charAt(i - 1) == '*') {
+                dp[0][i] = true;
+            } else {
+                break;
+            }
+        }
+        for (int i = 1; i <= m; ++i) {
+            for (int j = 1; j <= n; ++j) {
+                if (pattern.charAt(j - 1) == '*') {
+                    dp[i][j] = dp[i][j - 1] || dp[i - 1][j];
+                } else if (str.charAt(i - 1) == pattern.charAt(j - 1)) {
+                    dp[i][j] = dp[i - 1][j - 1];
+                }
+            }
+        }
+        return dp[m][n];
+    }
+
+
+    /**
+     * 匹配配置路径集合和当前请求路径(基于spring自带的AntPathMatcher，支持spring通配符'{}','*','**','?')
+     *
+     * @param configPaths 配置路径
+     * @param requestPath 请求路径
+     * @return false未匹配成功 true匹配成功
+     */
+    public static boolean matchPaths(Collection<String> configPaths, String requestPath) {
+        if (CollectionUtils.isEmpty(configPaths) || !StringUtils.hasLength(requestPath)) {
+            return false;
+        }
+        for (String configPath : configPaths) {
+            if (StringUtils.hasLength(configPath) && MATCHER.match(configPath, requestPath)) {
                 return true;
             }
         }
