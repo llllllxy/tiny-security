@@ -36,16 +36,6 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 - 无缝适配前后端分离与不分离项目
 - 完善的文档，包括使用说明、API文档、最佳实践等
 
----
-
-# 1.1、V2兼容架构（演进中）
-
-从 `1.2.7` 的演进版本开始，框架在不破坏原有 `AuthProvider` 使用方式的前提下，逐步引入 V2 分层：
-- `SessionRepository`：会话读写抽象层（当前默认由 `AuthProvider` 适配）
-- `AuthenticationManager`：认证管理器（负责凭证校验与会话刷新）
-- `AuthorizationManager`：授权管理器（负责注解/URL 权限决策）
-
-当前仍兼容原有 API，用于平滑迁移。你可以继续使用既有接入代码，同时按需扩展上述三个组件。
 
 ---
 
@@ -65,7 +55,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.2.7</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 
@@ -74,7 +64,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.2.7</version>
+    <version>1.3.0</version>
 </dependency>
 ```
 
