@@ -1,6 +1,5 @@
 package org.tinycloud.security.util.idgen;
 
-import java.io.Serial;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
@@ -15,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @version 2022-05-21 9:53
  **/
 public final class ObjectId implements Comparable<ObjectId>, Serializable {
-    @Serial
     private static final long serialVersionUID = 3670079982654483072L;
 
     private static final int RANDOM_VALUE1;

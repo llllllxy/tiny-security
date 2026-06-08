@@ -1,7 +1,5 @@
 package org.tinycloud.security.util;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -9,14 +7,15 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
-import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.context.SecurityContext;
+import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthUtilTest {
 

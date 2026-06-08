@@ -5,8 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.util.Collections;
@@ -48,13 +48,13 @@ public class RedisSessionRepository implements SessionRepository {
                 throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
             }
             String credentials = subject.getCredentials();
+            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins);
             this.redisTemplate.opsForValue().set(
                     AuthConsts.AUTH_CREDENTIALS_KEY + credentials,
                     JsonUtil.writeValueAsString(subject),
                     timeoutSeconds,
                     TimeUnit.SECONDS
             );
-            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins);
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;
