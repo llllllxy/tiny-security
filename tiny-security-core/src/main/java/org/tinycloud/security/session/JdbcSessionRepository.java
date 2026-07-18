@@ -2,10 +2,11 @@ package org.tinycloud.security.session;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.Assert;
-import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.time.LocalDateTime;
@@ -22,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  * @author liuxingyu01
  * @since 2026-04-28
  */
-public class JdbcSessionRepository implements SessionRepository {
+public class JdbcSessionRepository implements SessionRepository, DisposableBean {
     private static final Logger log = LoggerFactory.getLogger(JdbcSessionRepository.class);
 
     private final JdbcTemplate jdbcTemplate;
@@ -227,6 +228,17 @@ public class JdbcSessionRepository implements SessionRepository {
             log.info("JdbcSessionRepository clean num: {}", num);
         } catch (Exception e) {
             log.error("JdbcSessionRepository clean failed, Exception: ", e);
+        }
+    }
+
+    /**
+     * 在 Spring 容器关闭时停止过期会话清理线程，防止线程泄露。
+     */
+    @Override
+    public void destroy() {
+        ScheduledExecutorService executor = this.executorService;
+        if (executor != null) {
+            executor.shutdownNow();
         }
     }
 }

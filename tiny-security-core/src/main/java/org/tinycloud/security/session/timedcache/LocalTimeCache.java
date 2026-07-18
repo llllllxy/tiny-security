@@ -186,16 +186,9 @@ public class LocalTimeCache {
     private volatile ScheduledExecutorService executorService;
 
     /**
-     * 是否继续执行数据清理的线程标记
-     */
-    private volatile boolean refreshFlag;
-
-    /**
      * 初始化定时任务
      */
     public void initRefreshThread() {
-        // 启动定时刷新
-        this.refreshFlag = true;
         // 双重校验构造一个单例的ScheduledThreadPool
         if (this.executorService == null) {
             synchronized (LocalTimeCache.class) {
@@ -204,10 +197,6 @@ public class LocalTimeCache {
                     this.executorService.scheduleWithFixedDelay(() -> {
                         log.info("LocalTimeCache - refresh - at ：{}", CommonUtil.getCurrentTime());
                         try {
-                            // 如果已经被标记为结束
-                            if (!refreshFlag) {
-                                return;
-                            }
                             // 执行清理方法
                             refreshDataMap();
                         } catch (Exception e2) {
@@ -221,9 +210,12 @@ public class LocalTimeCache {
     }
 
     /**
-     * 结束定时任务
+     * 结束定时任务并停止调度线程。
      */
     public void endRefreshThread() {
-        this.refreshFlag = false;
+        ScheduledExecutorService executor = this.executorService;
+        if (executor != null) {
+            executor.shutdownNow();
+        }
     }
 }
