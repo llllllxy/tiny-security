@@ -50,10 +50,16 @@ public class DefaultAuthorizationManager implements AuthorizationManager {
             return AuthorizationDecision.grant();
         }
 
-        Set<String> roleSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
-        Set<String> permissionSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
-        // 保存角色权限数据，引用传递，所以修改后会被保存到安全上下文中
+        Set<String> roleSet = Collections.emptySet();
+        if (AnnotationUtils.findRequiresRoles(method) != null) {
+            roleSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
+        }
         context.setRoleSet(roleSet);
+
+        Set<String> permissionSet = Collections.emptySet();
+        if (this.permissionMode == PermissionMode.URL || AnnotationUtils.findRequiresPermissions(method) != null) {
+            permissionSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
+        }
         context.setPermissionSet(permissionSet);
 
         boolean hasPermission = this.permissionMode == PermissionMode.URL
