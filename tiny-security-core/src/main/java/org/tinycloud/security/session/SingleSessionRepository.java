@@ -2,10 +2,11 @@ package org.tinycloud.security.session;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.util.Assert;
 import org.tinycloud.security.consts.AuthConsts;
-import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.session.timedcache.LocalMapContainerByConcurrentHashMap;
 import org.tinycloud.security.session.timedcache.LocalTimeCache;
 
@@ -22,7 +23,7 @@ import java.util.stream.Collectors;
  * @author liuxingyu01
  * @since 2026-04-28
  */
-public class SingleSessionRepository implements SessionRepository {
+public class SingleSessionRepository implements SessionRepository, DisposableBean {
     private static final Logger log = LoggerFactory.getLogger(SingleSessionRepository.class);
 
     /**
@@ -217,5 +218,13 @@ public class SingleSessionRepository implements SessionRepository {
         if (removed && credentialsList.isEmpty()) {
             loginIdToCredentialsMap.remove(loginIdStr);
         }
+    }
+
+    /**
+     * 在 Spring 容器关闭时停止本地缓存清理线程，防止线程泄露。
+     */
+    @Override
+    public void destroy() {
+        this.timedCache.endRefreshThread();
     }
 }
