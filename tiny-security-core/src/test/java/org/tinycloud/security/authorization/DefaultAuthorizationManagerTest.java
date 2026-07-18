@@ -9,16 +9,17 @@ import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.config.GlobalConfig;
 import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.context.LoginSubject;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -124,6 +125,86 @@ class DefaultAuthorizationManagerTest {
         assertTrue(decision.isGranted());
     }
 
+    /**
+     * 验证仅声明角色注解时只读取角色集合，不触发权限集合查询。
+     *
+     * @throws Exception 反射获取测试方法失败时抛出
+     */
+    @Test
+    void shouldLoadOnlyRolesForRoleOnlyAnnotation() throws Exception {
+        AtomicInteger permissionQueryCount = new AtomicInteger();
+        AtomicInteger roleQueryCount = new AtomicInteger();
+        DefaultAuthorizationManager authorizationManager = new DefaultAuthorizationManager(
+                PermissionMode.ANNOTATION,
+                countingAuthorizationInfo(permissionQueryCount, roleQueryCount)
+        );
+        SecurityContext context = new SecurityContext();
+        context.setLoginSubject(loginSubject());
+
+        AuthorizationDecision decision = authorizationManager.authorize(request("/demo"), method("roleSecured"), context);
+
+        assertTrue(decision.isGranted());
+        assertTrue(permissionQueryCount.get() == 0);
+        assertTrue(roleQueryCount.get() == 1);
+    }
+
+    /**
+     * 验证仅声明权限注解时只读取权限集合，不触发角色集合查询。
+     *
+     * @throws Exception 反射获取测试方法失败时抛出
+     */
+    @Test
+    void shouldLoadOnlyPermissionsForPermissionOnlyAnnotation() throws Exception {
+        AtomicInteger permissionQueryCount = new AtomicInteger();
+        AtomicInteger roleQueryCount = new AtomicInteger();
+        DefaultAuthorizationManager authorizationManager = new DefaultAuthorizationManager(
+                PermissionMode.ANNOTATION,
+                countingAuthorizationInfo(permissionQueryCount, roleQueryCount)
+        );
+        SecurityContext context = new SecurityContext();
+        context.setLoginSubject(loginSubject());
+
+        AuthorizationDecision decision = authorizationManager.authorize(request("/demo"), method("secured"), context);
+
+        assertTrue(decision.isGranted());
+        assertTrue(permissionQueryCount.get() == 1);
+        assertTrue(roleQueryCount.get() == 0);
+    }
+
+    /**
+     * 创建统计角色与权限查询次数的授权信息提供器。
+     *
+     * @param permissionQueryCount 权限集合查询计数器
+     * @param roleQueryCount       角色集合查询计数器
+     * @return 授权信息提供器
+     */
+    private AuthorizationInfoGet countingAuthorizationInfo(AtomicInteger permissionQueryCount, AtomicInteger roleQueryCount) {
+        return new AuthorizationInfoGet() {
+            @Override
+            public Set<String> getPermissionSet(LoginSubject subject) {
+                permissionQueryCount.incrementAndGet();
+                return Collections.singleton("user:read");
+            }
+
+            @Override
+            public Set<String> getRoleSet(LoginSubject subject) {
+                roleQueryCount.incrementAndGet();
+                return Collections.singleton("admin");
+            }
+        };
+    }
+
+    /**
+     * 创建用于授权测试的登录主体。
+     *
+     * @return 登录主体
+     */
+    private LoginSubject loginSubject() {
+        LoginSubject subject = new LoginSubject();
+        subject.setLoginId("user-1");
+        return subject;
+    }
+
     private AuthorizationInfoGet emptyAuthorizationInfo() {
         return new AuthorizationInfoGet() {
             @Override
@@ -165,6 +246,10 @@ class DefaultAuthorizationManagerTest {
         @RequiresPermissions("user:read")
         @RequiresRoles("admin")
         public void securedWithRole() {
+        }
+
+        @RequiresRoles("admin")
+        public void roleSecured() {
         }
     }
 }
