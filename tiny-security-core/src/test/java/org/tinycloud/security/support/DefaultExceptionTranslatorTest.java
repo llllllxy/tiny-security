@@ -56,6 +56,21 @@ class DefaultExceptionTranslatorTest {
         assertEquals("系统异常", result.body.get("message"));
     }
 
+    @Test
+    void shouldReturn200WhenForceHttpStatus200Enabled() throws Exception {
+        DefaultExceptionTranslator forced = new DefaultExceptionTranslator(true);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/secure");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        forced.translate(request, response, new UnAuthorizedException());
+
+        // 状态码被强制为 200，但业务 code 仍为 401
+        assertEquals(200, response.getStatus());
+        Map<String, Object> body = JsonUtil.readValue(response.getContentAsString(), Map.class);
+        assertEquals(AuthConsts.CODE_UNAUTHORIZED, body.get("code"));
+    }
+
     @SuppressWarnings("unchecked")
     private TranslationResult translate(TinySecurityException ex, String uri) throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();

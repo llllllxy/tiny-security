@@ -22,6 +22,33 @@ import java.util.Map;
  * @since 2026-04-28
  */
 public class DefaultExceptionTranslator implements ExceptionTranslator {
+
+    /**
+     * 是否强制以 HTTP 200 返回异常响应。
+     * <ul>
+     *     <li>true：无论实际异常类型如何，统一返回 200，由响应体中的 code 字段表达业务错误；</li>
+     *     <li>false（默认）：返回真实错误状态码（401/403/409/500）。</li>
+     * </ul>
+     */
+    private final boolean forceHttpStatus200;
+
+    /**
+     * 默认构造，等价于 {@link #DefaultExceptionTranslator(boolean)} 传入 false。
+     * 保留无参构造以兼容旧用法与单元测试。
+     */
+    public DefaultExceptionTranslator() {
+        this(false);
+    }
+
+    /**
+     * 构造 tiny-security 默认异常翻译器。
+     *
+     * @param forceHttpStatus200 是否强制以 HTTP 200 返回异常响应
+     */
+    public DefaultExceptionTranslator(boolean forceHttpStatus200) {
+        this.forceHttpStatus200 = forceHttpStatus200;
+    }
+
     /**
      * 将异常翻译为统一 HTTP JSON 响应。
      *
@@ -36,6 +63,8 @@ public class DefaultExceptionTranslator implements ExceptionTranslator {
         }
 
         int status = resolveStatus(ex);
+        // 响应状态码：开启强制 200 时统一返回 200，否则返回真实错误状态码
+        int responseStatus = forceHttpStatus200 ? HttpServletResponse.SC_OK : status;
         int code = resolveCode(ex, status);
         String message = resolveMessage(ex, status);
 
@@ -45,7 +74,7 @@ public class DefaultExceptionTranslator implements ExceptionTranslator {
         payload.put("path", request == null ? null : request.getRequestURI());
         payload.put("timestamp", System.currentTimeMillis());
 
-        response.setStatus(status);
+        response.setStatus(responseStatus);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType("application/json;charset=UTF-8");
         try {

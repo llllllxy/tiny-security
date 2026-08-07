@@ -233,7 +233,7 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListe
     @Bean
     @ConditionalOnMissingBean(ExceptionTranslator.class)
     public ExceptionTranslator exceptionTranslator() {
-        return new DefaultExceptionTranslator();
+        return new DefaultExceptionTranslator(authProperties.getForceHttpStatus200());
     }
 
     /**
