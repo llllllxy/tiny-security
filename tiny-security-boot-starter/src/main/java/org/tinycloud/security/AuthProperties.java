@@ -42,6 +42,15 @@ public class AuthProperties {
     private Boolean exceptionTranslationEnabled = true;
 
     /**
+     * 是否强制以 HTTP 200 返回异常响应。
+     * <ul>
+     *     <li>true：无论实际异常类型如何，统一返回 200，由响应体中的 code 字段表达业务错误；</li>
+     *     <li>false（默认）：返回真实错误状态码（401/403/409/500）。</li>
+     * </ul>
+     */
+    private Boolean forceHttpStatus200 = false;
+
+    /**
      * 拦截路径，多个路径用逗号分隔，已过期，请使用 includePath
      */
     @Deprecated
@@ -152,6 +161,14 @@ public class AuthProperties {
 
     public void setExceptionTranslationEnabled(Boolean exceptionTranslationEnabled) {
         this.exceptionTranslationEnabled = exceptionTranslationEnabled;
+    }
+
+    public Boolean getForceHttpStatus200() {
+        return forceHttpStatus200;
+    }
+
+    public void setForceHttpStatus200(Boolean forceHttpStatus200) {
+        this.forceHttpStatus200 = forceHttpStatus200;
     }
 
     @Deprecated

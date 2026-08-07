@@ -89,6 +89,8 @@ tiny-security:
    authorization-enabled: true
    # 是否启用框架默认异常翻译器（自动将框架异常转换为JSON响应），默认true
    exception-translation-enabled: true
+   # 是否强制以 HTTP 200 返回异常响应，默认false；开启后异常统一返回200，由响应体 code 字段表达真实错误
+   force-http-status-200: false
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
    # jwt密钥，不配置则使用默认值
@@ -426,6 +428,22 @@ tiny-security在会话验证失败和权限验证失败的会抛出自定义异�
 | ConcurrentLoginOverLimitException | 并发登录超过限制 | 错误信息“并发登录超过最大限制！”，错误码409 |
 
 默认情况下，框架已内置异常翻译器，会自动将上述异常转换为JSON响应（可通过 `tiny-security.exception-translation-enabled=false` 关闭）。
+
+### 2.4.1 控制异常响应的 HTTP 状态码
+
+默认情况下，框架会返回与异常对应的真实 HTTP 状态码（401 / 403 / 409 / 500），方便网关、前端按状态码做统一拦截。
+
+如果你的前端或网关希望**所有异常都统一返回 HTTP 200**，仅通过响应体里的 `code` 字段区分错误（例如某些前端框架对 4xx/5xx 有额外拦截、或需要与旧系统兼容），可开启以下配置：
+
+```yaml
+tiny-security:
+  # 是否强制以 HTTP 200 返回异常响应，默认 false
+  # true  : 异常统一返回 200，响应体 code 仍为真实业务错误码（401/403/409/500），不影响前端判错
+  # false : 返回真实错误状态码（401/403/409/500）
+  force-http-status-200: true
+```
+
+> 说明：开启 `force-http-status-200: true` 后，HTTP 状态码固定为 200，但响应体中的 `code` 字段仍然是真实的业务错误码，前端仍可据此判断具体错误类型，无需改动判错逻辑。
 
 如果你希望完全自定义返回结构，也可以自己编写全局异常处理器来接管返回：
 
