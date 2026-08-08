@@ -557,8 +557,9 @@ tiny-security:
 ```
 
 
-### 2.5.3 密码加密算法
-框架封装了一些常见的加密算法，可供使用
+### 2.5.3 密码哈希与摘要算法
+框架封装了一些常见的密码哈希与摘要算法，可供使用（如需对称/非对称加密，推荐直接使用 JDK JCA 或 Hutool、BouncyCastle 等专用密码学库）
+
 1. 摘要算法：
    支持MD5、SHA256和国密SM3算法
 ```java
@@ -584,42 +585,7 @@ tiny-security:
     new SM3Hash("123456", "323@#@$1234da").toBase64();
 ```
 
-2. 对称加密
-   支持AES256-CBC算法
-```java
-    // 原文:
-    String message = "Helloworld!";
-    System.out.println("Message: " + message);
-
-    // 使用方法（密钥长度需要为32字节，iv长度需要为16字节）
-    AESUtil aesUtils = AESUtil.builder().secretKey("1G78Av#yej%WZJ3uiSZRz9oy%UAv4AAA").ivParameter("E%BAAAUTvXfwSuGQ").build();
-
-    // 加密:
-    String encrypted = aesUtils.encrypt(message);
-    System.out.println("加密: " + encrypted);
-
-    // 解密:
-    String decrypted = aesUtils.decrypt(encrypted);
-    System.out.println("解密: " + decrypted);
-```
-
-3. 非对称加密
-   支持RSA2048加密
-```java
-    Map<String, String> pair = generateKeyPair();
-    String publicKey = pair.get("publicKey");
-    String privateKey = pair.get("privateKey");
-
-    // 使用公钥加密
-    String encryptedValue = encryptByPublicKey(publicKey, "abcdefg");
-    System.out.println(encryptedValue);
-
-    // 使用私钥解密
-    String decryptedValue = decryptByPrivateKey(privateKey, encryptedValue);
-    System.out.println(decryptedValue);
-```
-
-4. 密码哈希算法
+2. 密码哈希算法
    支持BCrypt算法
 ```java
     // 密码哈希
