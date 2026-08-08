@@ -7,9 +7,10 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.method.HandlerMethod;
 import org.tinycloud.security.annotation.Ignore;
 import org.tinycloud.security.annotation.RequiresPermissions;
+import org.tinycloud.security.authorization.AuthorizationManager;
 import org.tinycloud.security.authorization.DefaultAuthorizationManager;
-import org.tinycloud.security.config.GlobalConfig;
-import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.config.AuthProperties;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
@@ -21,7 +22,6 @@ import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.NoPermissionException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.context.LoginSubject;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -36,14 +36,13 @@ class AuthorizationInterceptorTest {
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextHolder.clearContext();
-        GlobalConfigUtils.clearGlobalConfig();
     }
 
     @Test
     void shouldSkipAuthorizationWhenIgnoreAnnotationPresent() throws Exception {
-        initGlobalConfig(PermissionMode.ANNOTATION, emptyAuthorizationInfo());
+        AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), new CapturingSecurityEventPublisher());
 
-        boolean allowed = new AuthorizationInterceptor().preHandle(
+        boolean allowed = interceptor.preHandle(
                 request(),
                 new MockHttpServletResponse(),
                 handlerMethod("ignored")
@@ -54,14 +53,14 @@ class AuthorizationInterceptorTest {
 
     @Test
     void shouldSkipAuthorizationWhenNoAuthorizationAnnotationInAnnotationMode() throws Exception {
-        initGlobalConfig(PermissionMode.ANNOTATION, emptyAuthorizationInfo());
+        AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), new CapturingSecurityEventPublisher());
         LoginSubject subject = new LoginSubject();
         subject.setLoginId("user-1");
         SecurityContext context = new SecurityContext();
         context.setLoginSubject(subject);
         ThreadLocalSecurityContextHolder.setContext(context);
 
-        boolean allowed = new AuthorizationInterceptor().preHandle(
+        boolean allowed = interceptor.preHandle(
                 request(),
                 new MockHttpServletResponse(),
                 handlerMethod("plain")
@@ -72,9 +71,9 @@ class AuthorizationInterceptorTest {
 
     @Test
     void shouldThrowUnauthorizedWhenProtectedMethodHasNoAuthenticatedSubject() throws Exception {
-        initGlobalConfig(PermissionMode.ANNOTATION, emptyAuthorizationInfo());
+        AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), new CapturingSecurityEventPublisher());
 
-        assertThrows(UnAuthorizedException.class, () -> new AuthorizationInterceptor().preHandle(
+        assertThrows(UnAuthorizedException.class, () -> interceptor.preHandle(
                 request(),
                 new MockHttpServletResponse(),
                 handlerMethod("secured")
@@ -89,9 +88,9 @@ class AuthorizationInterceptorTest {
         context.setLoginSubject(subject);
         ThreadLocalSecurityContextHolder.setContext(context);
         CapturingSecurityEventPublisher eventPublisher = new CapturingSecurityEventPublisher();
-        initGlobalConfig(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), eventPublisher);
+        AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), eventPublisher);
 
-        assertThrows(NoPermissionException.class, () -> new AuthorizationInterceptor().preHandle(
+        assertThrows(NoPermissionException.class, () -> interceptor.preHandle(
                 request(),
                 new MockHttpServletResponse(),
                 handlerMethod("secured")
@@ -99,19 +98,13 @@ class AuthorizationInterceptorTest {
         assertTrue(eventPublisher.authorizationFailureCount.get() > 0);
     }
 
-    private void initGlobalConfig(PermissionMode permissionMode, AuthorizationInfoGet authorizationInfoGet) {
-        initGlobalConfig(permissionMode, authorizationInfoGet, new CapturingSecurityEventPublisher());
-    }
-
-    private void initGlobalConfig(PermissionMode permissionMode, AuthorizationInfoGet authorizationInfoGet, SecurityEventPublisher securityEventPublisher) {
-        GlobalConfig globalConfig = new GlobalConfig();
-        globalConfig.setBanner(false);
-        globalConfig.setPermCheckMode(permissionMode);
-        globalConfig.setAuthorizationInfoGet(authorizationInfoGet);
-        globalConfig.setSecurityContextRepository(new ThreadLocalSecurityContextRepository());
-        globalConfig.setAuthorizationManager(new DefaultAuthorizationManager(permissionMode, authorizationInfoGet));
-        globalConfig.setSecurityEventPublisher(securityEventPublisher);
-        GlobalConfigUtils.setGlobalConfig(globalConfig);
+    private AuthorizationInterceptor buildInterceptor(PermissionMode permissionMode, AuthorizationInfoGet authorizationInfoGet, SecurityEventPublisher securityEventPublisher) {
+        AuthProperties properties = new AuthProperties();
+        properties.setBanner(false);
+        properties.setPermCheckMode(permissionMode);
+        AuthorizationManager authorizationManager = new DefaultAuthorizationManager(permissionMode, authorizationInfoGet);
+        ThreadLocalSecurityContextRepository scr = new ThreadLocalSecurityContextRepository();
+        return new AuthorizationInterceptor(authorizationManager, scr, securityEventPublisher, properties);
     }
 
     private AuthorizationInfoGet emptyAuthorizationInfo() {

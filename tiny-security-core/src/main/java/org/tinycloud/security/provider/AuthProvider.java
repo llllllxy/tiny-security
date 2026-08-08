@@ -5,7 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
-import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
@@ -36,15 +36,24 @@ public class AuthProvider {
     private static final Logger log = LoggerFactory.getLogger(AuthProvider.class);
 
     private final SessionRepository sessionRepository;
+    private final AuthProperties properties;
+    private final SecurityEventPublisher securityEventPublisher;
 
     /**
      * 构造 AuthProvider 外观。
      *
-     * @param sessionRepository 会话仓储
+     * @param sessionRepository       会话仓储
+     * @param properties              配置属性
+     * @param securityEventPublisher  安全事件发布器
      */
-    public AuthProvider(SessionRepository sessionRepository) {
+    public AuthProvider(SessionRepository sessionRepository,
+                        AuthProperties properties,
+                        SecurityEventPublisher securityEventPublisher) {
         Assert.notNull(sessionRepository, "SessionRepository cannot be null!");
+        Assert.notNull(properties, "AuthProperties cannot be null!");
         this.sessionRepository = sessionRepository;
+        this.properties = properties;
+        this.securityEventPublisher = securityEventPublisher;
     }
 
     /**
@@ -54,7 +63,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken(HttpServletRequest request) {
-        String jwtToken = WebRequestUtils.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
+        String jwtToken = WebRequestUtils.getToken(request, properties.getTokenName());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -70,7 +79,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken() {
-        String jwtToken = WebRequestUtils.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
+        String jwtToken = WebRequestUtils.getToken(properties.getTokenName());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -93,7 +102,7 @@ public class AuthProvider {
         if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
             token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         }
-        Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
+        Map<String, String> claims = JwtUtil.getClaims(properties.getJwtSecret(), token);
         if (Objects.isNull(claims)) {
             throw new UnAuthorizedException();
         }
@@ -131,10 +140,10 @@ public class AuthProvider {
         Assert.isTrue(loginId instanceof Number || loginId instanceof String,
                 "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
 
-        String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
+        String credentials = CredentialsGenUtil.generate(properties.getCredentialsStyle());
         Map<String, String> payload = new HashMap<>();
         payload.put("credentials", credentials);
-        String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
+        String jwtToken = JwtUtil.sign(properties.getJwtSecret(), properties.getJwtSubject(), payload);
 
         long currentTime = System.currentTimeMillis();
         int timeout = resolveTimeout();
@@ -240,7 +249,7 @@ public class AuthProvider {
     public String login(Object loginId, Map<String, Object> extraInfo) {
         try {
             String token = this.createAuth(loginId, extraInfo);
-            CookieUtil.setCookie(WebRequestUtils.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
+            CookieUtil.setCookie(WebRequestUtils.getResponse(), properties.getTokenName(), token);
             resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
             return token;
         } catch (RuntimeException ex) {
@@ -362,7 +371,7 @@ public class AuthProvider {
      * @return 超时时间，默认1800秒
      */
     private int resolveTimeout() {
-        Integer timeout = GlobalConfigUtils.getGlobalConfig().getTimeout();
+        Integer timeout = properties.getTimeout();
         return timeout == null ? 1800 : timeout;
     }
 
@@ -372,7 +381,7 @@ public class AuthProvider {
      * @return 最大并发登录数，默认0（不限制）
      */
     private int resolveMaxConcurrentLogins() {
-        Integer maxConcurrentLogins = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
+        Integer maxConcurrentLogins = properties.getMaxConcurrentLogins();
         return maxConcurrentLogins == null ? 0 : maxConcurrentLogins;
     }
 
@@ -382,9 +391,9 @@ public class AuthProvider {
      * @return 安全事件发布器
      */
     private SecurityEventPublisher resolveSecurityEventPublisher() {
-        if (GlobalConfigUtils.getGlobalConfig() == null || GlobalConfigUtils.getGlobalConfig().getSecurityEventPublisher() == null) {
+        if (securityEventPublisher == null) {
             return new NoopSecurityEventPublisher();
         }
-        return GlobalConfigUtils.getGlobalConfig().getSecurityEventPublisher();
+        return securityEventPublisher;
     }
 }

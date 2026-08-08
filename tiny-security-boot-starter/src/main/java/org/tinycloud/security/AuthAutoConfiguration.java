@@ -9,10 +9,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -23,8 +21,7 @@ import org.tinycloud.security.authentication.AuthenticationManager;
 import org.tinycloud.security.authentication.DefaultAuthenticationManager;
 import org.tinycloud.security.authorization.AuthorizationManager;
 import org.tinycloud.security.authorization.DefaultAuthorizationManager;
-import org.tinycloud.security.config.GlobalConfig;
-import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.event.SecurityEventPublisher;
@@ -40,9 +37,8 @@ import org.tinycloud.security.session.SingleSessionRepository;
 import org.tinycloud.security.support.DefaultExceptionTranslator;
 import org.tinycloud.security.support.ExceptionTranslator;
 import org.tinycloud.security.support.TinySecurityHandlerExceptionResolver;
+import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.VersionUtil;
-
-import java.util.Objects;
 
 /**
  * <p>
@@ -55,17 +51,11 @@ import java.util.Objects;
 @ConditionalOnClass({HandlerInterceptor.class, WebMvcConfigurer.class})
 @Configuration
 @EnableConfigurationProperties(AuthProperties.class)
-public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListener<ContextRefreshedEvent> {
+public class AuthAutoConfiguration implements WebMvcConfigurer {
     final static Logger logger = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
     @Autowired
     private AuthProperties authProperties;
-
-    @Autowired
-    private ObjectProvider<SessionRepository> sessionRepositoryProvider;
-
-    @Autowired
-    private ObjectProvider<AuthProvider> authProviderProvider;
 
     @Autowired
     private ObjectProvider<AuthenticationManager> authenticationManagerProvider;
@@ -79,60 +69,37 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListe
     @Autowired
     private ObjectProvider<SecurityEventPublisher> securityEventPublisherProvider;
 
-    @Autowired
-    private ObjectProvider<AuthorizationInfoGet> authorizationInfoGetProvider;
-
     /**
      * 添加拦截器
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        SecurityContextRepository scr = securityContextRepositoryProvider.getIfAvailable();
+        if (scr == null) {
+            throw new IllegalStateException("SecurityContextRepository not initialized!");
+        }
+
         // 注册会话拦截器
-        registry.addInterceptor(new AuthenticationInterceptor())
+        AuthenticationManager am = authenticationManagerProvider.getIfAvailable();
+        if (am == null) {
+            throw new IllegalStateException("AuthenticationManager not initialized!");
+        }
+        registry.addInterceptor(new AuthenticationInterceptor(am, scr))
                 .addPathPatterns(authProperties.getIncludePath())
                 .excludePathPatterns(authProperties.getExcludePath())
                 .order(-2);
+
         // 注册权限拦截器（选择性）
         if (authProperties.getAuthorizationEnabled()) {
-            registry.addInterceptor(new AuthorizationInterceptor())
+            AuthorizationManager authzM = authorizationManagerProvider.getIfAvailable();
+            if (authzM == null) {
+                throw new IllegalStateException("AuthorizationManager not initialized!");
+            }
+            SecurityEventPublisher sep = securityEventPublisherProvider.getIfAvailable();
+            registry.addInterceptor(new AuthorizationInterceptor(authzM, scr, sep, authProperties))
                     .addPathPatterns(authProperties.getIncludePath())
                     .excludePathPatterns(authProperties.getExcludePath())
                     .order(-1);
-        }
-    }
-
-    @Override
-    public void onApplicationEvent(ContextRefreshedEvent event) {
-        // 避免重复初始化
-        if (Objects.nonNull(GlobalConfigUtils.getGlobalConfig())) {
-            return;
-        }
-        GlobalConfig globalConfig = new GlobalConfig();
-        globalConfig.setVersion(VersionUtil.getVersion());
-        globalConfig.setBanner(authProperties.getBanner());
-        globalConfig.setStoreType(authProperties.getStoreType());
-        globalConfig.setTableName(authProperties.getTableName());
-        globalConfig.setTimeout(authProperties.getTimeout());
-        globalConfig.setTokenName(authProperties.getTokenName());
-        globalConfig.setCredentialsStyle(authProperties.getCredentialsStyle());
-        globalConfig.setPermCheckMode(authProperties.getPermCheckMode());
-        globalConfig.setJwtSecret(authProperties.getJwtSecret());
-        globalConfig.setJwtSubject(authProperties.getJwtSubject());
-        globalConfig.setMaxConcurrentLogins(authProperties.getMaxConcurrentLogins());
-        /* 获取自定义的（ID生成器） */
-
-        sessionRepositoryProvider.ifAvailable(globalConfig::setSessionRepository);
-        authProviderProvider.ifAvailable(globalConfig::setAuthProvider);
-        authenticationManagerProvider.ifAvailable(globalConfig::setAuthenticationManager);
-        authorizationManagerProvider.ifAvailable(globalConfig::setAuthorizationManager);
-        securityContextRepositoryProvider.ifAvailable(globalConfig::setSecurityContextRepository);
-        securityEventPublisherProvider.ifAvailable(globalConfig::setSecurityEventPublisher);
-        /* 获取自定义的（AuthorizationInfoGetInterface */
-        authorizationInfoGetProvider.ifAvailable(globalConfig::setAuthorizationInfoGet);
-        GlobalConfigUtils.setGlobalConfig(globalConfig);
-
-        if (logger.isInfoEnabled()) {
-            logger.info("Tiny-Security started successfully, version: {}.", globalConfig.getVersion());
         }
     }
 
@@ -190,13 +157,15 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListe
     /**
      * 注册默认 AuthProvider 外观实现。
      *
-     * @param sessionRepository 会话仓储
+     * @param sessionRepository       会话仓储
+     * @param securityEventPublisher  安全事件发布器
      * @return AuthProvider
      */
     @Bean
     @ConditionalOnMissingBean(AuthProvider.class)
-    public AuthProvider authProvider(SessionRepository sessionRepository) {
-        return new AuthProvider(sessionRepository);
+    public AuthProvider authProvider(SessionRepository sessionRepository,
+                                     SecurityEventPublisher securityEventPublisher) {
+        return new AuthProvider(sessionRepository, authProperties, securityEventPublisher);
     }
 
     /**
@@ -260,6 +229,24 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListe
     }
 
     /**
+     * 注册安全门面，并注入到 {@link AuthUtil} 静态外观。
+     *
+     * @param securityContextRepository 安全上下文仓储
+     * @return 安全门面
+     */
+    @Bean
+    @ConditionalOnMissingBean(TinySecurityFacade.class)
+    public TinySecurityFacade tinySecurityFacade(SecurityContextRepository securityContextRepository) {
+        TinySecurityFacade facade = new TinySecurityFacade(securityContextRepository);
+        AuthUtil.setFacade(facade);
+        if (authProperties.getBanner()) {
+            printBanner();
+        }
+        logger.info("Tiny-Security started successfully, version: {}.", VersionUtil.getVersion());
+        return facade;
+    }
+
+    /**
      * 注册默认 tiny-security 异常解析器。
      *
      * @param exceptionTranslator 异常翻译器
@@ -272,5 +259,18 @@ public class AuthAutoConfiguration implements WebMvcConfigurer, ApplicationListe
         return new TinySecurityHandlerExceptionResolver(exceptionTranslator);
     }
 
-}
+    /**
+     * 输出 banner。
+     */
+    private void printBanner() {
+        String banner = ",--------.,--.                      ,---.                              ,--.  ,--.            \n" +
+                "'--.  .--'`--',--,--, ,--. ,--.    '   .-'  ,---.  ,---.,--.,--.,--.--.`--',-'  '-.,--. ,--. \n" +
+                "   |  |   ,--.|      \\ \\  '  /     `.  `-. | .-. :| .--'|  ||  ||  .--',--.'-.  .-' \\  '  /  \n" +
+                "   |  |   |  ||  ||  |  \\   '      .-'    |\\   --.\\ `--.'  ''  '|  |   |  |  |  |    \\   '   \n" +
+                "   `--'   `--'`--''--'.-'  /       `-----'  `----' `---' `----' `--'   `--'  `--'  .-'  /    \n" +
+                "                      `---'                                                        `---'     \n" +
+                VersionUtil.getVersion();
+        System.out.println(banner);
+    }
 
+}

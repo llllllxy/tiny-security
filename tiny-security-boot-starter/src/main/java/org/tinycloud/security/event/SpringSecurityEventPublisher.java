@@ -27,7 +27,7 @@ public class SpringSecurityEventPublisher implements SecurityEventPublisher {
      */
     @Override
     public void publishLoginSuccess(LoginSuccessEvent event) {
-        applicationEventPublisher.publishEvent(event);
+        this.applicationEventPublisher.publishEvent(event);
     }
 
     /**
@@ -37,7 +37,7 @@ public class SpringSecurityEventPublisher implements SecurityEventPublisher {
      */
     @Override
     public void publishLoginFailure(LoginFailureEvent event) {
-        applicationEventPublisher.publishEvent(event);
+        this.applicationEventPublisher.publishEvent(event);
     }
 
     /**
@@ -47,6 +47,6 @@ public class SpringSecurityEventPublisher implements SecurityEventPublisher {
      */
     @Override
     public void publishAuthorizationFailure(AuthorizationFailureEvent event) {
-        applicationEventPublisher.publishEvent(event);
+        this.applicationEventPublisher.publishEvent(event);
     }
 }

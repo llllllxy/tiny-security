@@ -3,17 +3,16 @@ package org.tinycloud.security.authentication;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.tinycloud.security.config.AuthProperties;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.session.SessionRepository;
 
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class DefaultAuthenticationManagerTest {
 
@@ -56,13 +55,22 @@ class DefaultAuthenticationManagerTest {
 
     static class SimpleAuthProvider extends AuthProvider {
         SimpleAuthProvider(SessionRepository sessionRepository) {
-            super(sessionRepository);
+            super(sessionRepository, defaultProperties(), null);
         }
 
         @Override
         public String getCredentials(HttpServletRequest request) {
             return request.getHeader("token");
         }
+    }
+
+    private static AuthProperties defaultProperties() {
+        AuthProperties properties = new AuthProperties();
+        properties.setBanner(false);
+        properties.setTokenName("token");
+        properties.setJwtSecret("test-secret");
+        properties.setJwtSubject("test-subject");
+        return properties;
     }
 
     static class FakeSessionRepository implements SessionRepository {
