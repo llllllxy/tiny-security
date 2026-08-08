@@ -7,16 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.method.HandlerMethod;
+import org.tinycloud.security.authentication.AuthenticationManager;
 import org.tinycloud.security.authentication.DefaultAuthenticationManager;
-import org.tinycloud.security.config.GlobalConfig;
-import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextRepository;
-import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
+import org.tinycloud.security.config.AuthProperties;
+import org.tinycloud.security.context.*;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.session.SessionRepository;
 
 import java.lang.reflect.Method;
@@ -24,16 +20,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthenticationInterceptorTest {
 
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextHolder.clearContext();
-        GlobalConfigUtils.clearGlobalConfig();
     }
 
     @Test
@@ -46,13 +39,14 @@ class AuthenticationInterceptorTest {
 
         FakeSessionRepository sessionRepository = new FakeSessionRepository();
         sessionRepository.putSubject(subject);
-        initGlobalConfig(sessionRepository);
+
+        AuthenticationInterceptor interceptor = buildInterceptor(sessionRepository, new ThreadLocalSecurityContextRepository());
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod("GET");
-        request.addHeader("token", "cred-1");
+        request.addHeader("token", "Bearer cred-1");
 
-        boolean allowed = new AuthenticationInterceptor().preHandle(
+        boolean allowed = interceptor.preHandle(
                 request,
                 new MockHttpServletResponse(),
                 handlerMethod("secured")
@@ -64,12 +58,12 @@ class AuthenticationInterceptorTest {
 
     @Test
     void shouldThrowUnauthorizedWhenCredentialsMissing() throws Exception {
-        initGlobalConfig(new FakeSessionRepository());
+        AuthenticationInterceptor interceptor = buildInterceptor(new FakeSessionRepository(), new ThreadLocalSecurityContextRepository());
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod("GET");
 
-        assertThrows(UnAuthorizedException.class, () -> new AuthenticationInterceptor().preHandle(
+        assertThrows(UnAuthorizedException.class, () -> interceptor.preHandle(
                 request,
                 new MockHttpServletResponse(),
                 handlerMethod("secured")
@@ -87,34 +81,29 @@ class AuthenticationInterceptorTest {
         FakeSessionRepository sessionRepository = new FakeSessionRepository();
         sessionRepository.putSubject(subject);
         CountingSecurityContextRepository repository = new CountingSecurityContextRepository();
-        initGlobalConfig(sessionRepository, repository);
+
+        AuthenticationInterceptor interceptor = buildInterceptor(sessionRepository, repository);
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setMethod("GET");
-        request.addHeader("token", "cred-1");
+        request.addHeader("token", "Bearer cred-1");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        AuthenticationInterceptor interceptor = new AuthenticationInterceptor();
         interceptor.preHandle(request, response, handlerMethod("secured"));
         interceptor.afterCompletion(request, response, handlerMethod("secured"), null);
 
         assertEquals(1, repository.clearCount.get());
     }
 
-    private void initGlobalConfig(SessionRepository sessionRepository) {
-        initGlobalConfig(sessionRepository, new ThreadLocalSecurityContextRepository());
-    }
-
-    private void initGlobalConfig(SessionRepository sessionRepository, SecurityContextRepository securityContextRepository) {
-        GlobalConfig globalConfig = new GlobalConfig();
-        globalConfig.setBanner(false);
-        globalConfig.setTimeout(1800);
-        AuthProvider authProvider = new SimpleAuthProvider(sessionRepository);
-        globalConfig.setAuthProvider(authProvider);
-        globalConfig.setSessionRepository(sessionRepository);
-        globalConfig.setSecurityContextRepository(securityContextRepository);
-        globalConfig.setAuthenticationManager(new DefaultAuthenticationManager(authProvider, sessionRepository, 1800));
-        GlobalConfigUtils.setGlobalConfig(globalConfig);
+    private AuthenticationInterceptor buildInterceptor(SessionRepository sessionRepository, SecurityContextRepository securityContextRepository) {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenName("token");
+        properties.setTimeout(1800);
+        properties.setJwtSecret("test-secret");
+        properties.setJwtSubject("test-subject");
+        AuthProvider authProvider = new SimpleAuthProvider(sessionRepository, properties);
+        AuthenticationManager am = new DefaultAuthenticationManager(authProvider, sessionRepository, 1800);
+        return new AuthenticationInterceptor(am, securityContextRepository);
     }
 
     private HandlerMethod handlerMethod(String methodName) throws NoSuchMethodException {
@@ -128,13 +117,17 @@ class AuthenticationInterceptorTest {
     }
 
     static class SimpleAuthProvider extends AuthProvider {
-        SimpleAuthProvider(SessionRepository sessionRepository) {
-            super(sessionRepository);
+        SimpleAuthProvider(SessionRepository sessionRepository, AuthProperties properties) {
+            super(sessionRepository, properties, null);
         }
 
         @Override
         public String getCredentials(HttpServletRequest request) {
-            return request.getHeader("token");
+            String token = request.getHeader("token");
+            if (token != null && token.startsWith("Bearer ")) {
+                return token.substring(7);
+            }
+            return token;
         }
     }
 

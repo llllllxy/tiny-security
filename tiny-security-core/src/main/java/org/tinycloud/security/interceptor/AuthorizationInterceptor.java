@@ -9,7 +9,7 @@ import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.annotation.AnnotationUtils;
 import org.tinycloud.security.authorization.AuthorizationDecision;
 import org.tinycloud.security.authorization.AuthorizationManager;
-import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
@@ -18,7 +18,6 @@ import org.tinycloud.security.event.AuthorizationFailureEvent;
 import org.tinycloud.security.event.NoopSecurityEventPublisher;
 import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.NoPermissionException;
-import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 
 import java.lang.reflect.Method;
@@ -31,6 +30,29 @@ import java.util.Objects;
  * @version 2024-03-22-11:23
  **/
 public class AuthorizationInterceptor implements HandlerInterceptor {
+
+    private final AuthorizationManager authorizationManager;
+    private final SecurityContextRepository securityContextRepository;
+    private final SecurityEventPublisher securityEventPublisher;
+    private final AuthProperties properties;
+
+    /**
+     * 构造权限验证拦截器。
+     *
+     * @param authorizationManager       授权管理器
+     * @param securityContextRepository  安全上下文仓储
+     * @param securityEventPublisher     安全事件发布器
+     * @param properties                 配置属性
+     */
+    public AuthorizationInterceptor(AuthorizationManager authorizationManager,
+                                     SecurityContextRepository securityContextRepository,
+                                     SecurityEventPublisher securityEventPublisher,
+                                     AuthProperties properties) {
+        this.authorizationManager = authorizationManager;
+        this.securityContextRepository = securityContextRepository;
+        this.securityEventPublisher = securityEventPublisher;
+        this.properties = properties;
+    }
 
     /*
      * 进入controller层之前拦截请求
@@ -53,18 +75,18 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
         if (AnnotationUtils.checkIgnore(method)) {
             return true;
         }
-        SecurityContext context = this.resolveSecurityContextRepository().loadContext(request);
+        SecurityContext context = this.securityContextRepository.loadContext(request);
         LoginSubject subject = (context == null ? null : context.getLoginSubject());
         if (Objects.isNull(subject)) {
             // 未登录属于认证失败，返回401语义更准确
             throw new UnAuthorizedException();
         }
         // 如果权限模式为注解并且类上或方法上没有注解，则直接返回（提升性能，省的每次都调用获取权限角色列表）
-        if (GlobalConfigUtils.getGlobalConfig().getPermCheckMode() == PermissionMode.ANNOTATION
+        if (this.properties.getPermCheckMode() == PermissionMode.ANNOTATION
                 && !AnnotationUtils.hasAuthorizationAnnotation(method)) {
             return true;
         }
-        AuthorizationDecision decision = this.resolveAuthorizationManager().authorize(request, method, context);
+        AuthorizationDecision decision = this.authorizationManager.authorize(request, method, context);
         if (decision.isGranted()) {
             return true;
         } else {
@@ -98,27 +120,11 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
         // 统一交由 AuthenticationInterceptor 在请求完成后清理安全上下文
     }
 
-    private AuthorizationManager resolveAuthorizationManager() {
-        AuthorizationManager authorizationManager = GlobalConfigUtils.getGlobalConfig().getAuthorizationManager();
-        if (Objects.isNull(authorizationManager)) {
-            throw new TinySecurityException("AuthorizationManager not initialized!");
-        }
-        return authorizationManager;
-    }
-
-    private SecurityContextRepository resolveSecurityContextRepository() {
-        SecurityContextRepository repository = GlobalConfigUtils.getGlobalConfig().getSecurityContextRepository();
-        if (Objects.isNull(repository)) {
-            throw new TinySecurityException("SecurityContextRepository not initialized!");
-        }
-        return repository;
-    }
-
     private SecurityEventPublisher resolveSecurityEventPublisher() {
-        if (GlobalConfigUtils.getGlobalConfig() == null || GlobalConfigUtils.getGlobalConfig().getSecurityEventPublisher() == null) {
+        if (this.securityEventPublisher == null) {
             return new NoopSecurityEventPublisher();
         }
-        return GlobalConfigUtils.getGlobalConfig().getSecurityEventPublisher();
+        return this.securityEventPublisher;
     }
 
 }
