@@ -1,259 +1,390 @@
 package org.tinycloud.security.provider;
 
-
+import javax.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.consts.AuthConsts;
+import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.context.SecurityContext;
+import org.tinycloud.security.context.SecurityContextUtils;
+import org.tinycloud.security.event.LoginFailureEvent;
+import org.tinycloud.security.event.LoginSuccessEvent;
+import org.tinycloud.security.event.NoopSecurityEventPublisher;
+import org.tinycloud.security.event.SecurityEventPublisher;
+import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
-import org.tinycloud.security.util.AuthUtil;
+import org.tinycloud.security.session.SessionRepository;
+import org.tinycloud.security.util.CookieUtil;
+import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JwtUtil;
+import org.tinycloud.security.web.WebRequestUtils;
 
-import javax.servlet.http.HttpServletRequest;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * 操作token和会话的接口
+ * 操作 token 和会话的兼容外观类（Facade）
  *
  * @author liuxingyu01
- * @version 2023-01-06-9:33
- **/
-public interface AuthProvider {
+ * @since 2026-04-28
+ */
+public class AuthProvider {
+    private static final Logger log = LoggerFactory.getLogger(AuthProvider.class);
 
-    /*============================操作token开始=============================*/
+    private final SessionRepository sessionRepository;
 
     /**
-     * 获取当前会话的token值（jwtToken）
+     * 构造 AuthProvider 外观。
      *
-     * @param request HttpServletRequest
-     * @return String
+     * @param sessionRepository 会话仓储
      */
-    default String getToken(HttpServletRequest request) {
-        String jwtToken = AuthUtil.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
-        // 第1步：先判断jwtToken是否为空
-        if (!StringUtils.hasText(jwtToken)) {
-            throw new UnAuthorizedException();
-        }
-        // 第2步：校验token的格式是否正确
-        if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            // 去除TOKEN_PREFIX
-            jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
-        } else { // token不是以TOKEN_PREFIX开头的，不合格
-            throw new UnAuthorizedException();
-        }
-        return jwtToken;
+    public AuthProvider(SessionRepository sessionRepository) {
+        Assert.notNull(sessionRepository, "SessionRepository cannot be null!");
+        this.sessionRepository = sessionRepository;
     }
 
     /**
-     * 获取当前会话的token值（jwtToken）
+     * 从指定请求中提取并解析 token（去除 Bearer 前缀）。
      *
-     * @return String
+     * @param request HTTP 请求
+     * @return 去前缀后的 token
      */
-    default String getToken() {
-        String jwtToken = AuthUtil.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
-        // 第1步：先判断jwtToken是否为空
+    public String getToken(HttpServletRequest request) {
+        String jwtToken = WebRequestUtils.getToken(request, GlobalConfigUtils.getGlobalConfig().getTokenName());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
-        // 第2步：校验token的格式是否正确
         if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            // 去除TOKEN_PREFIX
-            jwtToken = jwtToken.replace(AuthConsts.JWT_TOKEN_PREFIX, "");
-        } else { // token不是以TOKEN_PREFIX开头的，不合格
-            throw new UnAuthorizedException();
+            return jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         }
-        return jwtToken;
+        throw new UnAuthorizedException();
     }
 
     /**
-     * 根据token值（jwtToken）解析得到会话凭证（redis、database、memory里面的key）
+     * 从当前请求上下文提取并解析 token（去除 Bearer 前缀）。
      *
-     * @param token jwtToken
+     * @return 去前缀后的 token
+     */
+    public String getToken() {
+        String jwtToken = WebRequestUtils.getToken(GlobalConfigUtils.getGlobalConfig().getTokenName());
+        if (!StringUtils.hasText(jwtToken)) {
+            throw new UnAuthorizedException();
+        }
+        if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
+            return jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        }
+        throw new UnAuthorizedException();
+    }
+
+    /**
+     * 根据 token 解析会话凭证 credentials。
+     *
+     * @param token token 字符串（可包含 Bearer 前缀）
      * @return 会话凭证
      */
-    default String getCredentialsByToken(String token) {
-        // 校验token是不是伪造的
+    public String getCredentialsByToken(String token) {
+        if (!StringUtils.hasText(token)) {
+            throw new UnAuthorizedException();
+        }
+        if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
+            token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        }
         Map<String, String> claims = JwtUtil.getClaims(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), token);
         if (Objects.isNull(claims)) {
             throw new UnAuthorizedException();
         }
-        // 从jwt的Payload里获取credentials，这才是会话的凭证key，它在redis或者mysql里面存着用户信息
         return claims.get("credentials");
     }
 
     /**
-     * 根据token值（jwtToken）解析得到会话凭证（redis、database、memory里面的key）
+     * 从当前请求上下文获取会话凭证。
      *
      * @return 会话凭证
      */
-    default String getCredentials() {
-        String jwtToken = this.getToken();
-        return getCredentialsByToken(jwtToken);
+    public String getCredentials() {
+        return getCredentialsByToken(getToken());
     }
 
     /**
-     * 获取获取会话凭证
+     * 从指定请求中获取会话凭证。
      *
-     * @param request HttpServletRequest
+     * @param request HTTP 请求
      * @return 会话凭证
      */
-    default String getCredentials(HttpServletRequest request) {
-        String jwtToken = this.getToken(request);
-        return getCredentialsByToken(jwtToken);
+    public String getCredentials(HttpServletRequest request) {
+        return getCredentialsByToken(getToken(request));
     }
 
     /**
-     * 刷新credentials
+     * 创建会话并返回 token（不写 cookie）。
      *
-     * @param credentials
-     * @return
+     * @param loginId   登录账号ID
+     * @param extraInfo 扩展信息
+     * @return 带前缀 token
      */
-    boolean refreshByCredentials(String credentials);
+    private String createAuth(Object loginId, Map<String, Object> extraInfo) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        Assert.isTrue(loginId instanceof Number || loginId instanceof String,
+                "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
+
+        String credentials = CredentialsGenUtil.generate(GlobalConfigUtils.getGlobalConfig().getCredentialsStyle());
+        Map<String, String> payload = new HashMap<>();
+        payload.put("credentials", credentials);
+        String jwtToken = JwtUtil.sign(GlobalConfigUtils.getGlobalConfig().getJwtSecret(), GlobalConfigUtils.getGlobalConfig().getJwtSubject(), payload);
+
+        long currentTime = System.currentTimeMillis();
+        int timeout = resolveTimeout();
+        LoginSubject subject = new LoginSubject();
+        subject.setCredentials(credentials);
+        subject.setExtraInfo(extraInfo);
+        subject.setLoginId(loginId);
+        subject.setLoginTime(currentTime);
+        subject.setLoginExpireTime(currentTime + timeout * 1000L);
+
+        boolean success = sessionRepository.save(subject, timeout, resolveMaxConcurrentLogins());
+        if (!success) {
+            throw new TinySecurityException("Failed to create auth. Please retry!");
+        }
+        return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
+    }
 
     /**
-     * 刷新credentials，并且重置用户
+     * 刷新指定凭证对应会话。
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @param subject     登录主体
+     * @return 是否刷新成功
      */
-    boolean refreshByCredentials(String credentials, LoginSubject subject);
+    public boolean refreshByCredentials(String credentials, LoginSubject subject) {
+        return sessionRepository.refreshByCredentials(credentials, subject, resolveTimeout());
+    }
 
     /**
-     * 检查credentials是否失效
+     * 校验指定凭证是否仍然有效。
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @return true-有效，false-无效
      */
-    boolean checkByCredentials(String credentials);
+    public boolean checkByCredentials(String credentials) {
+        return sessionRepository.checkByCredentials(credentials);
+    }
 
     /**
-     * 获取登录用户信息
+     * 根据凭证获取登录主体。
      *
-     * @param credentials
-     * @return
+     * @param credentials 会话凭证
+     * @return 登录主体
      */
-    LoginSubject getSubject(String credentials);
+    public LoginSubject getSubject(String credentials) {
+        return sessionRepository.getSubject(credentials);
+    }
 
     /**
-     * 创建一个新的token
+     * 根据 token 删除会话。
      *
-     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @param extraInfo 额外的扩展信息，更灵活
-     * @return jwtToken
+     * @param token token 字符串
+     * @return 是否删除成功
      */
-    String createAuth(Object loginId, Map<String, Object> extraInfo);
+    public boolean deleteByToken(String token) {
+        Assert.hasText(token, "The token cannot be empty!");
+        try {
+            String credentials = this.getCredentialsByToken(token);
+            return this.deleteByCredentials(credentials);
+        } catch (Exception e) {
+            log.error("AuthProvider deleteByToken failed, Exception：", e);
+            return false;
+        }
+    }
 
     /**
-     * 删除会话（根据token）
+     * 根据凭证删除会话。
      *
-     * @param token
-     * @return
+     * @param credentials 会话凭证
+     * @return 是否删除成功
      */
-    boolean deleteByToken(String token);
+    public boolean deleteByCredentials(String credentials) {
+        return sessionRepository.deleteByCredentials(credentials);
+    }
 
     /**
-     * 删除会话（根据凭证）
+     * 删除指定账号下所有会话。
      *
-     * @param credentials
-     * @return
+     * @param loginId 账号ID
+     * @return 是否删除成功
      */
-    boolean deleteByCredentials(String credentials);
+    public boolean deleteByLoginId(Object loginId) {
+        return sessionRepository.deleteByLoginId(loginId);
+    }
 
     /**
-     * 通过loginId删除token---常用于主动让某人下线
+     * 登录（不带扩展信息）。
      *
-     * @param loginId
-     * @return
+     * @param loginId 登录账号ID
+     * @return 带前缀 token
      */
-    boolean deleteByLoginId(Object loginId);
-
-    /*============================操作token结束=============================*/
-
-
-    /*============================操作会话开始，此部分在AbstractAuthProvider里予以实现=============================*/
-
-    /**
-     * 执行登录操作
-     *
-     * @param loginId 会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     */
-    default String login(Object loginId) {
+    public String login(Object loginId) {
         return login(loginId, null);
     }
 
     /**
-     * 执行登录操作
+     * 登录并发布成功/失败事件。
      *
-     * @param loginId   会话登录：参数填写要登录的账号id，建议的数据类型：long | int | String， 不可以传入复杂类型，如：User、Admin 等等
-     * @param extraInfo 额外的扩展信息，更灵活
+     * @param loginId   登录账号ID
+     * @param extraInfo 扩展信息
+     * @return 带前缀的 token
      */
-    String login(Object loginId, Map<String, Object> extraInfo);
+    public String login(Object loginId, Map<String, Object> extraInfo) {
+        try {
+            String token = this.createAuth(loginId, extraInfo);
+            CookieUtil.setCookie(WebRequestUtils.getResponse(), GlobalConfigUtils.getGlobalConfig().getTokenName(), token);
+            resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
+            return token;
+        } catch (RuntimeException ex) {
+            resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
+                    loginId,
+                    extraInfo,
+                    ex.getMessage(),
+                    System.currentTimeMillis()
+            ));
+            throw ex;
+        }
+    }
 
     /**
-     * 退出登录
+     * 基于当前请求上下文登出。
      */
-    void logout();
+    public void logout() {
+        this.deleteByCredentials(this.getCredentials());
+    }
 
     /**
-     * HttpServletRequest request
+     * 基于指定请求登出。
      *
-     * @param request HttpServletRequest
+     * @param request HTTP 请求
      */
-    void logout(HttpServletRequest request);
+    public void logout(HttpServletRequest request) {
+        this.deleteByCredentials(this.getCredentials(request));
+    }
 
     /**
-     * 获取当前登录用户的loginId
+     * 从安全上下文获取当前登录用户。
      *
-     * @return Object
+     * @return 登录账号ID
      */
-    Object getLoginId();
+    public LoginSubject getLoginSubject() {
+        return this.getSecurityContext().getLoginSubject();
+    }
 
     /**
-     * 获取当前登录用户的loginId, 并转换为 String 类型
+     * 从安全上下文获取当前登录账号ID。
      *
-     * @return 账号id
+     * @return 登录账号ID
      */
-    default String getLoginIdAsString() {
+    public Object getLoginId() {
+        return this.getLoginSubject().getLoginId();
+    }
+
+    /**
+     * 获取当前登录账号ID（字符串形式）。
+     *
+     * @return 字符串账号ID
+     */
+    public String getLoginIdAsString() {
         return String.valueOf(getLoginId());
     }
 
     /**
-     * 获取当前登录用户的loginId, 并转换为 Integer 类型
+     * 获取当前登录账号ID（整数形式）。
      *
-     * @return 账号id
+     * @return 整数账号ID
      */
-    default Integer getLoginIdAsInt() {
+    public Integer getLoginIdAsInt() {
         return Integer.parseInt(String.valueOf(getLoginId()));
     }
 
     /**
-     * 获取当前登录用户的loginId, 并转换为 Long 类型
+     * 获取当前登录账号ID（长整型形式）。
      *
-     * @return 账号id
+     * @return 长整型账号ID
      */
-    default Long getLoginIdAsLong() {
+    public Long getLoginIdAsLong() {
         return Long.parseLong(String.valueOf(getLoginId()));
     }
 
     /**
-     * 获取当前登录用户信息
+     * 获取当前请求安全上下文。
      *
-     * @return LoginSubject
+     * @return 安全上下文
      */
-    LoginSubject getLoginSubject();
+    public SecurityContext getSecurityContext() {
+        // 优先复用拦截器阶段已建立的上下文，避免重复构建
+        SecurityContext context = SecurityContextUtils.getSecurityContext();
+        if (context != null && context.getLoginSubject() != null) {
+            return context;
+        }
+        throw new UnAuthorizedException();
+    }
 
     /**
-     * 校验当前会话是否登录
+     * 判断当前请求是否处于登录状态。
      *
-     * @return true已登录，false未登录
+     * @return true-已登录，false-未登录
      */
-    boolean isLogin();
+    public boolean isLogin() {
+        try {
+            return this.checkByCredentials(this.getCredentials());
+        } catch (Exception e) {
+            log.error("AuthProvider isLogin failed, Exception：{e}", e);
+            return false;
+        }
+    }
 
     /**
-     * 检验当前会话是否已经登录, 如果未登录，则抛出异常
+     * 校验当前请求是否已登录，未登录则抛异常。
      *
-     * @return true已登录，false未登录（会抛出异常）
+     * @return true-已登录
      */
-    boolean checkLogin();
-    /*============================操作会话结束=============================*/
+    public boolean checkLogin() {
+        boolean success = this.checkByCredentials(this.getCredentials());
+        if (!success) {
+            throw new UnAuthorizedException();
+        }
+        return true;
+    }
+
+    /**
+     * 解析会话超时时间（秒）。
+     *
+     * @return 超时时间，默认1800秒
+     */
+    private int resolveTimeout() {
+        Integer timeout = GlobalConfigUtils.getGlobalConfig().getTimeout();
+        return timeout == null ? 1800 : timeout;
+    }
+
+    /**
+     * 解析最大并发登录数。
+     *
+     * @return 最大并发登录数，默认0（不限制）
+     */
+    private int resolveMaxConcurrentLogins() {
+        Integer maxConcurrentLogins = GlobalConfigUtils.getGlobalConfig().getMaxConcurrentLogins();
+        return maxConcurrentLogins == null ? 0 : maxConcurrentLogins;
+    }
+
+    /**
+     * 解析安全事件发布器，缺省返回空实现。
+     *
+     * @return 安全事件发布器
+     */
+    private SecurityEventPublisher resolveSecurityEventPublisher() {
+        if (GlobalConfigUtils.getGlobalConfig() == null || GlobalConfigUtils.getGlobalConfig().getSecurityEventPublisher() == null) {
+            return new NoopSecurityEventPublisher();
+        }
+        return GlobalConfigUtils.getGlobalConfig().getSecurityEventPublisher();
+    }
 }

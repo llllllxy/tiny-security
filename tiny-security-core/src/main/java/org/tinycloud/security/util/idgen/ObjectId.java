@@ -1,6 +1,5 @@
 package org.tinycloud.security.util.idgen;
 
-
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;

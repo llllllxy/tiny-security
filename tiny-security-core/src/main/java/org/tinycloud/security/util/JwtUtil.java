@@ -21,9 +21,9 @@ import java.util.*;
 public class JwtUtil {
     final static Logger log = LoggerFactory.getLogger(JwtUtil.class);
 
-    // jwt签名密钥
+    // jwt默认签名密钥
     private static final String JWT_SECRET = "K$N)A3*sGGf<wo*22*%&(DF";
-
+    // jwt默认subject
     private static final String JWT_SUBJECT = "tiny-security";
 
     /**
