@@ -104,7 +104,7 @@ public class SM3ConvertUtil {
      * 根据字节数组获得值(十六进制数字)
      *
      * @param bytes 字节数组
-     * @return
+     * @return 十六进制数字-字符串
      */
     public static String getHexString(byte[] bytes) {
         return getHexString(bytes, true);
@@ -118,11 +118,14 @@ public class SM3ConvertUtil {
      * @return 十六进制数字-字符串
      */
     public static String getHexString(byte[] bytes, boolean upperCase) {
-        String ret = "";
-        for (int i = 0; i < bytes.length; i++) {
-            ret += Integer.toString((bytes[i] & 0xff) + 0x100, 16).substring(1);
+        if (bytes == null) {
+            throw new IllegalArgumentException("Argument bytes ( byte array ) is null! ");
         }
-        return upperCase ? ret.toUpperCase() : ret;
+        StringBuilder ret = new StringBuilder();
+        for (byte aByte : bytes) {
+            ret.append(Integer.toString((aByte & 0xff) + 0x100, 16).substring(1));
+        }
+        return upperCase ? ret.toString().toUpperCase() : ret.toString();
     }
 
     /**
@@ -148,10 +151,9 @@ public class SM3ConvertUtil {
      * @return byte[]
      */
     public static byte[] hexStringToBytes(String hexString) {
-        if (hexString == null || hexString.equals("")) {
+        if (hexString == null || hexString.isEmpty()) {
             return null;
         }
-
         hexString = hexString.toUpperCase();
         int length = hexString.length() / 2;
         char[] hexChars = hexString.toCharArray();
@@ -562,48 +564,6 @@ public class SM3ConvertUtil {
             i = defaultInt;
         }
         return i;
-    }
-
-    /**
-     * 十六进制串转化为byte数组
-     *
-     * @return the array of byte
-     */
-    public static byte[] hexToByte(String hex) throws IllegalArgumentException {
-        if (hex.length() % 2 != 0) {
-            throw new IllegalArgumentException();
-        }
-        char[] arr = hex.toCharArray();
-        byte[] b = new byte[hex.length() / 2];
-        for (int i = 0, j = 0, l = hex.length(); i < l; i++, j++) {
-            String swap = "" + arr[i++] + arr[i];
-            int byteint = Integer.parseInt(swap, 16) & 0xFF;
-            b[j] = new Integer(byteint).byteValue();
-        }
-        return b;
-    }
-
-    /**
-     * 字节数组转换为十六进制字符串
-     *
-     * @param b byte[] 需要转换的字节数组
-     * @return String 十六进制字符串
-     */
-    public static String byteToHex(byte b[]) {
-        if (b == null) {
-            throw new IllegalArgumentException("Argument b ( byte array ) is null! ");
-        }
-        String hs = "";
-        String stmp = "";
-        for (int n = 0; n < b.length; n++) {
-            stmp = Integer.toHexString(b[n] & 0xff);
-            if (stmp.length() == 1) {
-                hs = hs + "0" + stmp;
-            } else {
-                hs = hs + stmp;
-            }
-        }
-        return hs.toUpperCase();
     }
 
     public static byte[] subByte(byte[] input, int startIndex, int length) {

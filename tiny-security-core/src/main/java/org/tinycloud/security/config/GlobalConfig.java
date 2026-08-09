@@ -1,20 +1,45 @@
 package org.tinycloud.security.config;
 
 
+import org.tinycloud.security.authentication.AuthenticationManager;
+import org.tinycloud.security.authorization.AuthorizationManager;
+import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.enums.PermissionMode;
+import org.tinycloud.security.event.SecurityEventPublisher;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
+import org.tinycloud.security.provider.AuthProvider;
+import org.tinycloud.security.session.SessionRepository;
+
 import java.io.Serializable;
 
 /**
  * <p>
+ *     全局配置类
  * </p>
  *
  * @author liuxingyu01
  * @since 2024-04-2024/4/15 23:33
  */
 public class GlobalConfig implements Serializable {
+
+    private AuthProvider authProvider;
+
+    private SessionRepository sessionRepository;
+
+    private AuthenticationManager authenticationManager;
+
+    private AuthorizationManager authorizationManager;
+
+    private SecurityContextRepository securityContextRepository;
+
+    private SecurityEventPublisher securityEventPublisher;
+
+    private AuthorizationInfoGet authorizationInfoGet;
+
     /**
      * 是否开启 LOGO 打印
      */
-    private boolean banner = true;
+    private boolean banner;
 
     private String version;
 
@@ -30,11 +55,69 @@ public class GlobalConfig implements Serializable {
 
     private String tableName;
 
-    private String permCheckMode;
+    private PermissionMode permCheckMode;
 
     private String jwtSecret;
 
     private String jwtSubject;
+
+    private Integer maxConcurrentLogins;
+
+    public AuthProvider getAuthProvider() {
+        return authProvider;
+    }
+
+    public void setAuthProvider(AuthProvider authProvider) {
+        this.authProvider = authProvider;
+    }
+
+    public SessionRepository getSessionRepository() {
+        return sessionRepository;
+    }
+
+    public void setSessionRepository(SessionRepository sessionRepository) {
+        this.sessionRepository = sessionRepository;
+    }
+
+    public AuthenticationManager getAuthenticationManager() {
+        return authenticationManager;
+    }
+
+    public void setAuthenticationManager(AuthenticationManager authenticationManager) {
+        this.authenticationManager = authenticationManager;
+    }
+
+    public AuthorizationManager getAuthorizationManager() {
+        return authorizationManager;
+    }
+
+    public void setAuthorizationManager(AuthorizationManager authorizationManager) {
+        this.authorizationManager = authorizationManager;
+    }
+
+    public SecurityContextRepository getSecurityContextRepository() {
+        return securityContextRepository;
+    }
+
+    public void setSecurityContextRepository(SecurityContextRepository securityContextRepository) {
+        this.securityContextRepository = securityContextRepository;
+    }
+
+    public SecurityEventPublisher getSecurityEventPublisher() {
+        return securityEventPublisher;
+    }
+
+    public void setSecurityEventPublisher(SecurityEventPublisher securityEventPublisher) {
+        this.securityEventPublisher = securityEventPublisher;
+    }
+
+    public AuthorizationInfoGet getAuthorizationInfoGet() {
+        return authorizationInfoGet;
+    }
+
+    public void setAuthorizationInfoGet(AuthorizationInfoGet authorizationInfoGet) {
+        this.authorizationInfoGet = authorizationInfoGet;
+    }
 
     public boolean isBanner() {
         return banner;
@@ -100,11 +183,11 @@ public class GlobalConfig implements Serializable {
         this.tableName = tableName;
     }
 
-    public String getPermCheckMode() {
+    public PermissionMode getPermCheckMode() {
         return permCheckMode;
     }
 
-    public void setPermCheckMode(String permCheckMode) {
+    public void setPermCheckMode(PermissionMode permCheckMode) {
         this.permCheckMode = permCheckMode;
     }
 
@@ -122,5 +205,13 @@ public class GlobalConfig implements Serializable {
 
     public void setJwtSubject(String jwtSubject) {
         this.jwtSubject = jwtSubject;
+    }
+
+    public Integer getMaxConcurrentLogins() {
+        return maxConcurrentLogins;
+    }
+
+    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
+        this.maxConcurrentLogins = maxConcurrentLogins;
     }
 }
