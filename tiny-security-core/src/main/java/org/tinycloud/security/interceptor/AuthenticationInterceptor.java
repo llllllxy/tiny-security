@@ -1,4 +1,3 @@
-
 package org.tinycloud.security.interceptor;
 
 import javax.servlet.http.HttpServletRequest;
@@ -9,13 +8,10 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.ModelAndView;
 import org.tinycloud.security.annotation.AnnotationUtils;
 import org.tinycloud.security.authentication.AuthenticationManager;
-import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
-import org.tinycloud.security.exception.TinySecurityException;
 
 import java.lang.reflect.Method;
-import java.util.Objects;
 
 /**
  * 用户会话验证拦截器
@@ -24,6 +20,21 @@ import java.util.Objects;
  * @version 2020-03-22-11:23
  **/
 public class AuthenticationInterceptor implements HandlerInterceptor {
+
+    private final AuthenticationManager authenticationManager;
+    private final SecurityContextRepository securityContextRepository;
+
+    /**
+     * 构造会话认证拦截器。
+     *
+     * @param authenticationManager       认证管理器
+     * @param securityContextRepository   安全上下文仓储
+     */
+    public AuthenticationInterceptor(AuthenticationManager authenticationManager,
+                                      SecurityContextRepository securityContextRepository) {
+        this.authenticationManager = authenticationManager;
+        this.securityContextRepository = securityContextRepository;
+    }
 
     /*
      * 进入controller层之前拦截请求
@@ -48,9 +59,9 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         if (AnnotationUtils.checkIgnore(method)) {
             return true;
         }
-        SecurityContext context = this.resolveAuthenticationManager().authenticate(request);
+        SecurityContext context = this.authenticationManager.authenticate(request);
         // 存入安全上下文，以方便后续使用
-        this.resolveSecurityContextRepository().saveContext(context, request, response);
+        this.securityContextRepository.saveContext(context, request, response);
         // 合格不需要拦截，放行
         return true;
     }
@@ -69,22 +80,6 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
      */
     @Override
     public void afterCompletion(HttpServletRequest arg0, HttpServletResponse arg1, Object arg2, Exception arg3) throws Exception {
-        this.resolveSecurityContextRepository().clearContext(arg0, arg1);
-    }
-
-    private AuthenticationManager resolveAuthenticationManager() {
-        AuthenticationManager authenticationManager = GlobalConfigUtils.getGlobalConfig().getAuthenticationManager();
-        if (Objects.isNull(authenticationManager)) {
-            throw new TinySecurityException("AuthenticationManager not initialized!");
-        }
-        return authenticationManager;
-    }
-
-    private SecurityContextRepository resolveSecurityContextRepository() {
-        SecurityContextRepository repository = GlobalConfigUtils.getGlobalConfig().getSecurityContextRepository();
-        if (Objects.isNull(repository)) {
-            throw new TinySecurityException("SecurityContextRepository not initialized!");
-        }
-        return repository;
+        this.securityContextRepository.clearContext(arg0, arg1);
     }
 }

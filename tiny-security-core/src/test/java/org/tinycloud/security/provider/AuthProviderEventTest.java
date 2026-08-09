@@ -6,8 +6,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.tinycloud.security.config.GlobalConfig;
-import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
 import org.tinycloud.security.event.LoginFailureEvent;
@@ -26,16 +25,14 @@ class AuthProviderEventTest {
     @AfterEach
     void tearDown() {
         RequestContextHolder.resetRequestAttributes();
-        GlobalConfigUtils.clearGlobalConfig();
     }
 
     @Test
     void shouldPublishLoginSuccessEvent() {
         CapturingSecurityEventPublisher publisher = new CapturingSecurityEventPublisher();
-        initGlobalConfig(publisher);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(false), defaultProperties(), publisher);
         bindRequestContext();
 
-        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(false));
         authProvider.login("user-1", null);
 
         assertEquals(1, publisher.loginSuccessCount.get());
@@ -45,10 +42,9 @@ class AuthProviderEventTest {
     @Test
     void shouldPublishLoginFailureEvent() {
         CapturingSecurityEventPublisher publisher = new CapturingSecurityEventPublisher();
-        initGlobalConfig(publisher);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(true), defaultProperties(), publisher);
         bindRequestContext();
 
-        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(true));
         assertThrows(TinySecurityException.class, () -> authProvider.login("user-1", null));
 
         assertEquals(0, publisher.loginSuccessCount.get());
@@ -61,15 +57,16 @@ class AuthProviderEventTest {
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
     }
 
-    private void initGlobalConfig(SecurityEventPublisher publisher) {
-        GlobalConfig globalConfig = new GlobalConfig();
-        globalConfig.setBanner(false);
-        globalConfig.setTokenName("token");
-        globalConfig.setTimeout(1800);
-        globalConfig.setCredentialsStyle("uuid");
-        globalConfig.setMaxConcurrentLogins(0);
-        globalConfig.setSecurityEventPublisher(publisher);
-        GlobalConfigUtils.setGlobalConfig(globalConfig);
+    private AuthProperties defaultProperties() {
+        AuthProperties properties = new AuthProperties();
+        properties.setBanner(false);
+        properties.setTokenName("token");
+        properties.setTimeout(1800);
+        properties.setCredentialsStyle("uuid");
+        properties.setMaxConcurrentLogins(0);
+        properties.setJwtSecret("test-secret");
+        properties.setJwtSubject("test-subject");
+        return properties;
     }
 
     static class CapturingSecurityEventPublisher implements SecurityEventPublisher {

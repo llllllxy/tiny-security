@@ -1,13 +1,13 @@
 package org.tinycloud.security.context;
 
-import org.tinycloud.security.config.GlobalConfigUtils;
-import org.tinycloud.security.web.WebRequestUtils;
+import org.tinycloud.security.util.AuthUtil;
 
-import javax.servlet.http.HttpServletRequest;
 import java.util.Set;
 
 /**
  * 安全上下文工具类。
+ *
+ * <p>delegate 到 {@link AuthUtil}（静态外观 → {@link org.tinycloud.security.TinySecurityFacade}）。
  *
  * @author liuxingyu01
  * @since 2026-05-26
@@ -26,14 +26,7 @@ public final class SecurityContextUtils {
      * @return 安全上下文
      */
     public static SecurityContext getSecurityContext() {
-        HttpServletRequest request = WebRequestUtils.getRequest();
-        if (request != null && GlobalConfigUtils.getGlobalConfig() != null) {
-            SecurityContextRepository repository = GlobalConfigUtils.getGlobalConfig().getSecurityContextRepository();
-            if (repository != null) {
-                return repository.loadContext(request);
-            }
-        }
-        return null;
+        return AuthUtil.getSecurityContext();
     }
 
     /**
@@ -42,8 +35,7 @@ public final class SecurityContextUtils {
      * @return 登录主体
      */
     public static LoginSubject getLoginSubject() {
-        SecurityContext context = getSecurityContext();
-        return context == null ? null : context.getLoginSubject();
+        return AuthUtil.getLoginSubject();
     }
 
     /**
@@ -52,8 +44,7 @@ public final class SecurityContextUtils {
      * @return 角色集合
      */
     public static Set<String> getRoleSet() {
-        SecurityContext context = getSecurityContext();
-        return context == null ? null : context.getRoleSet();
+        return AuthUtil.getRoleSet();
     }
 
     /**
@@ -62,7 +53,6 @@ public final class SecurityContextUtils {
      * @return 权限集合
      */
     public static Set<String> getPermissionSet() {
-        SecurityContext context = getSecurityContext();
-        return context == null ? null : context.getPermissionSet();
+        return AuthUtil.getPermissionSet();
     }
 }

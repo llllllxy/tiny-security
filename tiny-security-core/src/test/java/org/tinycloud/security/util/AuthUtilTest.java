@@ -1,19 +1,17 @@
 package org.tinycloud.security.util;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.tinycloud.security.config.GlobalConfig;
-import org.tinycloud.security.config.GlobalConfigUtils;
+import org.tinycloud.security.TinySecurityFacade;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
-
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,7 +20,7 @@ class AuthUtilTest {
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextHolder.clearContext();
-        GlobalConfigUtils.clearGlobalConfig();
+        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
     }
 
@@ -32,10 +30,7 @@ class AuthUtilTest {
         ThreadLocalSecurityContextHolder.setContext(holderContext);
 
         SecurityContext repositoryContext = createContext("repo-user");
-        GlobalConfig globalConfig = new GlobalConfig();
-        globalConfig.setBanner(false);
-        globalConfig.setSecurityContextRepository(new FixedSecurityContextRepository(repositoryContext));
-        GlobalConfigUtils.setGlobalConfig(globalConfig);
+        AuthUtil.setFacade(new TinySecurityFacade(new FixedSecurityContextRepository(repositoryContext)));
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
@@ -49,6 +44,8 @@ class AuthUtilTest {
     void shouldReturnNullWhenNoRequestContext() {
         SecurityContext holderContext = createContext("holder-user");
         ThreadLocalSecurityContextHolder.setContext(holderContext);
+
+        AuthUtil.setFacade(new TinySecurityFacade(new FixedSecurityContextRepository(holderContext)));
 
         SecurityContext actual = AuthUtil.getSecurityContext();
         assertNull(actual);

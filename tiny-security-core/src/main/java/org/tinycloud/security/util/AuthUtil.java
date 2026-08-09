@@ -1,133 +1,99 @@
 package org.tinycloud.security.util;
 
-import org.tinycloud.security.authorization.AuthorizationEvaluator;
+import org.tinycloud.security.TinySecurityFacade;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextUtils;
+
+import java.util.Set;
 
 /**
  * 常用对外会话便捷工具类。
+ *
+ * <p>静态外观模式：delegate 到 {@link TinySecurityFacade}（Spring Bean），
+ * 用户调用方式不变，但内部依赖可通过注入替换，便于测试。
  *
  * @author liuxingyu01
  * @version 2023-01-06-9:33
  **/
 public class AuthUtil {
 
+    private static volatile TinySecurityFacade facade;
+
     /**
-     * 获取当前登录用户的loginId。
+     * 注册门面实例（由 AuthAutoConfiguration 在启动时调用）。
      *
-     * @return 登录账号ID
+     * @param facade 安全门面
      */
+    public static void setFacade(TinySecurityFacade facade) {
+        AuthUtil.facade = facade;
+    }
+
+    /**
+     * 获取门面实例。
+     *
+     * @return 安全门面
+     */
+    public static TinySecurityFacade getFacade() {
+        if (facade == null) {
+            throw new IllegalStateException("TinySecurityFacade not initialized. " +
+                    "Please ensure tiny-security is properly configured.");
+        }
+        return facade;
+    }
+
     public static Object getLoginId() {
-        LoginSubject subject = getLoginSubject();
-        return subject == null ? null : subject.getLoginId();
+        return getFacade().getLoginId();
     }
 
-    /**
-     * 获取当前登录用户的loginId，并转换为String类型。
-     *
-     * @return 字符串账号ID
-     */
     public static String getLoginIdAsString() {
-        Object loginId = getLoginId();
-        return loginId == null ? null : String.valueOf(loginId);
+        return getFacade().getLoginIdAsString();
     }
 
-    /**
-     * 获取当前登录用户的loginId，并转换为Integer类型。
-     *
-     * @return 整数账号ID
-     */
     public static Integer getLoginIdAsInt() {
-        Object loginId = getLoginId();
-        return loginId == null ? null : Integer.parseInt(String.valueOf(loginId));
+        return getFacade().getLoginIdAsInt();
     }
 
-    /**
-     * 获取当前登录用户的loginId，并转换为Long类型。
-     *
-     * @return 长整数账号ID
-     */
     public static Long getLoginIdAsLong() {
-        Object loginId = getLoginId();
-        return loginId == null ? null : Long.parseLong(String.valueOf(loginId));
+        return getFacade().getLoginIdAsLong();
     }
 
-    /**
-     * 获取当前请求安全上下文。
-     *
-     * @return 安全上下文
-     */
     public static SecurityContext getSecurityContext() {
-        return SecurityContextUtils.getSecurityContext();
+        return getFacade().getSecurityContext();
     }
 
-    /**
-     * 获取当前登录主体。
-     *
-     * @return 登录主体
-     */
     public static LoginSubject getLoginSubject() {
-        return SecurityContextUtils.getLoginSubject();
+        return getFacade().getLoginSubject();
     }
 
-    /**
-     * 判断当前账号是否拥有指定角色。
-     *
-     * @param role 角色标识
-     * @return true-拥有，false-未拥有
-     */
+    public static Set<String> getRoleSet() {
+        return getFacade().getRoleSet();
+    }
+
+    public static Set<String> getPermissionSet() {
+        return getFacade().getPermissionSet();
+    }
+
     public static boolean hasRole(String role) {
-        return AuthorizationEvaluator.hasRole(SecurityContextUtils.getRoleSet(), role);
+        return getFacade().hasRole(role);
     }
 
-    /**
-     * 判断当前账号是否同时拥有全部指定角色。
-     *
-     * @param roles 角色列表
-     * @return true-全部拥有，false-未全部拥有
-     */
     public static boolean hasAllRole(String... roles) {
-        return AuthorizationEvaluator.hasAllRole(SecurityContextUtils.getRoleSet(), roles);
+        return getFacade().hasAllRole(roles);
     }
 
-    /**
-     * 判断当前账号是否拥有任意指定角色。
-     *
-     * @param roles 角色列表
-     * @return true-拥有任意一个，false-全部未拥有
-     */
     public static boolean hasAnyRole(String... roles) {
-        return AuthorizationEvaluator.hasAnyRole(SecurityContextUtils.getRoleSet(), roles);
+        return getFacade().hasAnyRole(roles);
     }
 
-    /**
-     * 判断当前账号是否拥有指定权限。
-     *
-     * @param permission 权限标识
-     * @return true-拥有，false-未拥有
-     */
     public static boolean hasPermission(String permission) {
-        return AuthorizationEvaluator.hasPermission(SecurityContextUtils.getPermissionSet(), permission);
+        return getFacade().hasPermission(permission);
     }
 
-    /**
-     * 判断当前账号是否同时拥有全部指定权限。
-     *
-     * @param permissions 权限列表
-     * @return true-全部拥有，false-未全部拥有
-     */
     public static boolean hasAllPermission(String... permissions) {
-        return AuthorizationEvaluator.hasAllPermission(SecurityContextUtils.getPermissionSet(), permissions);
+        return getFacade().hasAllPermission(permissions);
     }
 
-    /**
-     * 判断当前账号是否拥有任意指定权限。
-     *
-     * @param permissions 权限列表
-     * @return true-拥有任意一个，false-全部未拥有
-     */
     public static boolean hasAnyPermission(String... permissions) {
-        return AuthorizationEvaluator.hasAnyPermission(SecurityContextUtils.getPermissionSet(), permissions);
+        return getFacade().hasAnyPermission(permissions);
     }
 }
