@@ -5,18 +5,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.tinycloud.security.TinySecurityFacade;
+import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.config.GlobalConfig;
-import org.tinycloud.security.config.GlobalConfigUtils;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
+import org.tinycloud.security.util.AuthUtil;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * AuthProvider 安全上下文获取测试。
@@ -29,7 +28,7 @@ class AuthProviderSecurityContextTest {
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextHolder.clearContext();
-        GlobalConfigUtils.clearGlobalConfig();
+        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
     }
 
@@ -42,7 +41,7 @@ class AuthProviderSecurityContextTest {
         ThreadLocalSecurityContextHolder.setContext(existingContext);
         bindRequestAndRepository();
 
-        AuthProvider authProvider = new AuthProvider(new ThrowingSessionRepository());
+        AuthProvider authProvider = new AuthProvider(new ThrowingSessionRepository(), defaultProperties(), null);
         SecurityContext actual = authProvider.getSecurityContext();
 
         assertSame(existingContext, actual);
@@ -55,17 +54,23 @@ class AuthProviderSecurityContextTest {
     @Test
     void shouldThrowUnauthorizedWhenContextMissingAndSubjectNotFound() {
         bindRequestAndRepository();
-        AuthProvider authProvider = new AuthProvider(new FixedSessionRepository(null));
+        AuthProvider authProvider = new AuthProvider(new FixedSessionRepository(null), defaultProperties(), null);
         assertThrows(UnAuthorizedException.class, authProvider::getSecurityContext);
     }
 
     private void bindRequestAndRepository() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        GlobalConfig globalConfig = new GlobalConfig();
-        globalConfig.setBanner(false);
-        globalConfig.setSecurityContextRepository(new ThreadLocalSecurityContextRepository());
-        GlobalConfigUtils.setGlobalConfig(globalConfig);
+        AuthUtil.setFacade(new TinySecurityFacade(new ThreadLocalSecurityContextRepository()));
+    }
+
+    private AuthProperties defaultProperties() {
+        AuthProperties properties = new AuthProperties();
+        properties.setBanner(false);
+        properties.setTokenName("token");
+        properties.setJwtSecret("test-secret");
+        properties.setJwtSubject("test-subject");
+        return properties;
     }
 
     private SecurityContext buildContext(String loginId) {
