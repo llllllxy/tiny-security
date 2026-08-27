@@ -1,6 +1,7 @@
 package org.tinycloud.security.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.util.CommonUtil;
 
@@ -34,11 +35,32 @@ public class AuthProperties {
 
     private String jwtSubject;
 
+    /**
+     * jwt自身有效期（秒），默认30天（2592000秒）
+     */
+    private Integer jwtTimeout = 30 * 24 * 60 * 60;
+
     private Integer maxConcurrentLogins = 0;
 
     private Boolean exceptionTranslationEnabled = true;
 
     private Boolean forceHttpStatus200 = false;
+
+    /**
+     * 是否启用 Cookie 模式（登录写 Cookie、登出清理 Cookie、从 Cookie 读取 token），
+     * 默认 false（纯 token 模式，适配前后端分离项目；前后端不分离项目需开启）
+     */
+    private Boolean enableCookie = false;
+
+    /**
+     * Cookie 是否仅通过 HTTPS 传输，默认 false（本地 http 调试友好，生产环境建议开启）
+     */
+    private Boolean cookieSecure = false;
+
+    /**
+     * Cookie SameSite 属性，默认 LAX
+     */
+    private CookieSameSite cookieSameSite = CookieSameSite.LAX;
 
     @Deprecated
     private String[] addPath;
@@ -67,12 +89,20 @@ public class AuthProperties {
     public void setJwtSecret(String jwtSecret) { this.jwtSecret = jwtSecret; }
     public String getJwtSubject() { return jwtSubject; }
     public void setJwtSubject(String jwtSubject) { this.jwtSubject = jwtSubject; }
+    public Integer getJwtTimeout() { return jwtTimeout; }
+    public void setJwtTimeout(Integer jwtTimeout) { this.jwtTimeout = jwtTimeout; }
     public Integer getMaxConcurrentLogins() { return maxConcurrentLogins; }
     public void setMaxConcurrentLogins(Integer maxConcurrentLogins) { this.maxConcurrentLogins = maxConcurrentLogins; }
     public Boolean getExceptionTranslationEnabled() { return exceptionTranslationEnabled; }
     public void setExceptionTranslationEnabled(Boolean exceptionTranslationEnabled) { this.exceptionTranslationEnabled = exceptionTranslationEnabled; }
     public Boolean getForceHttpStatus200() { return forceHttpStatus200; }
     public void setForceHttpStatus200(Boolean forceHttpStatus200) { this.forceHttpStatus200 = forceHttpStatus200; }
+    public Boolean getCookieSecure() { return cookieSecure; }
+    public void setCookieSecure(Boolean cookieSecure) { this.cookieSecure = cookieSecure; }
+    public Boolean getEnableCookie() { return enableCookie; }
+    public void setEnableCookie(Boolean enableCookie) { this.enableCookie = enableCookie; }
+    public CookieSameSite getCookieSameSite() { return cookieSameSite; }
+    public void setCookieSameSite(CookieSameSite cookieSameSite) { this.cookieSameSite = cookieSameSite; }
     @Deprecated
     public String[] getAddPath() { return addPath; }
     @Deprecated

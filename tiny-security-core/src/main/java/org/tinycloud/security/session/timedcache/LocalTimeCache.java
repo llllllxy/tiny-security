@@ -200,7 +200,7 @@ public class LocalTimeCache {
                             // 执行清理方法
                             refreshDataMap();
                         } catch (Exception e2) {
-                            log.error("LocalTimeCache - refresh - Exception：{e2}", e2);
+                            log.error("LocalTimeCache - refresh - Exception：", e2);
                         }
                     }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
                 }

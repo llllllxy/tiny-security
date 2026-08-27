@@ -58,7 +58,7 @@ public class CredentialsGenUtil {
                 token = NanoId.INSTANCE.randomNanoId();
                 break;
             default:
-                token = UUID.randomUUID().toString().replaceAll("-", "");
+                token = UUID.randomUUID().toString().replace("-", "");
                 break;
         }
         return token;

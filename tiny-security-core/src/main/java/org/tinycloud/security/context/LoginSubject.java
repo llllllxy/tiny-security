@@ -83,12 +83,13 @@ public class LoginSubject implements Serializable {
 
     @Override
     public String toString() {
+        // credentials 为会话凭证，输出到日志会造成泄露，这里固定脱敏
         return "LoginSubject{" +
                 "loginId=" + loginId +
-                "extraInfo=" + extraInfo +
+                ", extraInfo=" + extraInfo +
                 ", loginTime=" + loginTime +
                 ", loginExpireTime=" + loginExpireTime +
-                ", credentials=" + credentials +
+                ", credentials=****" +
                 '}';
     }
 }
