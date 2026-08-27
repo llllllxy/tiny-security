@@ -2,8 +2,74 @@
 
 > 分支：`springboot3`（Spring Boot 3.x / JDK 17+）
 > 数据来源：基于 `springboot3` 分支 first-parent 主线，按版本发布提交逐段切分
-> 版本区间：`1.2.0`（2025-05-14）→ `1.3.1`（2026-08-09）
+> 版本区间：`1.2.0`（2025-05-14）→ `1.3.2`（2026-08-27）
 > 更早基线：`1.1.0 全新版本发布`（2024-09-06，springboot3 重生起点）
+
+---
+
+## 1.3.2
+
+> 发布日期：2026-08-27 ｜ 升级路径：1.3.1 → 1.3.2 ｜ 完整分析见 `docs/project-analysis-2026-08.md`
+
+### 类型概览
+
+| 维度 | 内容 |
+|------|------|
+| 新增特性 | 4 项（enable-cookie 开关、jwt-timeout 配置、Cookie 安全属性配置、登出清理浏览器 Cookie） |
+| Bug 修复 | 3 项（JWT 公开默认密钥、JWT 过期时间硬编码、非 Web 线程登录 NPE） |
+| 安全修复 | 1 项（日志凭证泄露链路） |
+| 行为变更 | 2 项（未配置 jwt-secret 时改用随机密钥、Cookie 模式默认关闭） |
+
+### 安全修复
+
+- **移除 JWT 硬编码默认密钥**：此前未配置 `tiny-security.jwt-secret` 时会静默使用一个已在开源文档中公开的内置密钥，且 `LoginSubject.toString()` 会输出会话凭证（日志泄露）——两者组合存在伪造会话的风险。现在 `JwtUtil` 对空密钥直接抛出 `IllegalArgumentException`，不再有任何内置兜底密钥；`LoginSubject.toString()` 对 credentials 脱敏输出。
+- **非 Web 线程登录 NPE 修复**：定时任务 / MQ 消费者等未绑定请求上下文的线程调用 `login()` 时，`CookieUtil.setCookie` 不再因 `response` 为 null 抛出空指针，改为跳过 Cookie 写入并正常返回 token。
+
+### Bug 修复
+
+- **JWT 过期时间硬编码 30 天**：`timeout` 配置超过 30 天时会话会在 30 天处静默失效（401）。现新增 `jwt-timeout` 配置（默认 2592000 秒即 30 天），且实际生效值取 `max(jwt-timeout, timeout)`：默认行为不变，超长会话配置不再提前失效。
+- **Cookie 生存期与会话不同步**：登录 Cookie 的 maxAge 由硬编码 86400 秒改为与会话 `timeout` 一致，不再出现「Cookie 比会话活得久」。
+- **登出未清理浏览器 Cookie**：`logout()` / `logout(request)` 现在会写回 `maxAge=0` 的同名 Cookie，浏览器侧凭证立即失效。
+
+### 新增特性
+
+- **Cookie 模式开关（`enable-cookie`）**：
+
+  ```yaml
+  tiny-security:
+    enable-cookie: false  # 默认 false；开启后登录写 Cookie、登出清理 Cookie、并允许从 Cookie 读取 token
+  ```
+
+- **JWT 自身有效期可配置（`jwt-timeout`）**：
+
+  ```yaml
+  tiny-security:
+    jwt-timeout: 2592000  # 单位秒，默认30天；实际生效值不低于会话timeout
+  ```
+
+- **Cookie 安全属性配置**：
+
+  ```yaml
+  tiny-security:
+    cookie-secure: false    # 是否仅 HTTPS 传输，默认 false（生产建议开启）
+    cookie-same-site: LAX   # SameSite 属性，默认 LAX（可选 STRICT/LAX/NONE，防御 CSRF）
+  ```
+
+- **未配置 jwt-secret 时的安全兜底**：启动时自动生成 128 位随机密钥并打印 WARN 日志（提示重启后会话失效、生产环境必须配置固定密钥），替代原先静默使用公开默认密钥的行为。
+
+### ⚠️ 行为变更（升级必读）
+
+- **Cookie 模式默认关闭（`enable-cookie`，默认 `false`）**：此前登录总是写 Cookie、且 token 会自动从 Cookie 中读取；现在默认纯 token 模式（仅 header 与 URL 参数）。**前后端不分离、依赖 Cookie 传递 token 的项目升级后必须显式配置 `enable-cookie: true`，否则登录不再写 Cookie、请求也无法从 Cookie 中取到 token（全部 401）**。
+- **未配置 `jwt-secret` 时改用随机密钥**：此前未配置密钥的项目可以跨重启保持会话（因为使用内置固定密钥）；升级后每次重启会话全部失效。**生产环境请务必配置固定密钥**。
+- 直接调用 `JwtUtil.sign(null, ...)` / `JwtUtil.getClaims(null, ...)` 的代码将抛出 `IllegalArgumentException`（原先静默使用内置密钥）；`JwtUtil.sign` 新增带 `expireSeconds` 参数的重载，原三参重载保持兼容（默认 30 天）。
+
+### 升级检查清单
+
+- [ ] **依赖 Cookie 传 token 的（前后端不分离）项目：务必配置 `enable-cookie: true`**，否则升级后无法从 Cookie 读取 token
+- [ ] 检查是否已配置 `tiny-security.jwt-secret`（未配置的项目重启后会话失效）
+- [ ] 如直接使用 `JwtUtil` 工具类，确认未依赖「空密钥走内置默认值」的旧行为
+- [ ] 生产环境建议开启 `cookie-secure: true`
+- [ ] `LoginSubject.toString()` 不再输出 credentials，如有依赖该输出的日志排查逻辑需注意
 
 ---
 

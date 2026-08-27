@@ -75,9 +75,10 @@ tiny-security:
    # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)，如不配置，则默认为single
    store-type: single
    # token名称 (同时也是cookie名称以适配前后端不分离的模式)
+   # 注意：token 依次从 header、URL参数 中读取（开启 enable-cookie 后才会从 cookie 读取）；
+   # 通过 URL 参数传递 token 会使其进入访问日志，存在泄露风险，不建议生产环境使用
    token-name: token
    # 会话有效期（会话存储中的subject有效时长），单位秒，默认1800秒(30分钟)
-   # 注意：当前版本JWT自身过期时间固定为30天（用于防伪校验），后续版本将支持配置化
    timeout: 1800
    # 最大登录并发数，默认不限制
    max-concurrent-logins: 2
@@ -93,12 +94,21 @@ tiny-security:
    force-http-status-200: false
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
-   # jwt密钥，不配置则使用默认值
-   jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
+   # jwt密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥，重启后所有会话将失效）
+   jwt-secret: your-secret-key-please-replace-me
    # jwt主题，不配置则使用默认值
    jwt-subject: tiny-security
+   # jwt自身有效期（秒），默认2592000（即30天）；实际生效值不低于会话timeout，避免token先于会话过期
+   jwt-timeout: 2592000
+   # 是否启用Cookie模式（登录写cookie、登出清理cookie、从cookie读取token）
+   # 默认false纯token模式（前后端分离）；前后端不分离项目需开启
+   enable-cookie: false
+   # Cookie 是否仅通过 HTTPS 传输，默认false（本地 http 调试友好，生产环境建议开启）
+   cookie-secure: false
+   # Cookie SameSite 属性，默认LAX（可选 STRICT/LAX/NONE，用于防御 CSRF）
+   cookie-same-site: LAX
    # 要拦截的路径，默认拦截所有路径
-   add-path: /**
+   include-path: /**
    # 要排除的路径，默认不排除任何路径
    exclude-path:
       - /auth/login
@@ -500,7 +510,7 @@ $.ajax({
    success: function(data){ }
 });
 ```
-3. 前后端不分离的项目会自动从cookie里获取`token`
+3. 前后端不分离的项目在开启 `enable-cookie: true` 后会自动从cookie里获取`token`（登录时也会自动写入cookie）
 
 ---
 

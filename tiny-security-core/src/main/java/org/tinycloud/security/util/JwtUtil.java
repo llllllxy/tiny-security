@@ -21,10 +21,11 @@ import java.util.*;
 public class JwtUtil {
     final static Logger log = LoggerFactory.getLogger(JwtUtil.class);
 
-    // jwt默认签名密钥
-    private static final String JWT_SECRET = "K$N)A3*sGGf<wo*22*%&(DF";
     // jwt默认subject
     private static final String JWT_SUBJECT = "tiny-security";
+
+    // jwt默认有效期（秒）：30天
+    private static final long JWT_DEFAULT_EXPIRE_SECONDS = 30L * 24 * 60 * 60;
 
     /**
      * 获取subject
@@ -47,14 +48,12 @@ public class JwtUtil {
     /**
      * 验证jwt，并且解析里面的信息
      *
-     * @param jwtSecret 密钥信息
+     * @param jwtSecret 密钥信息（不可为空）
      * @param jwtSign   签名值
      * @return claims信息，当为null时，说明验证不通过
      */
     public static Map<String, String> getClaims(String jwtSecret, String jwtSign) {
-        if (jwtSecret == null || jwtSecret.isEmpty()) {
-            jwtSecret = JWT_SECRET;
-        }
+        requireSecret(jwtSecret);
         try {
             Map<String, String> map = new HashMap<>();
             DecodedJWT jwt = JWT.require(Algorithm.HMAC256(jwtSecret)).build().verify(jwtSign);
@@ -71,25 +70,33 @@ public class JwtUtil {
     }
 
     /**
-     * 生成 token
+     * 生成 token（默认有效期30天）
      *
-     * @param jwtSecret 密钥信息
+     * @param jwtSecret 密钥信息（不可为空）
      * @param subject   主题
      * @param payload   jwt其他数据
      * @return token
      */
     public static String sign(String jwtSecret, String subject, Map<String, String> payload) {
-        if (jwtSecret == null || jwtSecret.isEmpty()) {
-            jwtSecret = JWT_SECRET;
-        }
+        return sign(jwtSecret, subject, payload, JWT_DEFAULT_EXPIRE_SECONDS);
+    }
+
+    /**
+     * 生成 token
+     *
+     * @param jwtSecret     密钥信息（不可为空）
+     * @param subject       主题
+     * @param payload       jwt其他数据
+     * @param expireSeconds token有效期（秒）
+     * @return token
+     */
+    public static String sign(String jwtSecret, String subject, Map<String, String> payload, long expireSeconds) {
+        requireSecret(jwtSecret);
         if (subject == null || subject.isEmpty()) {
             subject = JWT_SUBJECT;
         }
         Date createTime = new Date();
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTime(createTime);
-        calendar.add(Calendar.DAY_OF_MONTH, 30); // 过期时间设置为30天后，即30天后强制过期
-        Date expireTime = calendar.getTime();
+        Date expireTime = new Date(createTime.getTime() + expireSeconds * 1000);
         JWTCreator.Builder builder = JWT.create();
         payload.forEach(builder::withClaim);
         return builder.withSubject(subject)
@@ -98,15 +105,14 @@ public class JwtUtil {
                 .sign(Algorithm.HMAC256(jwtSecret));
     }
 
-    public static void main(String[] args) {
-        Map<String, String> map = new HashMap<>();
-        map.put("token", UUID.randomUUID().toString());
-
-        // 生成jwt签名值
-        String token = sign(null, "x1cloud", map);
-        System.out.println(token);
-
-        // 解析jwt签名值
-        System.out.println(getClaims(null, token));
+    /**
+     * 校验密钥非空，禁止静默回退到任何内置默认密钥。
+     *
+     * @param jwtSecret 密钥信息
+     */
+    private static void requireSecret(String jwtSecret) {
+        if (jwtSecret == null || jwtSecret.isEmpty()) {
+            throw new IllegalArgumentException("The jwtSecret cannot be empty! Please configure tiny-security.jwt-secret.");
+        }
     }
 }
