@@ -89,7 +89,7 @@ public class LoginSubject implements Serializable {
                 ", extraInfo=" + extraInfo +
                 ", loginTime=" + loginTime +
                 ", loginExpireTime=" + loginExpireTime +
-                ", credentials=****" +
+                ", credentials=" + credentials +
                 '}';
     }
 }
