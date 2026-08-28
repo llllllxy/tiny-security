@@ -69,44 +69,152 @@ public class AuthProperties {
 
     private String[] excludePath = new String[]{};
 
-    public Boolean getBanner() { return banner; }
-    public void setBanner(Boolean banner) { this.banner = banner; }
-    public String getStoreType() { return storeType; }
-    public void setStoreType(String storeType) { this.storeType = storeType; }
-    public String getTokenName() { return tokenName; }
-    public void setTokenName(String tokenName) { this.tokenName = tokenName; }
-    public Integer getTimeout() { return timeout; }
-    public void setTimeout(Integer timeout) { this.timeout = timeout; }
-    public String getCredentialsStyle() { return credentialsStyle; }
-    public void setCredentialsStyle(String credentialsStyle) { this.credentialsStyle = credentialsStyle; }
-    public String getTableName() { return tableName; }
-    public void setTableName(String tableName) { this.tableName = tableName; }
-    public Boolean getAuthorizationEnabled() { return authorizationEnabled; }
-    public void setAuthorizationEnabled(Boolean authorizationEnabled) { this.authorizationEnabled = authorizationEnabled; }
-    public PermissionMode getPermCheckMode() { return permCheckMode; }
-    public void setPermCheckMode(PermissionMode permCheckMode) { this.permCheckMode = permCheckMode; }
-    public String getJwtSecret() { return jwtSecret; }
-    public void setJwtSecret(String jwtSecret) { this.jwtSecret = jwtSecret; }
-    public String getJwtSubject() { return jwtSubject; }
-    public void setJwtSubject(String jwtSubject) { this.jwtSubject = jwtSubject; }
-    public Integer getJwtTimeout() { return jwtTimeout; }
-    public void setJwtTimeout(Integer jwtTimeout) { this.jwtTimeout = jwtTimeout; }
-    public Integer getMaxConcurrentLogins() { return maxConcurrentLogins; }
-    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) { this.maxConcurrentLogins = maxConcurrentLogins; }
-    public Boolean getExceptionTranslationEnabled() { return exceptionTranslationEnabled; }
-    public void setExceptionTranslationEnabled(Boolean exceptionTranslationEnabled) { this.exceptionTranslationEnabled = exceptionTranslationEnabled; }
-    public Boolean getForceHttpStatus200() { return forceHttpStatus200; }
-    public void setForceHttpStatus200(Boolean forceHttpStatus200) { this.forceHttpStatus200 = forceHttpStatus200; }
-    public Boolean getCookieSecure() { return cookieSecure; }
-    public void setCookieSecure(Boolean cookieSecure) { this.cookieSecure = cookieSecure; }
-    public Boolean getEnableCookie() { return enableCookie; }
-    public void setEnableCookie(Boolean enableCookie) { this.enableCookie = enableCookie; }
-    public CookieSameSite getCookieSameSite() { return cookieSameSite; }
-    public void setCookieSameSite(CookieSameSite cookieSameSite) { this.cookieSameSite = cookieSameSite; }
+    public Boolean getBanner() {
+        return banner;
+    }
+
+    public void setBanner(Boolean banner) {
+        this.banner = banner;
+    }
+
+    public String getStoreType() {
+        return storeType;
+    }
+
+    public void setStoreType(String storeType) {
+        this.storeType = storeType;
+    }
+
+    public String getTokenName() {
+        return tokenName;
+    }
+
+    public void setTokenName(String tokenName) {
+        this.tokenName = tokenName;
+    }
+
+    public Integer getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Integer timeout) {
+        this.timeout = timeout;
+    }
+
+    public String getCredentialsStyle() {
+        return credentialsStyle;
+    }
+
+    public void setCredentialsStyle(String credentialsStyle) {
+        this.credentialsStyle = credentialsStyle;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
+
+    public Boolean getAuthorizationEnabled() {
+        return authorizationEnabled;
+    }
+
+    public void setAuthorizationEnabled(Boolean authorizationEnabled) {
+        this.authorizationEnabled = authorizationEnabled;
+    }
+
+    public PermissionMode getPermCheckMode() {
+        return permCheckMode;
+    }
+
+    public void setPermCheckMode(PermissionMode permCheckMode) {
+        this.permCheckMode = permCheckMode;
+    }
+
+    public String getJwtSecret() {
+        return jwtSecret;
+    }
+
+    public void setJwtSecret(String jwtSecret) {
+        this.jwtSecret = jwtSecret;
+    }
+
+    public String getJwtSubject() {
+        return jwtSubject;
+    }
+
+    public void setJwtSubject(String jwtSubject) {
+        this.jwtSubject = jwtSubject;
+    }
+
+    public Integer getJwtTimeout() {
+        return jwtTimeout;
+    }
+
+    public void setJwtTimeout(Integer jwtTimeout) {
+        this.jwtTimeout = jwtTimeout;
+    }
+
+    public Integer getMaxConcurrentLogins() {
+        return maxConcurrentLogins;
+    }
+
+    public void setMaxConcurrentLogins(Integer maxConcurrentLogins) {
+        this.maxConcurrentLogins = maxConcurrentLogins;
+    }
+
+    public Boolean getExceptionTranslationEnabled() {
+        return exceptionTranslationEnabled;
+    }
+
+    public void setExceptionTranslationEnabled(Boolean exceptionTranslationEnabled) {
+        this.exceptionTranslationEnabled = exceptionTranslationEnabled;
+    }
+
+    public Boolean getForceHttpStatus200() {
+        return forceHttpStatus200;
+    }
+
+    public void setForceHttpStatus200(Boolean forceHttpStatus200) {
+        this.forceHttpStatus200 = forceHttpStatus200;
+    }
+
+    public Boolean getCookieSecure() {
+        return cookieSecure;
+    }
+
+    public void setCookieSecure(Boolean cookieSecure) {
+        this.cookieSecure = cookieSecure;
+    }
+
+    public Boolean getEnableCookie() {
+        return enableCookie;
+    }
+
+    public void setEnableCookie(Boolean enableCookie) {
+        this.enableCookie = enableCookie;
+    }
+
+    public CookieSameSite getCookieSameSite() {
+        return cookieSameSite;
+    }
+
+    public void setCookieSameSite(CookieSameSite cookieSameSite) {
+        this.cookieSameSite = cookieSameSite;
+    }
+
     @Deprecated
-    public String[] getAddPath() { return addPath; }
+    public String[] getAddPath() {
+        return addPath;
+    }
+
     @Deprecated
-    public void setAddPath(String[] addPath) { this.addPath = addPath; }
+    public void setAddPath(String[] addPath) {
+        this.addPath = addPath;
+    }
+
     public String[] getIncludePath() {
         String[] mergedPaths = CommonUtil.mergeAndDeduplicate(this.includePath, this.addPath);
         if (mergedPaths == null || mergedPaths.length == 0) {
@@ -114,7 +222,16 @@ public class AuthProperties {
         }
         return mergedPaths;
     }
-    public void setIncludePath(String[] includePath) { this.includePath = includePath; }
-    public String[] getExcludePath() { return excludePath; }
-    public void setExcludePath(String[] excludePath) { this.excludePath = excludePath; }
+
+    public void setIncludePath(String[] includePath) {
+        this.includePath = includePath;
+    }
+
+    public String[] getExcludePath() {
+        return excludePath;
+    }
+
+    public void setExcludePath(String[] excludePath) {
+        this.excludePath = excludePath;
+    }
 }

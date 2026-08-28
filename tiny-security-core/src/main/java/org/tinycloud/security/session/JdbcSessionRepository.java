@@ -75,7 +75,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
             int num = jdbcTemplate.update(
                     sql,
                     subject.getCredentials(),
-                    String.valueOf(subject.getLoginId()),
+                    normalizeLoginId(subject.getLoginId()),
                     JsonUtil.writeValueAsString(subject),
                     subject.getLoginExpireTime()
             );
@@ -164,7 +164,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String sql = "DELETE FROM " + tableName + " WHERE login_id = ?";
-            int num = jdbcTemplate.update(sql, loginId);
+            int num = jdbcTemplate.update(sql, normalizeLoginId(loginId));
             return num > 0;
         } catch (Exception e) {
             log.error("JdbcSessionRepository deleteByLoginId failed, Exception: ", e);
@@ -179,12 +179,22 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
     public int countValidOnlineSessions(Object loginId) {
         String sql = "SELECT COUNT(1) FROM " + tableName + " WHERE login_id = ? AND credentials_expire_time > ?";
         try {
-            Long count = jdbcTemplate.queryForObject(sql, Long.class, loginId, System.currentTimeMillis());
+            Long count = jdbcTemplate.queryForObject(sql, Long.class, normalizeLoginId(loginId), System.currentTimeMillis());
             return count == null ? 0 : count.intValue();
         } catch (Exception e) {
             log.error("JdbcSessionRepository countValidOnlineSessions failed", e);
             return 0;
         }
+    }
+
+    /**
+     * 统一将登录ID转为字符串再绑定到 login_id（varchar）列。
+     * loginId 允许是 Number 或 String，若按 Number 原样绑定会触发数据库隐式转换：
+     * MySQL 上导致 login_id 索引失效，严格类型数据库（PostgreSQL 等）直接报错被吞掉后
+     * 表现为统计恒为 0、踢人失效，数字转换还可能造成 "0123" 与 123 的跨账号误匹配。
+     */
+    private String normalizeLoginId(Object loginId) {
+        return String.valueOf(loginId);
     }
 
     /**
