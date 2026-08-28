@@ -59,6 +59,8 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             if (!canLogin) {
                 throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
             }
+            // 无论是否启用并发限制，登录时都清理该账号在线索引中的失效凭证，否则索引随登录次数无限累积（内存泄漏）
+            this.countValidOnlineSessions(subject.getLoginId());
             this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
             this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
             return true;
@@ -77,8 +79,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
-            return timeout > 0;
+            return isCredentialValid(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
         } catch (Exception e) {
             log.error("SingleSessionRepository checkByCredentials failed, Exception：", e);
             return false;
@@ -92,11 +93,11 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
-            if (timeout <= 0) {
+            String cacheKey = AuthConsts.AUTH_CREDENTIALS_KEY + credentials;
+            if (!isCredentialValid(cacheKey)) {
                 return null;
             }
-            Object content = this.timedCache.getObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            Object content = this.timedCache.getObject(cacheKey);
             return content == null ? null : (LoginSubject) content;
         } catch (Exception e) {
             log.error("SingleSessionRepository getSubject failed, Exception：", e);
@@ -169,11 +170,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             return 0;
         }
         List<String> validCredentials = credentialsList.stream()
-                .filter(cred -> {
-                    String cacheKey = AuthConsts.AUTH_CREDENTIALS_KEY + cred;
-                    long timeout = this.timedCache.getObjectTimeout(cacheKey);
-                    return timeout > 0;
-                })
+                .filter(cred -> isCredentialValid(AuthConsts.AUTH_CREDENTIALS_KEY + cred))
                 .collect(Collectors.toList());
         if (validCredentials.size() != credentialsList.size()) {
             if (validCredentials.isEmpty()) {
@@ -183,6 +180,15 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             }
         }
         return validCredentials.size();
+    }
+
+    /**
+     * 判断指定缓存中的凭证是否有效（存在且未过期）。
+     * 永不过期（剩余存活时间为 NEVER_EXPIRE）的凭证视为有效。
+     */
+    private boolean isCredentialValid(String cacheKey) {
+        long timeout = this.timedCache.getObjectTimeout(cacheKey);
+        return timeout > 0 || timeout == LocalTimeCache.NEVER_EXPIRE;
     }
 
     /**
