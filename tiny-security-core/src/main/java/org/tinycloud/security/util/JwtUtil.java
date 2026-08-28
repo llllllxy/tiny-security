@@ -8,7 +8,9 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * <p>
@@ -53,7 +55,10 @@ public class JwtUtil {
      * @return claims信息，当为null时，说明验证不通过
      */
     public static Map<String, String> getClaims(String jwtSecret, String jwtSign) {
-        requireSecret(jwtSecret);
+        // 校验密钥非空，禁止静默回退到任何内置默认密钥。
+        if (jwtSecret == null || jwtSecret.isEmpty()) {
+            throw new IllegalArgumentException("The jwtSecret cannot be empty! Please configure tiny-security.jwt-secret.");
+        }
         try {
             Map<String, String> map = new HashMap<>();
             DecodedJWT jwt = JWT.require(Algorithm.HMAC256(jwtSecret)).build().verify(jwtSign);
@@ -91,7 +96,10 @@ public class JwtUtil {
      * @return token
      */
     public static String sign(String jwtSecret, String subject, Map<String, String> payload, long expireSeconds) {
-        requireSecret(jwtSecret);
+        // 校验密钥非空，禁止静默回退到任何内置默认密钥。
+        if (jwtSecret == null || jwtSecret.isEmpty()) {
+            throw new IllegalArgumentException("The jwtSecret cannot be empty! Please configure tiny-security.jwt-secret.");
+        }
         if (subject == null || subject.isEmpty()) {
             subject = JWT_SUBJECT;
         }
@@ -103,16 +111,5 @@ public class JwtUtil {
                 .withIssuedAt(createTime)
                 .withExpiresAt(expireTime)
                 .sign(Algorithm.HMAC256(jwtSecret));
-    }
-
-    /**
-     * 校验密钥非空，禁止静默回退到任何内置默认密钥。
-     *
-     * @param jwtSecret 密钥信息
-     */
-    private static void requireSecret(String jwtSecret) {
-        if (jwtSecret == null || jwtSecret.isEmpty()) {
-            throw new IllegalArgumentException("The jwtSecret cannot be empty! Please configure tiny-security.jwt-secret.");
-        }
     }
 }
