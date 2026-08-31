@@ -200,7 +200,7 @@ public class LocalTimeCache {
                 if (this.executorService == null) {
                     this.executorService = Executors.newScheduledThreadPool(1);
                     this.executorService.scheduleWithFixedDelay(() -> {
-                        log.info("LocalTimeCache - refresh - at ：{}", CommonUtil.getCurrentTime());
+                        log.debug("LocalTimeCache - refresh - at ：{}", CommonUtil.getCurrentTime());
                         try {
                             // 执行清理方法
                             refreshDataMap();

@@ -120,17 +120,4 @@ public class SimpleHash {
         }
     }
 
-
-    /**
-     * 简单测试示例
-     */
-    public static void main(String[] args) {
-        String password = "123456";
-        String salt = "323@#@$1234da";
-
-        System.out.println("MD5 HEX: " + new SimpleHash("MD5", password, salt, 2).toHex());
-        System.out.println("SHA-256 BASE64: " + new SimpleHash("SHA-256", password, salt, 10).toBase64());
-        System.out.println("SHA-256 HEX (no salt): " + new SimpleHash("SHA-256", password).toHex());
-        System.out.println("SM3 HEX: " + new SimpleHash("SM3", password, salt, 3).toHex());
-    }
 }

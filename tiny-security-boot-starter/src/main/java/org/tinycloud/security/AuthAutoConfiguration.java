@@ -270,7 +270,7 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
                 "   `--'   `--'`--''--'.-'  /       `-----'  `----' `---' `----' `--'   `--'  `--'  .-'  /    \n" +
                 "                      `---'                                                        `---'     \n" +
                 VersionUtil.getVersion();
-        System.out.println(banner);
+        logger.info("\n{}", banner);
     }
 
 }

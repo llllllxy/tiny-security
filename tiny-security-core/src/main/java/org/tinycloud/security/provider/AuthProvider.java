@@ -70,7 +70,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken(HttpServletRequest request) {
-        String jwtToken = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie());
+        String jwtToken = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -86,7 +86,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken() {
-        String jwtToken = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie());
+        String jwtToken = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -256,15 +256,14 @@ public class AuthProvider {
      * @return 带前缀的 token
      */
     public String login(Object loginId, Map<String, Object> extraInfo) {
+        String token;
         try {
-            String token = this.createAuth(loginId, extraInfo);
+            token = this.createAuth(loginId, extraInfo);
             if (resolveEnableCookie()) {
                 // cookie 生存期与会话 timeout 保持一致，并带上 Secure/SameSite 安全属性
                 CookieUtil.setCookie(WebRequestUtils.getResponse(), this.properties.getTokenName(), token,
                         "/", this.resolveTimeout(), this.resolveCookieSecure(), this.resolveCookieSameSite());
             }
-            this.resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
-            return token;
         } catch (RuntimeException ex) {
             this.resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
                     loginId,
@@ -274,6 +273,14 @@ public class AuthProvider {
             ));
             throw ex;
         }
+        // 成功事件发布移出 try 块：会话已创建成功，监听器抛异常不应被误判为登录失败，
+        // 也不应影响登录结果（仅记录 WARN）。
+        try {
+            this.resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
+        } catch (Exception ex) {
+            log.warn("AuthProvider publishLoginSuccess failed, Exception：", ex);
+        }
+        return token;
     }
 
     /**
@@ -329,18 +336,32 @@ public class AuthProvider {
      * 获取当前登录账号ID（整数形式）。
      *
      * @return 整数账号ID
+     * @throws UnAuthorizedException 未登录时
+     * @throws TinySecurityException loginId 非数字时
      */
     public Integer getLoginIdAsInt() {
-        return Integer.parseInt(String.valueOf(this.getLoginId()));
+        Object loginId = this.getLoginId();
+        try {
+            return Integer.parseInt(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            throw new TinySecurityException("loginId cannot be parsed as Integer: " + loginId);
+        }
     }
 
     /**
      * 获取当前登录账号ID（长整型形式）。
      *
      * @return 长整型账号ID
+     * @throws UnAuthorizedException 未登录时
+     * @throws TinySecurityException loginId 非数字时
      */
     public Long getLoginIdAsLong() {
-        return Long.parseLong(String.valueOf(this.getLoginId()));
+        Object loginId = this.getLoginId();
+        try {
+            return Long.parseLong(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            throw new TinySecurityException("loginId cannot be parsed as Long: " + loginId);
+        }
     }
 
     /**
@@ -429,6 +450,16 @@ public class AuthProvider {
     private boolean resolveEnableCookie() {
         Boolean enableCookie = this.properties.getEnableCookie();
         return enableCookie != null && enableCookie;
+    }
+
+    /**
+     * 解析是否允许从 URL 参数读取 token。
+     *
+     * @return 是否允许，默认 false（URL 传 token 存在访问日志/Referer 泄露风险，非必要不建议开启）
+     */
+    private boolean resolveEnableUrlToken() {
+        Boolean enableUrlToken = this.properties.getEnableUrlToken();
+        return enableUrlToken != null && enableUrlToken;
     }
 
     /**

@@ -91,6 +91,20 @@ class TinySecurityFacadeTest {
         assertEquals(12345L, facade.getLoginIdAsLong());
     }
 
+    /**
+     * 1.3.3 语义统一：loginId 为非数字字符串时，getLoginIdAsInt/Long 抛 TinySecurityException
+     * （而非 NumberFormatException 导致 500），getLoginIdAsString 保持宽松返回原值。
+     */
+    @Test
+    void shouldThrowTinySecurityExceptionWhenLoginIdIsNotNumeric() {
+        bindRequest();
+        repository.setContext(createContext("not-a-number", Collections.emptySet(), Collections.emptySet()));
+
+        assertEquals("not-a-number", facade.getLoginIdAsString());
+        assertThrows(org.tinycloud.security.exception.TinySecurityException.class, facade::getLoginIdAsInt);
+        assertThrows(org.tinycloud.security.exception.TinySecurityException.class, facade::getLoginIdAsLong);
+    }
+
     @Test
     void shouldCheckRoleCorrectly() {
         bindRequest();

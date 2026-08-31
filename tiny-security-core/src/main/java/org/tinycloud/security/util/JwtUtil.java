@@ -30,19 +30,45 @@ public class JwtUtil {
     private static final long JWT_DEFAULT_EXPIRE_SECONDS = 30L * 24 * 60 * 60;
 
     /**
-     * 获取subject
-     * <br/>
-     * 只是简单的解析jwt里的数据并不需要验证签名
+     * 获取subject（不验签，仅解析）。
+     *
+     * <p><b>安全警告：</b>此方法不校验 JWT 签名，任何未签名/伪造的 token 也能被解析出 subject。
+     * 若用于身份判断必须使用 {@link #getVerifiedSubject(String, String)}（验签），
+     * 或对能拿到完整 claims 的业务直接使用 {@link #getClaims(String, String)}。
      *
      * @param jwtSign 签名值
      * @return subject
+     * @deprecated 该方法不验签，存在被伪造 token 误导的安全风险，请改用 {@link #getVerifiedSubject(String, String)}
      */
+    @Deprecated
     public static String getSubject(String jwtSign) {
         try {
             DecodedJWT jwt = JWT.decode(jwtSign);
             return jwt.getSubject();
         } catch (Exception e) {
             log.error("getSubject error：", e);
+            return null;
+        }
+    }
+
+    /**
+     * 验签并获取 subject。
+     *
+     * <p>先使用密钥校验 JWT 签名与有效期，再返回 subject；验签失败（签名非法/已过期/密钥不符）返回 null。
+     *
+     * @param jwtSecret 密钥信息（不可为空）
+     * @param jwtSign   签名值
+     * @return subject，验签不通过时为 null
+     */
+    public static String getVerifiedSubject(String jwtSecret, String jwtSign) {
+        if (jwtSecret == null || jwtSecret.isEmpty()) {
+            throw new IllegalArgumentException("The jwtSecret cannot be empty! Please configure tiny-security.jwt-secret.");
+        }
+        try {
+            DecodedJWT jwt = JWT.require(Algorithm.HMAC256(jwtSecret)).build().verify(jwtSign);
+            return jwt.getSubject();
+        } catch (Exception e) {
+            log.error("getVerifiedSubject error：", e);
             return null;
         }
     }
@@ -79,7 +105,7 @@ public class JwtUtil {
      *
      * @param jwtSecret 密钥信息（不可为空）
      * @param subject   主题
-     * @param payload   jwt其他数据
+     * @param payload   jwt其他数据（不可为空，可为空 Map）
      * @return token
      */
     public static String sign(String jwtSecret, String subject, Map<String, String> payload) {
@@ -91,7 +117,7 @@ public class JwtUtil {
      *
      * @param jwtSecret     密钥信息（不可为空）
      * @param subject       主题
-     * @param payload       jwt其他数据
+     * @param payload       jwt其他数据（不可为 null）
      * @param expireSeconds token有效期（秒）
      * @return token
      */
@@ -99,6 +125,10 @@ public class JwtUtil {
         // 校验密钥非空，禁止静默回退到任何内置默认密钥。
         if (jwtSecret == null || jwtSecret.isEmpty()) {
             throw new IllegalArgumentException("The jwtSecret cannot be empty! Please configure tiny-security.jwt-secret.");
+        }
+        // 校验 payload 非空，避免调用方传入 null 触发 NPE。
+        if (payload == null) {
+            throw new IllegalArgumentException("The payload cannot be null!");
         }
         if (subject == null || subject.isEmpty()) {
             subject = JWT_SUBJECT;

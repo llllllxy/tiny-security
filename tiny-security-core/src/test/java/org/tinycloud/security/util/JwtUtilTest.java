@@ -81,6 +81,35 @@ class JwtUtilTest {
     }
 
     @Test
+    void shouldVerifySubjectWithValidSecret() {
+        String token = JwtUtil.sign("secret-1", "subject-1", payload(), 60);
+
+        assertEquals("subject-1", JwtUtil.getVerifiedSubject("secret-1", token));
+    }
+
+    @Test
+    void shouldRejectSubjectWithWrongSecretOrTamperedToken() {
+        String token = JwtUtil.sign("secret-1", "subject-1", payload(), 60);
+
+        assertNull(JwtUtil.getVerifiedSubject("secret-2", token));
+        assertNull(JwtUtil.getVerifiedSubject("secret-1", token + "x"));
+        assertNull(JwtUtil.getVerifiedSubject("secret-1", "not-a-jwt"));
+    }
+
+    @Test
+    void shouldRejectSubjectWhenExpired() {
+        String token = JwtUtil.sign("secret-1", "subject-1", payload(), -10);
+
+        assertNull(JwtUtil.getVerifiedSubject("secret-1", token));
+    }
+
+    @Test
+    void shouldThrowWhenPayloadNullOnSign() {
+        assertThrows(IllegalArgumentException.class, () -> JwtUtil.sign("secret-1", "subject-1", null, 60));
+        assertThrows(IllegalArgumentException.class, () -> JwtUtil.sign("secret-1", "subject-1", null));
+    }
+
+    @Test
     void shouldUseDefaultSubjectWhenEmpty() {
         String token = JwtUtil.sign("secret-1", null, payload(), 60);
 

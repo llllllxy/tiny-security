@@ -209,7 +209,7 @@ public class RedisSessionRepository implements SessionRepository {
             return true;
         }
         int currentOnlineCount = countValidOnlineSessions(loginId);
-        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
+        log.debug("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
         return currentOnlineCount < maxConcurrentLogins;
     }
 

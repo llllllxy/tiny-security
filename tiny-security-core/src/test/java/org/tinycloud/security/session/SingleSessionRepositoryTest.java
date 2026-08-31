@@ -90,6 +90,35 @@ class SingleSessionRepositoryTest {
     }
 
     /**
+     * 1.3.3 索引收敛：登出最后一个凭证后，在线索引 key 应被整体移除（而非残留空列表）。
+     */
+    @Test
+    void deleteShouldRemoveIndexKeyWhenLastCredentialRemoved() throws Exception {
+        assertTrue(repository.save(buildSubject(10005L, "cred-only"), 60, 0));
+
+        assertTrue(repository.deleteByCredentials("cred-only"));
+
+        Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
+        assertNull(index.get("10005"));
+    }
+
+    /**
+     * 1.3.3 索引收敛：deleteByLoginId 删除账号下全部会话后，在线索引 key 应被移除。
+     */
+    @Test
+    void deleteByLoginIdShouldRemoveIndexKey() throws Exception {
+        assertTrue(repository.save(buildSubject(10006L, "cred-a"), 60, 0));
+        assertTrue(repository.save(buildSubject(10006L, "cred-b"), 60, 0));
+
+        assertTrue(repository.deleteByLoginId(10006L));
+
+        assertFalse(repository.checkByCredentials("cred-a"));
+        assertFalse(repository.checkByCredentials("cred-b"));
+        Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
+        assertNull(index.get("10006"));
+    }
+
+    /**
      * 把指定凭证的到期时间改到过去，模拟会话自然过期。
      */
     private void backdateExpire(String credentials) throws Exception {

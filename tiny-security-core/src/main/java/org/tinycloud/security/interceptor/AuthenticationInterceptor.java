@@ -47,6 +47,13 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        // 防御性清理：进入拦截器时先清除上一次请求遗留的安全上下文。
+        // Servlet 异步（Callable/DeferredResult）或异常场景下 afterCompletion 可能未执行，
+        // ThreadLocal 会随线程回池残留，导致后续请求读到上一个用户的身份（串号）。
+        // 这里在每次真正处理 Controller 请求前兜底清理一次（exclude-path 不进入拦截器，
+        // 本就不会写入上下文，无需处理；不引入全局 Filter，保持框架轻量）。
+        this.securityContextRepository.clearContext(request, response);
+
         // 判断请求类型，如果是OPTIONS，直接返回
         String options = HttpMethod.OPTIONS.toString();
         if (options.equals(request.getMethod())) {

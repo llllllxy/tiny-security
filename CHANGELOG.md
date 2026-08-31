@@ -2,8 +2,37 @@
 
 > 分支：`springboot3`（Spring Boot 3.x / JDK 17+）
 > 数据来源：基于 `springboot3` 分支 first-parent 主线，按版本发布提交逐段切分
-> 版本区间：`1.2.0`（2025-05-14）→ `1.3.2`（2026-08-27）
+> 版本区间：`1.2.0`（2025-05-14）→ `1.3.3`（2026-08-31）
 > 更早基线：`1.1.0 全新版本发布`（2024-09-06，springboot3 重生起点）
+
+---
+
+## 1.3.3
+
+> 升级路径：1.3.2 → 1.3.3 ｜ 本次为安全加固 + 正确性修复批次（基于 2026-08-31 安全审计）
+
+### 安全修复
+
+- **恢复 `LoginSubject.toString()` 凭证脱敏**：1.3.2 后 `aae08b7` 曾回退为输出真实 credentials（便于排查），现恢复为固定输出 `credentials=****`，杜绝日志泄露会话凭证；同步恢复并修正 `LoginSubjectTest`。
+- **移除可预测凭证生成器**：删除 `snowflake`/`objectid`/`ulid` 三种凭证风格（含时间戳，凭证可被预测/枚举，存在会话冒充风险），仅保留 `uuid`/`random128`/`nanoid`；`CredentialsGenUtil` 对未知风格一律回退 `uuid`。同时删除仅被其引用的 `Snowflake`/`ObjectId`/`Ulid*`/`LocalHostUtil` 实现。
+- **URL 参数 token 默认关闭**：新增 `enable-url-token`（默认 `false`），token 默认仅从 header（及开启后的 Cookie）读取，不再回退 URL 参数，避免凭证进入访问日志/Referer。
+
+### Bug 修复 / 正确性
+
+- **滑动续期阈值修正**：`DefaultAuthenticationManager` 续期阈值由 `timeout*0.8` 改为 `timeout*0.2`（剩余 TTL 不足 20% 才续期），消除"会话度过 20% 后每请求触发存储写"的写放大。
+- **ThreadLocal 异步残留防御**：`AuthenticationInterceptor.preHandle` 进入时先 `clearContext` 兜底清理一次，降低 Servlet 异步/异常场景下线程回池残留导致的"用户串号"风险。
+- **`JsonUtil` 序列化失败显式抛错**：不再静默返回空串，改为抛 `TinySecurityException`，杜绝"登录成功但立即 401"的隐蔽故障。
+- **`SingleSessionRepository` 在线索引并发收敛**：list 变更统一由单锁保护，弃用 `put` 整体替换，修复并发计数丢失更新。
+- **`login()` 成功路径异常隔离**：成功事件发布移出 try 块，自定义事件监听器抛异常不再被误判为登录失败（仅 WARN）。
+- **`getLoginIdAsInt/Long` 异常语义统一**：loginId 非数字时抛 `TinySecurityException`（不再直接抛 `NumberFormatException` 导致 500）。
+
+### API 调整
+
+- `JwtUtil` 新增 `getVerifiedSubject(secret, token)`（验签后取 subject）；原 `getSubject(token)` 不验签，标注 `@Deprecated` 并在 javadoc 中警告；`sign` 增加 payload 空校验。
+
+### 工程清理
+
+- 清理生产类残留 `main()`/`System.out`/`printStackTrace`（`BCrypt`/`SimpleHash`/`SM3Hash`/`SM3ConvertUtil`/banner 输出）；README 版本号同步至 1.3.3 并更新配置说明。
 
 ---
 

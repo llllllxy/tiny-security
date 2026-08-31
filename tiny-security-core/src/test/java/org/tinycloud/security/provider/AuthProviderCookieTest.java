@@ -168,6 +168,37 @@ class AuthProviderCookieTest {
         assertNull(logoutResponse.getCookie("token"));
     }
 
+    /**
+     * 1.3.3：enable-url-token 默认关闭——URL 参数中的 token 不被读取（避免进入访问日志/Referer 泄露），
+     * header 无 token 时直接 401。
+     */
+    @Test
+    void shouldNotReadTokenFromUrlParameterWhenUrlTokenDisabled() {
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), defaultProperties(), null);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addParameter("token", "Bearer some-jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
+
+        assertThrows(UnAuthorizedException.class, authProvider::getToken);
+    }
+
+    /**
+     * 1.3.3：开启 enable-url-token 后，URL 参数中的 token 可被读取（兼容历史行为）。
+     */
+    @Test
+    void shouldReadTokenFromUrlParameterWhenUrlTokenEnabled() {
+        AuthProperties properties = defaultProperties();
+        properties.setEnableUrlToken(true);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addParameter("token", "Bearer some-jwt");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
+
+        assertEquals("some-jwt", authProvider.getToken());
+    }
+
     private MockHttpServletResponse bindRequestContext() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();

@@ -22,25 +22,25 @@ public class AuthConsts {
     /**
      * 无权限访问
      */
-    public static int CODE_NO_PERMISSION = 403;
+    public static final int CODE_NO_PERMISSION = 403;
 
     /**
      * 未登录或会话已失效
      */
-    public static int CODE_UNAUTHORIZED = 401;
+    public static final int CODE_UNAUTHORIZED = 401;
 
     /**
      * 并发登录超量
      */
-    public static int CODE_CONCURRENT_LOGIN_OVER_LIMIT = 409;
+    public static final int CODE_CONCURRENT_LOGIN_OVER_LIMIT = 409;
 
     /**
      * 其他异常
      */
-    public static int CODE_OTHER_ERROR = 500;
+    public static final int CODE_OTHER_ERROR = 500;
 
     /**
      * JWT 令牌前缀
      */
-    public static String JWT_TOKEN_PREFIX = "Bearer ";
+    public static final String JWT_TOKEN_PREFIX = "Bearer ";
 }
