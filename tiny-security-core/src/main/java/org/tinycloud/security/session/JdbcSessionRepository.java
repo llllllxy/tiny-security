@@ -205,7 +205,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
             return true;
         }
         int currentOnlineCount = countValidOnlineSessions(loginId);
-        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
+        log.debug("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
         return currentOnlineCount < maxConcurrentLogins;
     }
 
@@ -220,7 +220,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
                     long randomDelaySeconds = ThreadLocalRandom.current().nextInt(RANDOM_DELAY_MAX_SECONDS);
                     long initialDelay = INITIAL_DELAY_BASE + randomDelaySeconds * 1000L;
                     this.executorService.scheduleAtFixedRate(() -> {
-                        log.info("JdbcSessionRepository clean execute at: {}", LocalDateTime.now());
+                        log.debug("JdbcSessionRepository clean execute at: {}", LocalDateTime.now());
                         this.clean();
                     }, initialDelay, PERIOD, TimeUnit.MILLISECONDS);
                 }
@@ -235,7 +235,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
         try {
             String sql = "DELETE FROM " + tableName + " WHERE credentials_expire_time < ?";
             int num = jdbcTemplate.update(sql, System.currentTimeMillis());
-            log.info("JdbcSessionRepository clean num: {}", num);
+            log.debug("JdbcSessionRepository clean num: {}", num);
         } catch (Exception e) {
             log.error("JdbcSessionRepository clean failed, Exception: ", e);
         }

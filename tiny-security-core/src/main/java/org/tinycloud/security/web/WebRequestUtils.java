@@ -65,8 +65,20 @@ public final class WebRequestUtils {
      * @return token
      */
     public static String getToken(String tokenName, boolean enableCookie) {
+        return getToken(tokenName, enableCookie, true);
+    }
+
+    /**
+     * 从当前请求中获取用户token。
+     *
+     * @param tokenName      token名称
+     * @param enableCookie   是否允许从 Cookie 中读取 token
+     * @param enableUrlToken 是否允许从 URL 参数读取 token（默认建议 false：URL 传 token 会进入访问日志/Referer，造成凭证泄露）
+     * @return token
+     */
+    public static String getToken(String tokenName, boolean enableCookie, boolean enableUrlToken) {
         HttpServletRequest request = getRequest();
-        return request == null ? null : getToken(request, tokenName, enableCookie);
+        return request == null ? null : getToken(request, tokenName, enableCookie, enableUrlToken);
     }
 
     /**
@@ -89,11 +101,24 @@ public final class WebRequestUtils {
      * @return token
      */
     public static String getToken(HttpServletRequest request, String tokenName, boolean enableCookie) {
+        return getToken(request, tokenName, enableCookie, true);
+    }
+
+    /**
+     * 从指定请求中获取用户token。
+     *
+     * @param request        HTTP请求
+     * @param tokenName      token名称
+     * @param enableCookie   是否允许从 Cookie 中读取 token
+     * @param enableUrlToken 是否允许从 URL 参数读取 token（默认建议 false：URL 传 token 会进入访问日志/Referer，造成凭证泄露）
+     * @return token
+     */
+    public static String getToken(HttpServletRequest request, String tokenName, boolean enableCookie, boolean enableUrlToken) {
         String token = request.getHeader(tokenName);
         if (!StringUtils.hasText(token) && enableCookie) {
             token = CookieUtil.getCookie(request, tokenName);
         }
-        if (!StringUtils.hasText(token)) {
+        if (!StringUtils.hasText(token) && enableUrlToken) {
             token = request.getParameter(tokenName);
         }
         return token;

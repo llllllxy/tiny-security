@@ -5,6 +5,7 @@ import org.tinycloud.security.authorization.AuthorizationEvaluator;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.web.WebRequestUtils;
 
 import java.util.Set;
@@ -81,21 +82,35 @@ public class TinySecurityFacade {
     /**
      * 获取当前登录账号ID（整数形式）。
      *
-     * @return 整数账号ID，无会话时返回 null
+     * @return 整数账号ID，无会话时返回 null；loginId 非数字时抛 {@link TinySecurityException}
      */
     public Integer getLoginIdAsInt() {
         Object loginId = getLoginId();
-        return loginId == null ? null : Integer.parseInt(String.valueOf(loginId));
+        if (loginId == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            throw new TinySecurityException("loginId cannot be parsed as Integer: " + loginId);
+        }
     }
 
     /**
      * 获取当前登录账号ID（长整型形式）。
      *
-     * @return 长整型账号ID，无会话时返回 null
+     * @return 长整型账号ID，无会话时返回 null；loginId 非数字时抛 {@link TinySecurityException}
      */
     public Long getLoginIdAsLong() {
         Object loginId = getLoginId();
-        return loginId == null ? null : Long.parseLong(String.valueOf(loginId));
+        if (loginId == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            throw new TinySecurityException("loginId cannot be parsed as Long: " + loginId);
+        }
     }
 
     /**

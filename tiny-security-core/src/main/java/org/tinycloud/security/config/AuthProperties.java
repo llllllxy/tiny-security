@@ -53,6 +53,13 @@ public class AuthProperties {
     private Boolean enableCookie = false;
 
     /**
+     * 是否允许从 URL 参数中读取 token。
+     * <p>默认 false：URL 参数传 token 会进入访问日志、Referer 等渠道造成凭证泄露，非必要不建议开启。
+     * 开启后兼容历史行为（header 无 token 时回退到 {@code ?tokenName=xxx}）。
+     */
+    private Boolean enableUrlToken = false;
+
+    /**
      * Cookie 是否仅通过 HTTPS 传输，默认 false（本地 http 调试友好，生产环境建议开启）
      */
     private Boolean cookieSecure = false;
@@ -195,6 +202,14 @@ public class AuthProperties {
 
     public void setEnableCookie(Boolean enableCookie) {
         this.enableCookie = enableCookie;
+    }
+
+    public Boolean getEnableUrlToken() {
+        return enableUrlToken;
+    }
+
+    public void setEnableUrlToken(Boolean enableUrlToken) {
+        this.enableUrlToken = enableUrlToken;
     }
 
     public CookieSameSite getCookieSameSite() {

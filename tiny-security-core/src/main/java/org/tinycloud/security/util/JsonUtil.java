@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.tinycloud.security.exception.TinySecurityException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,6 +26,10 @@ public class JsonUtil {
 
     /**
      * 对象转JSON字符串
+     *
+     * <p>序列化失败时抛出 {@link TinySecurityException}（而不是静默返回空串），
+     * 避免会话仓储把空串写入 Redis/DB，导致"登录成功但立即失效"的隐蔽故障。
+     *
      * @param value 待转换对象
      * @return JSON字符串
      */
@@ -33,9 +38,8 @@ public class JsonUtil {
             try {
                 return objectMapper.writeValueAsString(value);
             } catch (JsonProcessingException e) {
-                if (log.isErrorEnabled()) {
-                    log.error("JsonUtil -- writeValueAsString -- Exception=", e);
-                }
+                log.error("JsonUtil -- writeValueAsString -- Exception=", e);
+                throw new TinySecurityException("Json serialize failed: " + e.getMessage(), e);
             }
         }
         return "";
