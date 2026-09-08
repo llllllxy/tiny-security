@@ -1,6 +1,6 @@
 package org.tinycloud.security;
 
-import jakarta.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletRequest;
 import org.tinycloud.security.authorization.AuthorizationEvaluator;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
