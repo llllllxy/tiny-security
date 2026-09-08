@@ -12,12 +12,13 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.SecurityEventPublisher;
+import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
@@ -69,7 +70,7 @@ class EndToEndFlowTest {
 
     @AfterEach
     void tearDown() {
-        ThreadLocalSecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextRepository.clearContext();
         AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
         sessionRepository.clear();
@@ -192,13 +193,13 @@ class EndToEndFlowTest {
     }
 
     /**
-     * 无会话时 AuthUtil 返回 null（不抛异常）
+     * 1.3.4 行为统一：无会话时 AuthUtil（委托 Facade）统一抛 UnAuthorizedException（不再返回 null）
      */
     @Test
-    void shouldReturnNullWhenNoSession() {
-        assertNull(AuthUtil.getLoginId());
-        assertNull(AuthUtil.getLoginSubject());
-        assertNull(AuthUtil.getSecurityContext());
+    void shouldThrowWhenNoSession() {
+        assertThrows(UnAuthorizedException.class, AuthUtil::getLoginId);
+        assertThrows(UnAuthorizedException.class, AuthUtil::getLoginSubject);
+        assertThrows(UnAuthorizedException.class, AuthUtil::getSecurityContext);
     }
 
     /**

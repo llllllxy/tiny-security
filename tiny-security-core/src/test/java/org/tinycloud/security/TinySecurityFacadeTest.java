@@ -44,10 +44,11 @@ class TinySecurityFacadeTest {
     }
 
     @Test
-    void shouldReturnNullWhenNoRequestContext() {
-        assertNull(facade.getSecurityContext());
-        assertNull(facade.getLoginSubject());
-        assertNull(facade.getLoginId());
+    void shouldThrowWhenNoRequestContext() {
+        // 1.3.4 行为统一：无请求上下文时 get* 系列统一抛 UnAuthorizedException（不再返回 null）
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getSecurityContext);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getLoginSubject);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getLoginId);
     }
 
     @Test
@@ -70,14 +71,15 @@ class TinySecurityFacadeTest {
     }
 
     @Test
-    void shouldReturnNullLoginIdWhenNoContext() {
+    void shouldThrowWhenContextIsNull() {
         bindRequest();
         repository.setContext(null);
 
-        assertNull(facade.getLoginId());
-        assertNull(facade.getLoginIdAsString());
-        assertNull(facade.getLoginIdAsInt());
-        assertNull(facade.getLoginIdAsLong());
+        // 1.3.4 行为统一：会话为空时所有 get* / 数字转换系列统一抛 UnAuthorizedException
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getLoginId);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getLoginIdAsString);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getLoginIdAsInt);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getLoginIdAsLong);
     }
 
     @Test
@@ -145,12 +147,15 @@ class TinySecurityFacadeTest {
     }
 
     @Test
-    void shouldReturnEmptySetsWhenContextIsNull() {
+    void shouldThrowWhenContextIsNullForRoleAndPermission() {
         bindRequest();
         repository.setContext(null);
 
-        assertNull(facade.getRoleSet());
-        assertNull(facade.getPermissionSet());
+        // 1.3.4 行为统一：会话为空时 getRoleSet/getPermissionSet 及 has* 系列统一抛 UnAuthorizedException
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getRoleSet);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, facade::getPermissionSet);
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, () -> facade.hasRole("admin"));
+        assertThrows(org.tinycloud.security.exception.UnAuthorizedException.class, () -> facade.hasPermission("user:read"));
     }
 
     private void bindRequest() {
