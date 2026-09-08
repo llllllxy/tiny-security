@@ -10,6 +10,7 @@ import org.tinycloud.security.session.timedcache.LocalTimeCache;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -74,7 +75,7 @@ class SingleSessionRepositoryTest {
         assertTrue(repository.save(buildSubject(10003L, "cred-new"), 60, 0));
 
         Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
-        assertEquals(List.of("cred-new"), index.get("10003"));
+        assertEquals(Arrays.asList("cred-new"), index.get("10003"));
     }
 
     /**
@@ -144,10 +145,10 @@ class SingleSessionRepositoryTest {
 
         List<String> credentials = repository.getCredentialsByLoginId(10008L);
 
-        assertEquals(List.of("cred-new"), credentials);
+        assertEquals(Arrays.asList("cred-new"), credentials);
         // 索引中的失效项应被就地清理
         Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
-        assertEquals(List.of("cred-new"), index.get("10008"));
+        assertEquals(Arrays.asList("cred-new"), index.get("10008"));
     }
 
     /**
@@ -190,7 +191,7 @@ class SingleSessionRepositoryTest {
         credentials.clear();
 
         Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
-        assertEquals(List.of("cred-a"), index.get("10009"));
+        assertEquals(Arrays.asList("cred-a"), index.get("10009"));
     }
 
     /**

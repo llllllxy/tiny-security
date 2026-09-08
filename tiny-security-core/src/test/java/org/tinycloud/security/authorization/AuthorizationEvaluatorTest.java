@@ -8,6 +8,9 @@ import org.tinycloud.security.enums.Logical;
 
 import java.lang.reflect.Method;
 import java.util.Set;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,7 +66,7 @@ class AuthorizationEvaluatorTest {
 
     @Test
     void hasElementShouldMatchExactOrWildcard() {
-        Set<String> permissions = Set.of("user:read", "order:*", "report:view");
+        Set<String> permissions = new HashSet<>(Arrays.asList("user:read", "order:*", "report:view"));
 
         assertTrue(AuthorizationEvaluator.hasElement(permissions, "user:read"));
         assertTrue(AuthorizationEvaluator.hasElement(permissions, "order:create"));
@@ -75,14 +78,14 @@ class AuthorizationEvaluatorTest {
     @Test
     void hasElementShouldReturnFalseForEmptyOrNullCollection() {
         assertFalse(AuthorizationEvaluator.hasElement(null, "x"));
-        assertFalse(AuthorizationEvaluator.hasElement(Set.of(), "x"));
+        assertFalse(AuthorizationEvaluator.hasElement(Collections.emptySet(), "x"));
     }
 
     // ---------------- hasRole / hasPermission 系列 ----------------
 
     @Test
     void hasRoleShouldSupportAndOrSemantics() {
-        Set<String> roles = Set.of("admin", "user");
+        Set<String> roles = new HashSet<>(Arrays.asList("admin", "user"));
 
         assertTrue(AuthorizationEvaluator.hasRole(roles, "admin"));
         assertFalse(AuthorizationEvaluator.hasRole(roles, "guest"));
@@ -94,7 +97,7 @@ class AuthorizationEvaluatorTest {
 
     @Test
     void hasPermissionShouldSupportAndOrSemantics() {
-        Set<String> permissions = Set.of("user:read", "user:write");
+        Set<String> permissions = new HashSet<>(Arrays.asList("user:read", "user:write"));
 
         assertTrue(AuthorizationEvaluator.hasPermission(permissions, "user:read"));
         assertFalse(AuthorizationEvaluator.hasPermission(permissions, "user:delete"));
@@ -109,20 +112,20 @@ class AuthorizationEvaluatorTest {
     @Test
     void checkPermissionShouldHonorAndLogical() throws Exception {
         Method method = AnnotatedController.class.getMethod("andPermission");
-        Set<String> permissions = Set.of("p1", "p2");
+        Set<String> permissions = new HashSet<>(Arrays.asList("p1", "p2"));
 
         assertTrue(AuthorizationEvaluator.checkPermission(method, permissions));
-        assertFalse(AuthorizationEvaluator.checkPermission(method, Set.of("p1")));
-        assertFalse(AuthorizationEvaluator.checkPermission(method, Set.of("p2")));
+        assertFalse(AuthorizationEvaluator.checkPermission(method, new HashSet<>(Arrays.asList("p1"))));
+        assertFalse(AuthorizationEvaluator.checkPermission(method, new HashSet<>(Arrays.asList("p2"))));
     }
 
     @Test
     void checkPermissionShouldHonorOrLogical() throws Exception {
         Method method = AnnotatedController.class.getMethod("orPermission");
-        Set<String> permissions = Set.of("p1");
+        Set<String> permissions = new HashSet<>(Arrays.asList("p1"));
 
         assertTrue(AuthorizationEvaluator.checkPermission(method, permissions));
-        assertFalse(AuthorizationEvaluator.checkPermission(method, Set.of("p3")));
+        assertFalse(AuthorizationEvaluator.checkPermission(method, new HashSet<>(Arrays.asList("p3"))));
     }
 
     @Test
@@ -130,8 +133,8 @@ class AuthorizationEvaluatorTest {
         Method noAnnotation = AnnotatedController.class.getMethod("plain");
         Method empty = AnnotatedController.class.getMethod("emptyPermission");
 
-        assertTrue(AuthorizationEvaluator.checkPermission(noAnnotation, Set.of()));
-        assertTrue(AuthorizationEvaluator.checkPermission(empty, Set.of()));
+        assertTrue(AuthorizationEvaluator.checkPermission(noAnnotation, Collections.emptySet()));
+        assertTrue(AuthorizationEvaluator.checkPermission(empty, Collections.emptySet()));
     }
 
     @Test
@@ -139,30 +142,30 @@ class AuthorizationEvaluatorTest {
         Method andMethod = AnnotatedController.class.getMethod("andRole");
         Method orMethod = AnnotatedController.class.getMethod("orRole");
 
-        assertTrue(AuthorizationEvaluator.checkRole(andMethod, Set.of("r1", "r2")));
-        assertFalse(AuthorizationEvaluator.checkRole(andMethod, Set.of("r1")));
-        assertTrue(AuthorizationEvaluator.checkRole(orMethod, Set.of("r1")));
-        assertFalse(AuthorizationEvaluator.checkRole(orMethod, Set.of("r3")));
+        assertTrue(AuthorizationEvaluator.checkRole(andMethod, new HashSet<>(Arrays.asList("r1", "r2"))));
+        assertFalse(AuthorizationEvaluator.checkRole(andMethod, new HashSet<>(Arrays.asList("r1"))));
+        assertTrue(AuthorizationEvaluator.checkRole(orMethod, new HashSet<>(Arrays.asList("r1"))));
+        assertFalse(AuthorizationEvaluator.checkRole(orMethod, new HashSet<>(Arrays.asList("r3"))));
     }
 
     // ---------------- matchPaths（Ant 风格 URL 匹配） ----------------
 
     @Test
     void matchPathsShouldSupportAntPatterns() {
-        assertTrue(AuthorizationEvaluator.matchPaths(Set.of("/**"), "/user/list"));
-        assertTrue(AuthorizationEvaluator.matchPaths(Set.of("/user/*"), "/user/list"));
-        assertFalse(AuthorizationEvaluator.matchPaths(Set.of("/user/*"), "/user/list/1"));
-        assertTrue(AuthorizationEvaluator.matchPaths(Set.of("/user/**"), "/user/list/1"));
-        assertTrue(AuthorizationEvaluator.matchPaths(Set.of("/order/{id}"), "/order/42"));
-        assertFalse(AuthorizationEvaluator.matchPaths(Set.of("/order/{id}"), "/order/42/items"));
-        assertFalse(AuthorizationEvaluator.matchPaths(Set.of("/admin/*"), "/user/list"));
+        assertTrue(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/**")), "/user/list"));
+        assertTrue(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/user/*")), "/user/list"));
+        assertFalse(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/user/*")), "/user/list/1"));
+        assertTrue(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/user/**")), "/user/list/1"));
+        assertTrue(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/order/{id}")), "/order/42"));
+        assertFalse(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/order/{id}")), "/order/42/items"));
+        assertFalse(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/admin/*")), "/user/list"));
     }
 
     @Test
     void matchPathsShouldReturnFalseForEmptyOrNull() {
         assertFalse(AuthorizationEvaluator.matchPaths(null, "/x"));
-        assertFalse(AuthorizationEvaluator.matchPaths(Set.of(), "/x"));
-        assertFalse(AuthorizationEvaluator.matchPaths(Set.of("/x"), ""));
+        assertFalse(AuthorizationEvaluator.matchPaths(Collections.emptySet(), "/x"));
+        assertFalse(AuthorizationEvaluator.matchPaths(new HashSet<>(Arrays.asList("/x")), ""));
     }
 
     // ---------------- checkUrlPermission（URL 模式鉴权） ----------------
@@ -172,15 +175,15 @@ class AuthorizationEvaluatorTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRequestURI("/user/list");
 
-        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("/user/**")));
-        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("/user/list")));
-        assertFalse(AuthorizationEvaluator.checkUrlPermission(request, Set.of("/admin/**")));
-        assertFalse(AuthorizationEvaluator.checkUrlPermission(request, Set.of()));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, new HashSet<>(Arrays.asList("/user/**"))));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, new HashSet<>(Arrays.asList("/user/list"))));
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(request, new HashSet<>(Arrays.asList("/admin/**"))));
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(request, Collections.emptySet()));
     }
 
     @Test
     void checkUrlPermissionShouldReturnFalseForNullRequest() {
-        assertFalse(AuthorizationEvaluator.checkUrlPermission(null, Set.of("/**")));
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(null, new HashSet<>(Arrays.asList("/**"))));
     }
 
     // ---------------- 测试用注解控制器 ----------------

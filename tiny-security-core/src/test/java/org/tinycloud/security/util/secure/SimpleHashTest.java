@@ -50,9 +50,21 @@ class SimpleHashTest {
         SimpleHash hash = new SimpleHash("MD5", "123456");
 
         assertEquals(
-                java.util.Base64.getEncoder().encodeToString(
-                        java.util.HexFormat.of().parseHex(hash.toHex())),
+                java.util.Base64.getEncoder().encodeToString(parseHex(hash.toHex())),
                 hash.toBase64());
+    }
+
+    /**
+     * hex 字符串 → byte[]，仅测试内使用（master 基于 JDK 8，无 java.util.HexFormat）。
+     */
+    private static byte[] parseHex(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
     }
 
     @Test
