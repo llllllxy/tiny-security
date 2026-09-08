@@ -26,7 +26,7 @@ class AuthenticationInterceptorTest {
 
     @AfterEach
     void tearDown() {
-        ThreadLocalSecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextRepository.clearContext();
     }
 
     @Test
@@ -53,7 +53,7 @@ class AuthenticationInterceptorTest {
         );
 
         assertTrue(allowed);
-        assertEquals("user-1", ThreadLocalSecurityContextHolder.getContext().getLoginSubject().getLoginId());
+        assertEquals("user-1", ThreadLocalSecurityContextRepository.getContext().getLoginSubject().getLoginId());
     }
 
     @Test
@@ -109,7 +109,7 @@ class AuthenticationInterceptorTest {
         staleSubject.setCredentials("stale-cred");
         SecurityContext staleContext = new SecurityContext();
         staleContext.setLoginSubject(staleSubject);
-        ThreadLocalSecurityContextHolder.setContext(staleContext);
+        ThreadLocalSecurityContextRepository.setContext(staleContext);
 
         LoginSubject subject = new LoginSubject();
         subject.setLoginId("user-1");
@@ -134,8 +134,8 @@ class AuthenticationInterceptorTest {
 
         assertTrue(allowed);
         // 残留上下文被清除，当前线程读到的是本次认证的新用户
-        assertNotNull(ThreadLocalSecurityContextHolder.getContext());
-        assertEquals("user-1", ThreadLocalSecurityContextHolder.getContext().getLoginSubject().getLoginId());
+        assertNotNull(ThreadLocalSecurityContextRepository.getContext());
+        assertEquals("user-1", ThreadLocalSecurityContextRepository.getContext().getLoginSubject().getLoginId());
     }
 
     private AuthenticationInterceptor buildInterceptor(SessionRepository sessionRepository, SecurityContextRepository securityContextRepository) {
@@ -224,18 +224,18 @@ class AuthenticationInterceptorTest {
 
         @Override
         public SecurityContext loadContext(HttpServletRequest request) {
-            return ThreadLocalSecurityContextHolder.getContext();
+            return ThreadLocalSecurityContextRepository.getContext();
         }
 
         @Override
         public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
-            ThreadLocalSecurityContextHolder.setContext(context);
+            ThreadLocalSecurityContextRepository.setContext(context);
         }
 
         @Override
         public void clearContext(HttpServletRequest request, HttpServletResponse response) {
             clearCount.incrementAndGet();
-            ThreadLocalSecurityContextHolder.clearContext();
+            ThreadLocalSecurityContextRepository.clearContext();
         }
     }
 }

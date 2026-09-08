@@ -9,7 +9,7 @@ import org.tinycloud.security.TinySecurityFacade;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
@@ -27,7 +27,7 @@ class AuthProviderSecurityContextTest {
 
     @AfterEach
     void tearDown() {
-        ThreadLocalSecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextRepository.clearContext();
         AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
     }
@@ -38,7 +38,7 @@ class AuthProviderSecurityContextTest {
     @Test
     void shouldReturnExistingSecurityContextWhenContextAlreadyExists() {
         SecurityContext existingContext = buildContext("existing-user");
-        ThreadLocalSecurityContextHolder.setContext(existingContext);
+        ThreadLocalSecurityContextRepository.setContext(existingContext);
         bindRequestAndRepository();
 
         AuthProvider authProvider = new AuthProvider(new ThrowingSessionRepository(), defaultProperties(), null);
