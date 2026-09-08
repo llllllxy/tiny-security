@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.tinycloud.security.util.CommonUtil;
 
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -35,14 +36,14 @@ public class LocalTimeCache {
     /**
      * 存储数据的集合
      */
-    public LocalMapContainer<Object> dataMap;
+    public ConcurrentHashMap<String, Object> dataMap;
 
     /**
      * 存储数据过期时间的集合（单位: 毫秒）, 记录所有 key 的到期时间 （注意存储的是到期时间，不是剩余存活时间）
      */
-    public LocalMapContainer<Long> expireMap;
+    public ConcurrentHashMap<String, Long> expireMap;
 
-    public LocalTimeCache(LocalMapContainer<Object> dataMap, LocalMapContainer<Long> expireMap) {
+    public LocalTimeCache(ConcurrentHashMap<String, Object> dataMap, ConcurrentHashMap<String, Long> expireMap) {
         this.dataMap = dataMap;
         this.expireMap = expireMap;
     }

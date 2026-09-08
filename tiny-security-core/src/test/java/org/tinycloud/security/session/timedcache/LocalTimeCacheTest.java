@@ -2,6 +2,8 @@ package org.tinycloud.security.session.timedcache;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.ConcurrentHashMap;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -15,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class LocalTimeCacheTest {
 
     private final LocalTimeCache cache = new LocalTimeCache(
-            new LocalMapContainerByConcurrentHashMap<>(),
-            new LocalMapContainerByConcurrentHashMap<>());
+            new ConcurrentHashMap<>(),
+            new ConcurrentHashMap<>());
 
     /**
      * 永不过期的 key：查询 TTL 返回 NEVER_EXPIRE，且数据仍在。
