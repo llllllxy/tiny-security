@@ -7,7 +7,6 @@ import org.springframework.util.Assert;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
-import org.tinycloud.security.session.timedcache.LocalMapContainerByConcurrentHashMap;
 import org.tinycloud.security.session.timedcache.LocalTimeCache;
 
 import java.util.List;
@@ -28,8 +27,8 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
      * 维护会话核心内存缓存（线程安全）
      */
     private final LocalTimeCache timedCache = new LocalTimeCache(
-            new LocalMapContainerByConcurrentHashMap<>(),
-            new LocalMapContainerByConcurrentHashMap<>()
+            new ConcurrentHashMap<>(),
+            new ConcurrentHashMap<>()
     );
 
     /**
