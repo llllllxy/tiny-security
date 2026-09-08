@@ -34,6 +34,12 @@
             <artifactId>spring-boot-starter-jdbc</artifactId>
             <scope>provided</scope>
         </dependency>
+        <!-- caffeine 本地缓存（可选依赖，用户自行引入；用于 store-type=caffeine 的会话仓储） -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- servlet依赖 -->
         <dependency>
             <groupId>jakarta.servlet</groupId>

@@ -19,6 +19,12 @@ public class AuthProperties {
 
     private String storeType = "single";
 
+    /**
+     * Caffeine 会话仓储（store-type=caffeine）的最大缓存条目数，默认 10000。
+     * 超出后按近似 LRU 驱逐最早写入的会话，保护内存上限。
+     */
+    private Long caffeineMaximumSize = 10000L;
+
     private String tokenName = "token";
 
     private Integer timeout = 1800;
@@ -45,6 +51,13 @@ public class AuthProperties {
     private Boolean exceptionTranslationEnabled = true;
 
     private Boolean forceHttpStatus200 = false;
+
+    /**
+     * 框架异常解析器（TinySecurityHandlerExceptionResolver）的优先级。
+     * <p>默认 null（等价 {@code Ordered.HIGHEST_PRECEDENCE}，尽早处理安全异常）。
+     * 若希望业务侧 {@code @ControllerAdvice} 优先处理，可设为 0 或更大的值。
+     */
+    private Integer exceptionResolverOrder;
 
     /**
      * 是否启用 Cookie 模式（登录写 Cookie、登出清理 Cookie、从 Cookie 读取 token），
@@ -90,6 +103,14 @@ public class AuthProperties {
 
     public void setStoreType(String storeType) {
         this.storeType = storeType;
+    }
+
+    public Long getCaffeineMaximumSize() {
+        return caffeineMaximumSize;
+    }
+
+    public void setCaffeineMaximumSize(Long caffeineMaximumSize) {
+        this.caffeineMaximumSize = caffeineMaximumSize;
     }
 
     public String getTokenName() {
@@ -178,6 +199,14 @@ public class AuthProperties {
 
     public void setExceptionTranslationEnabled(Boolean exceptionTranslationEnabled) {
         this.exceptionTranslationEnabled = exceptionTranslationEnabled;
+    }
+
+    public Integer getExceptionResolverOrder() {
+        return exceptionResolverOrder;
+    }
+
+    public void setExceptionResolverOrder(Integer exceptionResolverOrder) {
+        this.exceptionResolverOrder = exceptionResolverOrder;
     }
 
     public Boolean getForceHttpStatus200() {
