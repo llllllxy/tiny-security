@@ -1,7 +1,8 @@
 package org.tinycloud.security.provider;
 
-import jakarta.servlet.http.Cookie;
+import javax.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -12,6 +13,8 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
+
+import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -103,7 +106,9 @@ class AuthProviderCookieTest {
         assertEquals(1800, cookie.getMaxAge());
         assertTrue(cookie.isHttpOnly());
         assertFalse(cookie.getSecure());
-        assertEquals("Lax", cookie.getAttribute("SameSite"));
+        // SameSite 属性需要 Servlet 6 / jakarta；master 基于 javax.servlet 3.1 不存在对应方法，自动跳过
+        Assumptions.assumeTrue(supportsCookieAttribute(), "Cookie#setAttribute / getAttribute requires Servlet 6 (jakarta)");
+        assertEquals("Lax", getCookieAttribute(cookie, "SameSite"));
     }
 
     @Test
@@ -120,7 +125,8 @@ class AuthProviderCookieTest {
         Cookie cookie = response.getCookie("token");
         assertNotNull(cookie);
         assertTrue(cookie.getSecure());
-        assertEquals("None", cookie.getAttribute("SameSite"));
+        Assumptions.assumeTrue(supportsCookieAttribute(), "Cookie#setAttribute / getAttribute requires Servlet 6 (jakarta)");
+        assertEquals("None", getCookieAttribute(cookie, "SameSite"));
     }
 
     /**
@@ -204,6 +210,33 @@ class AuthProviderCookieTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
         return response;
+    }
+
+    /**
+     * 通过反射读取 Cookie#getAttribute（Servlet 6 / jakarta 才有；master 基于 javax.servlet 3.1 不存在），
+     * 找不到方法时返回 null。生产代码 CookieUtil#trySetCookieAttribute 也是反射写入，本测试对称处理读取。
+     */
+    private static String getCookieAttribute(Cookie cookie, String name) {
+        try {
+            Method method = Cookie.class.getMethod("getAttribute", String.class);
+            Object value = method.invoke(cookie, name);
+            return value == null ? null : value.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 是否支持 javax/jakarta Cookie#setAttribute / getAttribute（Servlet 6+）。
+     * master 基于 javax.servlet 3.1 不支持，springboot3 基于 jakarta.servlet 6 支持。
+     */
+    private static boolean supportsCookieAttribute() {
+        try {
+            Cookie.class.getMethod("setAttribute", String.class, String.class);
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
     }
 
     private AuthProperties defaultProperties() {

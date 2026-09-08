@@ -8,6 +8,7 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 
@@ -92,12 +93,9 @@ public class CookieUtil {
             cookie.setHttpOnly(true);
             cookie.setSecure(secure);
             if (StringUtils.hasText(sameSite)) {
-                try {
-                    cookie.setAttribute("SameSite", sameSite);
-                } catch (Exception e) {
-                    // 容器不支持 Servlet 6 的 Cookie.setAttribute 时降级为不设置该属性
-                    logger.debug("CookieUtil setCookie setAttribute(SameSite={}) failed!", sameSite, e);
-                }
+                // Servlet 6 / jakarta 才提供 Cookie.setAttribute(String, String)，旧版 javax 通过反射调用，
+                // 找不到方法时静默跳过（保持 JDK 8 / Servlet 3.1 兼容）
+                trySetCookieAttribute(cookie, "SameSite", sameSite);
             }
             try {
                 cookie.setValue(URLEncoder.encode(value, "utf-8"));
@@ -216,6 +214,21 @@ public class CookieUtil {
             }
         }
         return value;
+    }
+
+    /**
+     * 通过反射尝试调用 Cookie.setAttribute(name, value)（Servlet 6 / jakarta 新增）。
+     * 找不到方法时静默跳过——保持对旧版 javax.servlet（Servlet 3.1，JDK 8 / Spring Boot 2.x）的编译与运行兼容。
+     */
+    private static void trySetCookieAttribute(Cookie cookie, String name, String value) {
+        try {
+            Method method = Cookie.class.getMethod("setAttribute", String.class, String.class);
+            method.invoke(cookie, name, value);
+        } catch (NoSuchMethodException e) {
+            logger.debug("CookieUtil trySetCookieAttribute skipped: Cookie#setAttribute not supported by current Servlet API.");
+        } catch (Exception e) {
+            logger.debug("CookieUtil trySetCookieAttribute failed: name={}, value={}", name, value, e);
+        }
     }
 
 }

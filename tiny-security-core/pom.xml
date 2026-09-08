@@ -42,11 +42,11 @@
         </dependency>
         <!-- servlet依赖 -->
         <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-            <scope>provided</scope>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <scope>provided</scope><!-- provided可以理解为此包不由我直接提供 需要调用者/容器提供 -->
         </dependency>
-        <!-- 配置属性元数据生成 -->
+        <!-- 配置属性元数据生成（AuthProperties 已迁移至本模块） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>
