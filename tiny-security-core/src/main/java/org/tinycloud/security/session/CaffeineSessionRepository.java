@@ -3,7 +3,6 @@ package org.tinycloud.security.session;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
-import org.checkerframework.checker.index.qual.NonNegative;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -77,14 +76,14 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
 
                     @Override
                     public long expireAfterUpdate(String key, LoginSubject value, long currentTime,
-                                                  @NonNegative long currentDuration) {
+                                                  long currentDuration) {
                         // 续期/重写后按新的 loginExpireTime 重新计算
                         return nanosUntilExpire(value);
                     }
 
                     @Override
                     public long expireAfterRead(String key, LoginSubject value, long currentTime,
-                                                @NonNegative long currentDuration) {
+                                                long currentDuration) {
                         // 读不重置过期时间：滑动续期由框架的 refresh 显式驱动（与其它仓储语义一致）
                         return currentDuration;
                     }
