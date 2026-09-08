@@ -9,7 +9,6 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextUtils;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.NoopSecurityEventPublisher;
@@ -18,6 +17,7 @@ import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
+import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JwtUtil;
@@ -371,7 +371,7 @@ public class AuthProvider {
      */
     public SecurityContext getSecurityContext() {
         // 优先复用拦截器阶段已建立的上下文，避免重复构建
-        SecurityContext context = SecurityContextUtils.getSecurityContext();
+        SecurityContext context = AuthUtil.getSecurityContext();
         if (context != null && context.getLoginSubject() != null) {
             return context;
         }
