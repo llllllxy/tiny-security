@@ -64,7 +64,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.3.3</version>
+    <version>1.4.0</version>
 </dependency>
 ```
 
@@ -72,8 +72,11 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 
 ```yaml
 tiny-security:
-   # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)，如不配置，则默认为single
+   # 存储类型，目前支持jdbc、redis、single(单机内存)、caffeine(本地缓存)四种，如不配置，则默认为single
+   # 注意：caffeine 为可选依赖，使用前需自行引入 com.github.ben-manes.caffeine:caffeine
    store-type: single
+   # caffeine 会话仓储的最大缓存条目数（store-type=caffeine 时生效），默认10000，超出按近似LRU驱逐
+   caffeine-maximum-size: 10000
    # token名称 (同时也是cookie名称以适配前后端不分离的模式)
    # 注意：token 依次从 header、Cookie（开启 enable-cookie 后）中读取；
    # 默认不再从 URL 参数读取（enable-url-token 默认 false），因为 URL 传 token 会进入访问日志，存在泄露风险
@@ -110,6 +113,9 @@ tiny-security:
    cookie-secure: false
    # Cookie SameSite 属性，默认LAX（可选 STRICT/LAX/NONE，用于防御 CSRF）
    cookie-same-site: LAX
+   # 框架异常解析器优先级，默认null（等价HIGHEST_PRECEDENCE，尽早处理安全异常）
+   # 若希望业务侧 @ControllerAdvice 优先处理，可设为 0 或更大的值
+   exception-resolver-order: # 例如 0
    # 要拦截的路径，默认拦截所有路径
    include-path: /**
    # 要排除的路径，默认不排除任何路径

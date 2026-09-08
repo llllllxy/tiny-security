@@ -2,8 +2,44 @@
 
 > 分支：`springboot3`（Spring Boot 3.x / JDK 17+）
 > 数据来源：基于 `springboot3` 分支 first-parent 主线，按版本发布提交逐段切分
-> 版本区间：`1.2.0`（2025-05-14）→ `1.3.3`（2026-08-31）
+> 版本区间：`1.2.0`（2025-05-14）→ `1.4.0`（2026-09-01）
 > 更早基线：`1.1.0 全新版本发布`（2024-09-06，springboot3 重生起点）
+
+---
+
+## 1.4.0
+
+> 升级路径：1.3.3 → 1.4.0 ｜ 本次为双 API 语义统一（破坏性变更）
+
+### ⚠️ 行为变更（升级必读）
+
+- **`AuthUtil` / `TinySecurityFacade` 的 `get*` 与 `has*` 系列在未登录/会话失效时统一抛 `UnAuthorizedException`，不再返回 null**：
+  - 影响方法：`getSecurityContext` / `getLoginSubject` / `getLoginId` / `getLoginIdAsString` / `getLoginIdAsInt` / `getLoginIdAsLong` / `getRoleSet` / `getPermissionSet` / `hasRole` / `hasAllRole` / `hasAnyRole` / `hasPermission` / `hasAllPermission` / `hasAnyPermission`
+  - 此前 `AuthProvider` 系列已抛异常，而 `AuthUtil`/`TinySecurityFacade` 系列返回 null，两套 API 行为不一致；本次统一为"未登录即抛异常"，与 `AuthProvider`、Spring Security 语义对齐
+  - **破坏性**：依赖 `AuthUtil.getLoginId()` 等返回 null 进行容错判断（如可选鉴权接口、日志埋点）的代码，升级后将抛 `UnAuthorizedException`，需改为显式捕获或先判断登录状态
+- **移除冗余转发类 `SecurityContextUtils`**（原仅转发到 `AuthUtil`，无自有逻辑）：直接使用 `AuthUtil.getSecurityContext()` 等替代。**破坏性**：若外部代码 import 了 `SecurityContextUtils`，请改用 `AuthUtil`。
+- **移除冗余转发类 `ThreadLocalSecurityContextHolder`**（原仅封装一个 `ThreadLocal`）：`ThreadLocal` 已内联进 `ThreadLocalSecurityContextRepository`，通过其静态方法 `getContext()` / `setContext()` / `clearContext()` 访问。**破坏性**：若外部代码 import 了 `ThreadLocalSecurityContextHolder`，请改用 `ThreadLocalSecurityContextRepository`。
+- **移除冗余抽象 `LocalMapContainer` 接口及其唯一实现 `LocalMapContainerByConcurrentHashMap`**：`LocalTimeCache` 的 `dataMap`/`expireMap` 字段与构造直接使用 `ConcurrentHashMap`（底层本就依赖它，行为不变，删除 `getSource()` 死方法）。**破坏性**：若外部代码直接 new `LocalTimeCache(...)`，参数类型改为 `ConcurrentHashMap<String,Object>` / `ConcurrentHashMap<String,Long>`。
+- **`SessionRepository.deleteByLoginId` 返回值语义统一为"操作已执行"（幂等）**：此前 Single/Caffeine 无会话时返回 `true`，而 Jdbc/Redis 返回 `false`，四个仓储行为不一致。本次统一为：**只要操作正常完成即返回 `true`**（无会话可删也算成功，仅异常返回 `false`）。**破坏性**：依赖 Jdbc/Redis `deleteByLoginId` 返回 `false` 判断"该账号无会话"的代码，升级后将收到 `true`，请改用 `countValidOnlineSessions` 判断是否存在会话。
+
+### 升级检查清单
+
+- [ ] 排查代码中所有 `AuthUtil.getLoginId()` / `AuthUtil.getLoginSubject()` / `AuthUtil.getSecurityContext()` / `AuthUtil.getRoleSet()` / `AuthUtil.getPermissionSet()` 及 `has*` 系列的调用点
+- [ ] 若存在"未登录也调用上述方法且依赖返回 null"的场景（如未登录可访问的接口里读取当前用户做日志），改为：先 `try { AuthUtil.getLoginId(); } catch (UnAuthorizedException e) { /* 未登录处理 */ }`，或在确信已登录的路径内调用
+- [ ] `hasRole` / `hasPermission` 等"判断型"方法：未登录时也会抛异常（不再返回 false）。若希望未登录容错判断，需在调用前确保已登录或显式捕获
+- [ ] 全局异常处理器若已处理 `UnAuthorizedException`（默认 `TinySecurityHandlerExceptionResolver` 会转为 401），则无需额外改动
+
+### 新增特性
+
+- **新增 Caffeine 本地缓存会话仓储**（`store-type=caffeine`）：提供容量上限保护（`caffeine-maximum-size`，默认 10000，近似 LRU 驱逐）与惰性过期驱逐，适合"单机部署、会话量大、需内存上限"场景。
+  - **可选依赖**：caffeine 以 `provided` 提供，使用前需自行引入：
+    ```xml
+    <dependency>
+        <groupId>com.github.ben-manes.caffeine</groupId>
+        <artifactId>caffeine</artifactId>
+    </dependency>
+    ```
+  - 过期语义与其它仓储一致：由 `LoginSubject.getLoginExpireTime()` 驱动，续期时重新写入即重置。
 
 ---
 
