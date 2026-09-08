@@ -12,6 +12,7 @@ import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -231,6 +232,28 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
                 return 0;
             }
             return credentialsList.size();
+        }
+    }
+
+    /**
+     * 获取指定账号下全部有效（未被驱逐）会话凭证。
+     * <p>在 {@link #onlineLock} 锁内先就地清理已被 Caffeine 驱逐的凭证，再返回列表副本。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        String loginIdStr = String.valueOf(loginId);
+        synchronized (onlineLock) {
+            List<String> credentialsList = this.loginIdToCredentialsMap.get(loginIdStr);
+            if (credentialsList == null || credentialsList.isEmpty()) {
+                return new ArrayList<>();
+            }
+            credentialsList.removeIf(cred -> this.cache.getIfPresent(AuthConsts.AUTH_CREDENTIALS_KEY + cred) == null);
+            if (credentialsList.isEmpty()) {
+                this.loginIdToCredentialsMap.remove(loginIdStr);
+                return new ArrayList<>();
+            }
+            return new ArrayList<>(credentialsList);
         }
     }
 

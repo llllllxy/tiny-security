@@ -335,6 +335,27 @@ authProvider.deleteTokenByLoginId(loginId);
 
 ```
 
+### 2.2.8 查询指定账号的全部会话凭证
+
+获取某个账号当前所有**有效（未过期）**的会话凭证，常用于多设备管理（列出账号的所有在线设备/会话）、
+定向踢人（只注销其中某一个凭证，而非 `deleteTokenByLoginId` 的全量注销）。
+账号无有效会话时返回空列表（不会返回 null）。
+
+```java
+@Autowired
+private AuthProvider authProvider;
+
+// 获取该账号当前所有有效会话凭证
+List<String> credentialsList = authProvider.getCredentialsByLoginId(loginId);
+
+// 典型用法：只注销该账号的某一个会话（设备），保留其他会话
+authProvider.deleteByCredentials(credentialsList.get(0));
+```
+
+> ⚠️ 凭证即会话钥匙，等同于用户身份凭据，**请勿输出到日志或返回给前端**。
+> 该方法依赖仓储的「账号 → 凭证」反向索引，内置四种仓储（single / caffeine / redis / jdbc）均已支持；
+> 自定义 `SessionRepository` 未实现该方法时，调用会抛 `UnsupportedOperationException`。
+
 ---
 
 
@@ -565,6 +586,13 @@ public class MongoSessionRepository implements SessionRepository {
     @Override
     public int countValidOnlineSessions(Object loginId) {
         return 0;
+    }
+
+    // 可选实现：按账号反查全部有效会话凭证（多设备管理/定向踢人场景需要）
+    // 接口为 default 方法，不实现时调用会抛 UnsupportedOperationException
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        return Collections.emptyList();
     }
 }
 ```

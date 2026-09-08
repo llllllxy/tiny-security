@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -124,6 +126,38 @@ class CaffeineSessionRepositoryTest {
 
         assertFalse(repository.checkByCredentials("cred-a"));
         assertFalse(repository.checkByCredentials("cred-b"));
+    }
+
+    /**
+     * getCredentialsByLoginId：返回该账号全部有效凭证；账号无会话时返回空列表。
+     */
+    @Test
+    void shouldGetCredentialsByLoginId() {
+        assertTrue(repository.save(buildSubject(10008L, "cred-a"), 60, 0));
+        assertTrue(repository.save(buildSubject(10008L, "cred-b"), 60, 0));
+
+        List<String> credentials = repository.getCredentialsByLoginId(10008L);
+
+        assertEquals(2, credentials.size());
+        assertTrue(credentials.contains("cred-a"));
+        assertTrue(credentials.contains("cred-b"));
+        assertTrue(repository.getCredentialsByLoginId(99999L).isEmpty());
+    }
+
+    /**
+     * getCredentialsByLoginId：已过期（loginExpireTime 已过）的凭证不应返回。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldExcludeExpiredCredentials() {
+        LoginSubject expired = buildSubject(10009L, "cred-old");
+        expired.setLoginExpireTime(System.currentTimeMillis() - 1000L);
+        assertTrue(repository.save(expired, 60, 0));
+        assertTrue(repository.save(buildSubject(10009L, "cred-new"), 60, 0));
+
+        List<String> credentials = repository.getCredentialsByLoginId(10009L);
+
+        assertEquals(1, credentials.size());
+        assertTrue(credentials.contains("cred-new"));
     }
 
     /**

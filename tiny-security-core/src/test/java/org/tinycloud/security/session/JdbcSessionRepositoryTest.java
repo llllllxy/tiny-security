@@ -8,6 +8,8 @@ import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -150,6 +152,39 @@ class JdbcSessionRepositoryTest {
         assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, "1auth"));
         assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, ""));
         assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, null));
+    }
+
+    /**
+     * getCredentialsByLoginId：返回该账号全部有效凭证（Number 与 String loginId 口径一致），
+     * 且不含已过期会话；无会话时返回空列表。
+     */
+    @Test
+    void shouldGetCredentialsByLoginId() {
+        assertTrue(repository.save(buildSubject(10007L, "cred-long-a"), 60, 0));
+        assertTrue(repository.save(buildSubject(10007L, "cred-long-b"), 60, 0));
+        assertTrue(repository.save(buildSubject("user-10008", "cred-str-a"), 60, 0));
+
+        List<String> credentials = repository.getCredentialsByLoginId(10007L);
+        assertEquals(2, credentials.size());
+        assertTrue(credentials.contains("cred-long-a"));
+        assertTrue(credentials.contains("cred-long-b"));
+        assertEquals(List.of("cred-str-a"), repository.getCredentialsByLoginId("user-10008"));
+
+        // 无会话时返回空列表（不返回 null）
+        assertNotNull(repository.getCredentialsByLoginId("no-such-user"));
+        assertTrue(repository.getCredentialsByLoginId("no-such-user").isEmpty());
+    }
+
+    /**
+     * getCredentialsByLoginId：已过期会话不计入（与 countValidOnlineSessions 口径一致）。
+     */
+    @Test
+    void shouldExcludeExpiredSessionsFromCredentialsQuery() {
+        LoginSubject expired = buildSubject(10009L, "cred-expired");
+        expired.setLoginExpireTime(System.currentTimeMillis() - 1000L);
+        assertTrue(repository.save(expired, 60, 0));
+
+        assertTrue(repository.getCredentialsByLoginId(10009L).isEmpty());
     }
 
     /**

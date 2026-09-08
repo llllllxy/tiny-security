@@ -9,7 +9,7 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -176,6 +176,23 @@ public class RedisSessionRepository implements SessionRepository {
     }
 
     /**
+     * 获取指定账号下全部有效会话凭证。
+     * <p>复用 {@link #clearInvalidCredentials(Object)}：它会在返回有效凭证前
+     * 先把在线列表中的失效凭证清理掉（Redis 会话 key 过期后列表残留）。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        try {
+            List<String> validCredentials = this.clearInvalidCredentials(loginId);
+            return new ArrayList<>(validCredentials);
+        } catch (Exception e) {
+            log.error("RedisSessionRepository getCredentialsByLoginId failed, Exception：", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
      * 清理在线列表中的失效凭证并返回有效凭证。
      */
     private List<String> clearInvalidCredentials(Object loginId) {
@@ -183,7 +200,7 @@ public class RedisSessionRepository implements SessionRepository {
         List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
         if (credentialsList == null || credentialsList.isEmpty()) {
             this.redisTemplate.delete(onlineKey);
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
         List<String> invalidCredentials = credentialsList.stream()
                 .filter(cred -> !this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + cred))
@@ -196,7 +213,7 @@ public class RedisSessionRepository implements SessionRepository {
         }
         if (credentialsList == null || credentialsList.isEmpty()) {
             this.redisTemplate.delete(onlineKey);
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
         return credentialsList;
     }

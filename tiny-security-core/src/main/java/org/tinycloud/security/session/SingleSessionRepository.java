@@ -9,6 +9,7 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.session.timedcache.LocalTimeCache;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -188,6 +189,29 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
                 return 0;
             }
             return credentialsList.size();
+        }
+    }
+
+    /**
+     * 获取指定账号下全部有效（未过期）会话凭证。
+     * <p>在 {@link #onlineLock} 锁内先就地清理失效凭证，再返回列表副本，
+     * 避免调用方持有内部 list 引用后与并发变更互相干扰。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        String loginIdStr = String.valueOf(loginId);
+        synchronized (onlineLock) {
+            List<String> credentialsList = this.loginIdToCredentialsMap.get(loginIdStr);
+            if (credentialsList == null || credentialsList.isEmpty()) {
+                return new ArrayList<>();
+            }
+            credentialsList.removeIf(cred -> !isCredentialValid(AuthConsts.AUTH_CREDENTIALS_KEY + cred));
+            if (credentialsList.isEmpty()) {
+                this.loginIdToCredentialsMap.remove(loginIdStr);
+                return new ArrayList<>();
+            }
+            return new ArrayList<>(credentialsList);
         }
     }
 
