@@ -13,6 +13,8 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -73,7 +75,7 @@ class RedisSessionRepositoryTest {
     void saveShouldCleanupDeadOnlineEntriesEvenWithoutLimit() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
-        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("dead-cred"), List.of());
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(Arrays.asList("dead-cred"), Collections.emptyList());
         when(redisTemplate.hasKey("tiny:security:credentials:dead-cred")).thenReturn(false);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-new"), 60, 0));
@@ -104,7 +106,7 @@ class RedisSessionRepositoryTest {
     @Test
     void saveShouldRejectWhenConcurrentLimitReached() {
         when(redisTemplate.opsForList()).thenReturn(listOperations);
-        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("other-cred"));
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(Arrays.asList("other-cred"));
         when(redisTemplate.hasKey("tiny:security:credentials:other-cred")).thenReturn(true);
 
         assertThrows(ConcurrentLoginOverLimitException.class,
@@ -136,7 +138,7 @@ class RedisSessionRepositoryTest {
     void deleteByLoginIdShouldDeleteAllSessions() {
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         when(listOperations.range(ONLINE_KEY, 0L, -1L))
-                .thenReturn(List.of("cred-a", "cred-b"));
+                .thenReturn(Arrays.asList("cred-a", "cred-b"));
 
         assertTrue(repository.deleteByLoginId(10001L));
 
@@ -153,7 +155,7 @@ class RedisSessionRepositoryTest {
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         // 第一次读取在线列表（含失效项），清理后第二次读取只剩有效项
         when(listOperations.range(ONLINE_KEY, 0L, -1L))
-                .thenReturn(List.of("cred-alive", "cred-dead"), List.of("cred-alive"));
+                .thenReturn(Arrays.asList("cred-alive", "cred-dead"), Arrays.asList("cred-alive"));
         when(redisTemplate.hasKey("tiny:security:credentials:cred-alive")).thenReturn(true);
         when(redisTemplate.hasKey("tiny:security:credentials:cred-dead")).thenReturn(false);
 

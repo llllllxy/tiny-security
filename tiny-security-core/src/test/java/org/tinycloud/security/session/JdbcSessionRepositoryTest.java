@@ -9,6 +9,7 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
 import java.util.List;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -32,15 +33,14 @@ class JdbcSessionRepositoryTest {
         jdbcTemplate = new JdbcTemplate(new SimpleDriverDataSource(
                 new org.h2.Driver(), "jdbc:h2:mem:jdbc_session_test;DB_CLOSE_DELAY=-1", "sa", ""));
         jdbcTemplate.execute("DROP TABLE IF EXISTS t_auth_storage");
-        jdbcTemplate.execute("""
-                CREATE TABLE t_auth_storage (
-                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                    credentials VARCHAR(256) NOT NULL,
-                    login_id VARCHAR(64) NOT NULL,
-                    login_subject VARCHAR(5000) NOT NULL,
-                    credentials_expire_time BIGINT NOT NULL
-                )
-                """);
+        jdbcTemplate.execute(
+                "CREATE TABLE t_auth_storage ("
+                        + "id BIGINT AUTO_INCREMENT PRIMARY KEY, "
+                        + "credentials VARCHAR(256) NOT NULL, "
+                        + "login_id VARCHAR(64) NOT NULL, "
+                        + "login_subject VARCHAR(5000) NOT NULL, "
+                        + "credentials_expire_time BIGINT NOT NULL"
+                        + ")");
         repository = new JdbcSessionRepository(jdbcTemplate, "t_auth_storage");
     }
 
@@ -168,7 +168,7 @@ class JdbcSessionRepositoryTest {
         assertEquals(2, credentials.size());
         assertTrue(credentials.contains("cred-long-a"));
         assertTrue(credentials.contains("cred-long-b"));
-        assertEquals(List.of("cred-str-a"), repository.getCredentialsByLoginId("user-10008"));
+        assertEquals(Arrays.asList("cred-str-a"), repository.getCredentialsByLoginId("user-10008"));
 
         // 无会话时返回空列表（不返回 null）
         assertNotNull(repository.getCredentialsByLoginId("no-such-user"));

@@ -1,7 +1,7 @@
 package org.tinycloud.security;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +16,7 @@ import org.tinycloud.security.util.AuthUtil;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -54,7 +55,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldReturnSecurityContextFromRepository() {
         bindRequest();
-        SecurityContext context = createContext("user-1", Set.of("admin"), Set.of("user:read"));
+        SecurityContext context = createContext("user-1", new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read")));
         repository.setContext(context);
 
         SecurityContext actual = facade.getSecurityContext();
@@ -110,7 +111,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldCheckRoleCorrectly() {
         bindRequest();
-        repository.setContext(createContext("user-1", Set.of("admin", "user"), Collections.emptySet()));
+        repository.setContext(createContext("user-1", new HashSet<>(Arrays.asList("admin", "user")), Collections.emptySet()));
 
         assertTrue(facade.hasRole("admin"));
         assertTrue(facade.hasRole("user"));
@@ -124,7 +125,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldCheckPermissionCorrectly() {
         bindRequest();
-        repository.setContext(createContext("user-1", Collections.emptySet(), Set.of("user:read", "user:write")));
+        repository.setContext(createContext("user-1", Collections.emptySet(), new HashSet<>(Arrays.asList("user:read", "user:write"))));
 
         assertTrue(facade.hasPermission("user:read"));
         assertTrue(facade.hasPermission("user:write"));
@@ -138,7 +139,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldDelegateThroughAuthUtil() {
         bindRequest();
-        repository.setContext(createContext("user-1", Set.of("admin"), Set.of("user:read")));
+        repository.setContext(createContext("user-1", new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read"))));
 
         // AuthUtil 应该 delegate 到 facade
         assertEquals("user-1", AuthUtil.getLoginId());
