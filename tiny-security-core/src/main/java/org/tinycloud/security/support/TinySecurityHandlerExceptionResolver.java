@@ -18,12 +18,30 @@ public class TinySecurityHandlerExceptionResolver implements HandlerExceptionRes
     private final ExceptionTranslator exceptionTranslator;
 
     /**
-     * 构造 tiny-security 异常解析器。
+     * 异常解析器优先级，默认 {@link Ordered#HIGHEST_PRECEDENCE}（尽早处理安全异常）。
+     * <p>可通过配置 {@code tiny-security.exception-resolver-order} 调低，使业务侧
+     * {@code @ControllerAdvice} 能优先处理（例如设为 0 或 {@link Ordered#LOWEST_PRECEDENCE}）。
+     */
+    private final int order;
+
+    /**
+     * 构造 tiny-security 异常解析器（默认最高优先级）。
      *
      * @param exceptionTranslator 异常翻译器
      */
     public TinySecurityHandlerExceptionResolver(ExceptionTranslator exceptionTranslator) {
+        this(exceptionTranslator, Ordered.HIGHEST_PRECEDENCE);
+    }
+
+    /**
+     * 构造 tiny-security 异常解析器（指定优先级）。
+     *
+     * @param exceptionTranslator 异常翻译器
+     * @param order               优先级（数值越小越优先；建议用 {@link Ordered} 常量）
+     */
+    public TinySecurityHandlerExceptionResolver(ExceptionTranslator exceptionTranslator, int order) {
         this.exceptionTranslator = exceptionTranslator;
+        this.order = order;
     }
 
     /**
@@ -45,12 +63,12 @@ public class TinySecurityHandlerExceptionResolver implements HandlerExceptionRes
     }
 
     /**
-     * 设置较高优先级，尽早处理安全异常。
+     * 返回异常解析器优先级。
      *
-     * @return 顺序值
+     * @return 顺序值（默认 {@link Ordered#HIGHEST_PRECEDENCE}，可通过构造或配置调整）
      */
     @Override
     public int getOrder() {
-        return Ordered.HIGHEST_PRECEDENCE;
+        return order;
     }
 }

@@ -30,6 +30,7 @@ import org.tinycloud.security.interceptor.AuthenticationInterceptor;
 import org.tinycloud.security.interceptor.AuthorizationInterceptor;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
+import org.tinycloud.security.session.CaffeineSessionRepository;
 import org.tinycloud.security.session.JdbcSessionRepository;
 import org.tinycloud.security.session.RedisSessionRepository;
 import org.tinycloud.security.session.SessionRepository;
@@ -155,6 +156,24 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
     }
 
     /**
+     * 注册 Caffeine 本地缓存会话仓储。
+     *
+     * <p>caffeine 为可选依赖（provided，需用户自行引入），故用 {@code name} 字符串形式做条件判断，
+     * 避免 starter 编译期依赖 caffeine；用户未引入 caffeine 时该 Bean 不装配。
+     *
+     * @return 会话仓储
+     */
+    @ConditionalOnMissingBean(SessionRepository.class)
+    @ConditionalOnProperty(name = "tiny-security.store-type", havingValue = "caffeine")
+    @ConditionalOnClass(name = "com.github.benmanes.caffeine.cache.Caffeine")
+    @Bean
+    public SessionRepository caffeineSessionRepository() {
+        Long maximumSize = authProperties.getCaffeineMaximumSize();
+        logger.info("CaffeineSessionRepository is running! maximumSize={}", maximumSize);
+        return new CaffeineSessionRepository(maximumSize == null ? 10000L : maximumSize);
+    }
+
+    /**
      * 注册默认 AuthProvider 外观实现。
      *
      * @param sessionRepository       会话仓储
@@ -256,7 +275,9 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
     @ConditionalOnProperty(name = "tiny-security.exception-translation-enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(name = "tinySecurityHandlerExceptionResolver")
     public HandlerExceptionResolver tinySecurityHandlerExceptionResolver(ExceptionTranslator exceptionTranslator) {
-        return new TinySecurityHandlerExceptionResolver(exceptionTranslator);
+        // 优先级可配：默认 HIGHEST_PRECEDENCE；业务侧可通过 exception-resolver-order 调低使 @ControllerAdvice 优先
+        Integer order = authProperties.getExceptionResolverOrder();
+        return new TinySecurityHandlerExceptionResolver(exceptionTranslator, order == null ? org.springframework.core.Ordered.HIGHEST_PRECEDENCE : order);
     }
 
     /**
