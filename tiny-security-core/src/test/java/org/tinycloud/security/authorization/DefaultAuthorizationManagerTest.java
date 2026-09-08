@@ -10,7 +10,7 @@ import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
@@ -28,7 +28,7 @@ class DefaultAuthorizationManagerTest {
 
     @AfterEach
     void tearDown() {
-        ThreadLocalSecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextRepository.clearContext();
         RequestContextHolder.resetRequestAttributes();
         AuthUtil.setFacade(null);
     }

@@ -12,7 +12,7 @@ import org.tinycloud.security.authorization.DefaultAuthorizationManager;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.ThreadLocalSecurityContextHolder;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
@@ -35,7 +35,7 @@ class AuthorizationInterceptorTest {
 
     @AfterEach
     void tearDown() {
-        ThreadLocalSecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextRepository.clearContext();
     }
 
     @Test
@@ -58,7 +58,7 @@ class AuthorizationInterceptorTest {
         subject.setLoginId("user-1");
         SecurityContext context = new SecurityContext();
         context.setLoginSubject(subject);
-        ThreadLocalSecurityContextHolder.setContext(context);
+        ThreadLocalSecurityContextRepository.setContext(context);
 
         boolean allowed = interceptor.preHandle(
                 request(),
@@ -86,7 +86,7 @@ class AuthorizationInterceptorTest {
         subject.setLoginId("user-1");
         SecurityContext context = new SecurityContext();
         context.setLoginSubject(subject);
-        ThreadLocalSecurityContextHolder.setContext(context);
+        ThreadLocalSecurityContextRepository.setContext(context);
         CapturingSecurityEventPublisher eventPublisher = new CapturingSecurityEventPublisher();
         AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), eventPublisher);
 
