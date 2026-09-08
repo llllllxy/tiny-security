@@ -152,13 +152,13 @@ public class RedisSessionRepository implements SessionRepository {
         try {
             String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId;
             List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
-            if (credentialsList == null || credentialsList.isEmpty()) {
-                return false;
-            }
-            for (String cred : credentialsList) {
-                redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+            if (credentialsList != null) {
+                for (String cred : credentialsList) {
+                    redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+                }
             }
             this.redisTemplate.delete(onlineKey);
+            // 幂等语义：无论是否有会话被删除，只要操作正常完成即视为成功
             return true;
         } catch (Exception e) {
             log.error("RedisSessionRepository deleteByLoginId failed, Exception：", e);

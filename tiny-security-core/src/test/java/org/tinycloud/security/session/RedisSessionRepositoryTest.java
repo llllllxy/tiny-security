@@ -113,6 +113,37 @@ class RedisSessionRepositoryTest {
     }
 
     /**
+     * 幂等语义（1.4.0）：在线列表为空/不存在时也返回 true——deleteByLoginId 表达的是
+     * "操作是否成功执行"而非"实际删除了几个会话"，与 Single/Caffeine 本地仓储一致。
+     */
+    @Test
+    void deleteByLoginIdShouldReturnTrueWhenNoOnlineSession() {
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(null);
+
+        assertTrue(repository.deleteByLoginId(10001L));
+
+        // 即使无会话可删，也应删除在线列表 key（幂等清理）
+        verify(redisTemplate).delete(ONLINE_KEY);
+    }
+
+    /**
+     * 有会话时按凭证逐个删除会话 key，并清理在线列表 key。
+     */
+    @Test
+    void deleteByLoginIdShouldDeleteAllSessions() {
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(listOperations.range(ONLINE_KEY, 0L, -1L))
+                .thenReturn(List.of("cred-a", "cred-b"));
+
+        assertTrue(repository.deleteByLoginId(10001L));
+
+        verify(redisTemplate).delete("tiny:security:credentials:cred-a");
+        verify(redisTemplate).delete("tiny:security:credentials:cred-b");
+        verify(redisTemplate).delete(ONLINE_KEY);
+    }
+
+    /**
      * 构造登录主体。
      */
     private LoginSubject buildSubject(Object loginId, String credentials) {

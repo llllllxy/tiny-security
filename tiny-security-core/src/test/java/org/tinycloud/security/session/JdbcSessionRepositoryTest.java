@@ -135,6 +135,34 @@ class JdbcSessionRepositoryTest {
     }
 
     /**
+     * 表名白名单校验：仅允许字母/下划线/数字/点号（支持 schema.table），杜绝 SQL 拼接注入。
+     */
+    @Test
+    void shouldRejectInvalidTableName() {
+        // 合法表名（含 schema.table 形式）不应抛异常——此处仅校验不抛错，不真正建表
+        assertDoesNotThrow(() -> new JdbcSessionRepository(jdbcTemplate, "my_auth_storage").destroy());
+        assertDoesNotThrow(() -> new JdbcSessionRepository(jdbcTemplate, "dbo.t_auth_storage").destroy());
+
+        // 非法表名：含空格/分号/引号/特殊字符应被拒绝
+        assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, "t auth"));
+        assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, "t; DROP TABLE x"));
+        assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, "t' OR '1'='1"));
+        assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, "1auth"));
+        assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, ""));
+        assertThrows(IllegalArgumentException.class, () -> new JdbcSessionRepository(jdbcTemplate, null));
+    }
+
+    /**
+     * 幂等语义（1.4.0）：无会话可删时也返回 true——deleteByLoginId 表达的是
+     * "操作是否成功执行"而非"实际删除了几个会话"，与 Single/Caffeine 本地仓储一致。
+     */
+    @Test
+    void shouldReturnTrueWhenNoSessionToDelete() {
+        assertTrue(repository.deleteByLoginId("no-such-user"));
+        assertTrue(repository.deleteByLoginId(99999L));
+    }
+
+    /**
      * 构造登录主体。
      */
     private LoginSubject buildSubject(Object loginId, String credentials) {
