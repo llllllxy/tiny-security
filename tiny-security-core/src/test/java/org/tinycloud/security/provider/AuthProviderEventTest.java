@@ -18,7 +18,9 @@ import org.tinycloud.security.session.SessionRepository;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthProviderEventTest {
 
@@ -51,6 +53,25 @@ class AuthProviderEventTest {
         assertEquals(1, publisher.loginFailureCount.get());
     }
 
+    /**
+     * 1.3.3：成功事件监听器抛异常时，会话已创建成功，login() 必须仍返回 token、
+     * 且不得误发 LoginFailureEvent（仅内部记录 WARN）。
+     */
+    @Test
+    void shouldReturnTokenWhenSuccessListenerThrows() {
+        CapturingSecurityEventPublisher publisher = new CapturingSecurityEventPublisher();
+        publisher.throwOnSuccess = true;
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(false), defaultProperties(), publisher);
+        bindRequestContext();
+
+        String token = authProvider.login("user-1", null);
+
+        assertNotNull(token);
+        assertTrue(token.startsWith("Bearer "));
+        assertEquals(1, publisher.loginSuccessCount.get());
+        assertEquals(0, publisher.loginFailureCount.get());
+    }
+
     private void bindRequestContext() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -72,10 +93,14 @@ class AuthProviderEventTest {
     static class CapturingSecurityEventPublisher implements SecurityEventPublisher {
         private final AtomicInteger loginSuccessCount = new AtomicInteger(0);
         private final AtomicInteger loginFailureCount = new AtomicInteger(0);
+        private volatile boolean throwOnSuccess;
 
         @Override
         public void publishLoginSuccess(LoginSuccessEvent event) {
             loginSuccessCount.incrementAndGet();
+            if (throwOnSuccess) {
+                throw new RuntimeException("listener failure");
+            }
         }
 
         @Override

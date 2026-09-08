@@ -10,6 +10,7 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -53,6 +54,12 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
      * @param tableName    会话表名
      */
     public JdbcSessionRepository(JdbcTemplate jdbcTemplate, String tableName) {
+        Assert.hasText(tableName, "The tableName cannot be empty!");
+        // 表名来自配置（无用户输入，注入面极小），但仍做白名单校验，杜绝任何形式的 SQL 拼接注入。
+        // 允许：字母/下划线/数字开头，可含点号以支持 schema.table 形式（如 dbo.t_auth_storage）
+        if (!tableName.matches("^[a-zA-Z_][a-zA-Z0-9_.]*$")) {
+            throw new IllegalArgumentException("Invalid tableName '" + tableName + "', only letters, digits, '_' and '.' are allowed, and must start with a letter or '_'");
+        }
         this.jdbcTemplate = jdbcTemplate;
         this.tableName = tableName;
         this.initCleanThread();
@@ -75,7 +82,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
             int num = jdbcTemplate.update(
                     sql,
                     subject.getCredentials(),
-                    String.valueOf(subject.getLoginId()),
+                    normalizeLoginId(subject.getLoginId()),
                     JsonUtil.writeValueAsString(subject),
                     subject.getLoginExpireTime()
             );
@@ -164,8 +171,9 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String sql = "DELETE FROM " + tableName + " WHERE login_id = ?";
-            int num = jdbcTemplate.update(sql, loginId);
-            return num > 0;
+            // 幂等语义：无论是否有会话被删除，只要操作正常完成即视为成功
+            jdbcTemplate.update(sql, normalizeLoginId(loginId));
+            return true;
         } catch (Exception e) {
             log.error("JdbcSessionRepository deleteByLoginId failed, Exception: ", e);
             return false;
@@ -179,12 +187,41 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
     public int countValidOnlineSessions(Object loginId) {
         String sql = "SELECT COUNT(1) FROM " + tableName + " WHERE login_id = ? AND credentials_expire_time > ?";
         try {
-            Long count = jdbcTemplate.queryForObject(sql, Long.class, loginId, System.currentTimeMillis());
+            Long count = jdbcTemplate.queryForObject(sql, Long.class, normalizeLoginId(loginId), System.currentTimeMillis());
             return count == null ? 0 : count.intValue();
         } catch (Exception e) {
             log.error("JdbcSessionRepository countValidOnlineSessions failed", e);
             return 0;
         }
+    }
+
+    /**
+     * 获取指定账号下全部有效（未过期）会话凭证。
+     * <p>与 {@link #countValidOnlineSessions(Object)} 口径一致：按字符串化的 login_id
+     * 精确匹配，且只取 credentials_expire_time 大于当前时间的行。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        String sql = "SELECT credentials FROM " + tableName + " WHERE login_id = ? AND credentials_expire_time > ?";
+        try {
+            List<String> credentialsList = jdbcTemplate.queryForList(sql, String.class,
+                    normalizeLoginId(loginId), System.currentTimeMillis());
+            return credentialsList == null ? new ArrayList<>() : credentialsList;
+        } catch (Exception e) {
+            log.error("JdbcSessionRepository getCredentialsByLoginId failed", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 统一将登录ID转为字符串再绑定到 login_id（varchar）列。
+     * loginId 允许是 Number 或 String，若按 Number 原样绑定会触发数据库隐式转换：
+     * MySQL 上导致 login_id 索引失效，严格类型数据库（PostgreSQL 等）直接报错被吞掉后
+     * 表现为统计恒为 0、踢人失效，数字转换还可能造成 "0123" 与 123 的跨账号误匹配。
+     */
+    private String normalizeLoginId(Object loginId) {
+        return String.valueOf(loginId);
     }
 
     /**
@@ -195,7 +232,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
             return true;
         }
         int currentOnlineCount = countValidOnlineSessions(loginId);
-        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
+        log.debug("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
         return currentOnlineCount < maxConcurrentLogins;
     }
 
@@ -210,7 +247,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
                     long randomDelaySeconds = ThreadLocalRandom.current().nextInt(RANDOM_DELAY_MAX_SECONDS);
                     long initialDelay = INITIAL_DELAY_BASE + randomDelaySeconds * 1000L;
                     this.executorService.scheduleAtFixedRate(() -> {
-                        log.info("JdbcSessionRepository clean execute at: {}", LocalDateTime.now());
+                        log.debug("JdbcSessionRepository clean execute at: {}", LocalDateTime.now());
                         this.clean();
                     }, initialDelay, PERIOD, TimeUnit.MILLISECONDS);
                 }
@@ -225,7 +262,7 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
         try {
             String sql = "DELETE FROM " + tableName + " WHERE credentials_expire_time < ?";
             int num = jdbcTemplate.update(sql, System.currentTimeMillis());
-            log.info("JdbcSessionRepository clean num: {}", num);
+            log.debug("JdbcSessionRepository clean num: {}", num);
         } catch (Exception e) {
             log.error("JdbcSessionRepository clean failed, Exception: ", e);
         }

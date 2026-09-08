@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.tinycloud.security.util.CommonUtil;
 
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -35,14 +36,14 @@ public class LocalTimeCache {
     /**
      * 存储数据的集合
      */
-    public LocalMapContainer<Object> dataMap;
+    public ConcurrentHashMap<String, Object> dataMap;
 
     /**
      * 存储数据过期时间的集合（单位: 毫秒）, 记录所有 key 的到期时间 （注意存储的是到期时间，不是剩余存活时间）
      */
-    public LocalMapContainer<Long> expireMap;
+    public ConcurrentHashMap<String, Long> expireMap;
 
-    public LocalTimeCache(LocalMapContainer<Object> dataMap, LocalMapContainer<Long> expireMap) {
+    public LocalTimeCache(ConcurrentHashMap<String, Object> dataMap, ConcurrentHashMap<String, Long> expireMap) {
         this.dataMap = dataMap;
         this.expireMap = expireMap;
     }
@@ -157,6 +158,11 @@ public class LocalTimeCache {
         if (expire == null) {
             return NOT_VALUE_EXPIRE;
         }
+        // 永不过期的key按原样返回，绝不能参与"时间戳-当前时间"计算：
+        // 否则 -1 会被当作早已过期的时间戳，导致永不过期的key在查询TTL时被误删
+        if (expire == NEVER_EXPIRE) {
+            return NEVER_EXPIRE;
+        }
         // 计算剩余时间并返回
         long timeout = (expire - System.currentTimeMillis()) / 1000;
         // 小于零时，视为不存在，返回NOT_VALUE_EXPIRE
@@ -195,12 +201,12 @@ public class LocalTimeCache {
                 if (this.executorService == null) {
                     this.executorService = Executors.newScheduledThreadPool(1);
                     this.executorService.scheduleWithFixedDelay(() -> {
-                        log.info("LocalTimeCache - refresh - at ：{}", CommonUtil.getCurrentTime());
+                        log.debug("LocalTimeCache - refresh - at ：{}", CommonUtil.getCurrentTime());
                         try {
                             // 执行清理方法
                             refreshDataMap();
                         } catch (Exception e2) {
-                            log.error("LocalTimeCache - refresh - Exception：{e2}", e2);
+                            log.error("LocalTimeCache - refresh - Exception：", e2);
                         }
                     }, 10/*首次延迟多长时间后执行*/, DATA_REFRESH_PERIOD/*间隔时间*/, TimeUnit.SECONDS);
                 }

@@ -1,6 +1,6 @@
 package org.tinycloud.security.provider;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
@@ -9,20 +9,22 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
-import org.tinycloud.security.context.SecurityContextUtils;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.NoopSecurityEventPublisher;
 import org.tinycloud.security.event.SecurityEventPublisher;
+import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
+import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CookieUtil;
 import org.tinycloud.security.util.CredentialsGenUtil;
 import org.tinycloud.security.util.JwtUtil;
 import org.tinycloud.security.web.WebRequestUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -40,6 +42,11 @@ public class AuthProvider {
     private final SecurityEventPublisher securityEventPublisher;
 
     /**
+     * 实际生效的 JWT 密钥：优先取配置值；未配置时生成随机密钥（重启后所有会话失效）
+     */
+    private final String jwtSecret;
+
+    /**
      * 构造 AuthProvider 外观。
      *
      * @param sessionRepository       会话仓储
@@ -50,10 +57,11 @@ public class AuthProvider {
                         AuthProperties properties,
                         SecurityEventPublisher securityEventPublisher) {
         Assert.notNull(sessionRepository, "SessionRepository cannot be null!");
-        Assert.notNull(properties, "AuthProperties cannot be null!");
+        Assert.notNull(properties, "The properties cannot be null!");
         this.sessionRepository = sessionRepository;
         this.properties = properties;
         this.securityEventPublisher = securityEventPublisher;
+        this.jwtSecret = resolveJwtSecret(properties.getJwtSecret());
     }
 
     /**
@@ -63,7 +71,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken(HttpServletRequest request) {
-        String jwtToken = WebRequestUtils.getToken(request, properties.getTokenName());
+        String jwtToken = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -79,7 +87,7 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken() {
-        String jwtToken = WebRequestUtils.getToken(properties.getTokenName());
+        String jwtToken = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
         if (!StringUtils.hasText(jwtToken)) {
             throw new UnAuthorizedException();
         }
@@ -102,7 +110,7 @@ public class AuthProvider {
         if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
             token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
         }
-        Map<String, String> claims = JwtUtil.getClaims(properties.getJwtSecret(), token);
+        Map<String, String> claims = JwtUtil.getClaims(this.jwtSecret, token);
         if (Objects.isNull(claims)) {
             throw new UnAuthorizedException();
         }
@@ -115,7 +123,7 @@ public class AuthProvider {
      * @return 会话凭证
      */
     public String getCredentials() {
-        return getCredentialsByToken(getToken());
+        return this.getCredentialsByToken(this.getToken());
     }
 
     /**
@@ -125,7 +133,7 @@ public class AuthProvider {
      * @return 会话凭证
      */
     public String getCredentials(HttpServletRequest request) {
-        return getCredentialsByToken(getToken(request));
+        return this.getCredentialsByToken(this.getToken(request));
     }
 
     /**
@@ -140,13 +148,15 @@ public class AuthProvider {
         Assert.isTrue(loginId instanceof Number || loginId instanceof String,
                 "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
 
-        String credentials = CredentialsGenUtil.generate(properties.getCredentialsStyle());
+        String credentials = CredentialsGenUtil.generate(this.properties.getCredentialsStyle());
         Map<String, String> payload = new HashMap<>();
         payload.put("credentials", credentials);
-        String jwtToken = JwtUtil.sign(properties.getJwtSecret(), properties.getJwtSubject(), payload);
+        // JWT 有效期取 jwt-timeout 与会话 timeout 的较大值，避免 token 先于会话过期
+        long jwtExpireSeconds = Math.max(this.properties.getJwtTimeout(), this.resolveTimeout());
+        String jwtToken = JwtUtil.sign(this.jwtSecret, this.properties.getJwtSubject(), payload, jwtExpireSeconds);
 
         long currentTime = System.currentTimeMillis();
-        int timeout = resolveTimeout();
+        int timeout = this.resolveTimeout();
         LoginSubject subject = new LoginSubject();
         subject.setCredentials(credentials);
         subject.setExtraInfo(extraInfo);
@@ -154,7 +164,7 @@ public class AuthProvider {
         subject.setLoginTime(currentTime);
         subject.setLoginExpireTime(currentTime + timeout * 1000L);
 
-        boolean success = sessionRepository.save(subject, timeout, resolveMaxConcurrentLogins());
+        boolean success = this.sessionRepository.save(subject, timeout, this.resolveMaxConcurrentLogins());
         if (!success) {
             throw new TinySecurityException("Failed to create auth. Please retry!");
         }
@@ -169,7 +179,7 @@ public class AuthProvider {
      * @return 是否刷新成功
      */
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
-        return sessionRepository.refreshByCredentials(credentials, subject, resolveTimeout());
+        return this.sessionRepository.refreshByCredentials(credentials, subject, resolveTimeout());
     }
 
     /**
@@ -179,7 +189,7 @@ public class AuthProvider {
      * @return true-有效，false-无效
      */
     public boolean checkByCredentials(String credentials) {
-        return sessionRepository.checkByCredentials(credentials);
+        return this.sessionRepository.checkByCredentials(credentials);
     }
 
     /**
@@ -189,7 +199,7 @@ public class AuthProvider {
      * @return 登录主体
      */
     public LoginSubject getSubject(String credentials) {
-        return sessionRepository.getSubject(credentials);
+        return this.sessionRepository.getSubject(credentials);
     }
 
     /**
@@ -216,7 +226,7 @@ public class AuthProvider {
      * @return 是否删除成功
      */
     public boolean deleteByCredentials(String credentials) {
-        return sessionRepository.deleteByCredentials(credentials);
+        return this.sessionRepository.deleteByCredentials(credentials);
     }
 
     /**
@@ -226,7 +236,26 @@ public class AuthProvider {
      * @return 是否删除成功
      */
     public boolean deleteByLoginId(Object loginId) {
-        return sessionRepository.deleteByLoginId(loginId);
+        return this.sessionRepository.deleteByLoginId(loginId);
+    }
+
+    /**
+     * 获取指定账号下全部有效（未过期）会话凭证。
+     *
+     * <p>典型用途：多设备管理（列出账号的所有在线设备/会话）、定向下线
+     * （配合 {@link #deleteByCredentials(String)} 只踢掉某个凭证，
+     * 而非 {@link #deleteByLoginId(Object)} 的全量踢出）。
+     *
+     * <p>注意：凭证即会话钥匙，等同于用户身份凭据，请勿输出到日志或返回给前端；
+     * 且该方法依赖仓储的"账号 → 凭证"反向索引，内置四种仓储均已实现，
+     * 自定义仓储未实现时抛 {@link UnsupportedOperationException}。
+     *
+     * @param loginId 账号ID
+     * @return 有效会话凭证列表，无有效会话时返回空列表
+     * @throws UnsupportedOperationException 当前会话仓储不支持按账号反查凭证时抛出
+     */
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        return this.sessionRepository.getCredentialsByLoginId(loginId);
     }
 
     /**
@@ -236,7 +265,7 @@ public class AuthProvider {
      * @return 带前缀 token
      */
     public String login(Object loginId) {
-        return login(loginId, null);
+        return this.login(loginId, null);
     }
 
     /**
@@ -247,13 +276,16 @@ public class AuthProvider {
      * @return 带前缀的 token
      */
     public String login(Object loginId, Map<String, Object> extraInfo) {
+        String token;
         try {
-            String token = this.createAuth(loginId, extraInfo);
-            CookieUtil.setCookie(WebRequestUtils.getResponse(), properties.getTokenName(), token);
-            resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
-            return token;
+            token = this.createAuth(loginId, extraInfo);
+            if (resolveEnableCookie()) {
+                // cookie 生存期与会话 timeout 保持一致，并带上 Secure/SameSite 安全属性
+                CookieUtil.setCookie(WebRequestUtils.getResponse(), this.properties.getTokenName(), token,
+                        "/", this.resolveTimeout(), this.resolveCookieSecure(), this.resolveCookieSameSite());
+            }
         } catch (RuntimeException ex) {
-            resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
+            this.resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
                     loginId,
                     extraInfo,
                     ex.getMessage(),
@@ -261,12 +293,23 @@ public class AuthProvider {
             ));
             throw ex;
         }
+        // 成功事件发布移出 try 块：会话已创建成功，监听器抛异常不应被误判为登录失败，
+        // 也不应影响登录结果（仅记录 WARN）。
+        try {
+            this.resolveSecurityEventPublisher().publishLoginSuccess(new LoginSuccessEvent(loginId, token, extraInfo, System.currentTimeMillis()));
+        } catch (Exception ex) {
+            log.warn("AuthProvider publishLoginSuccess failed, Exception：", ex);
+        }
+        return token;
     }
 
     /**
      * 基于当前请求上下文登出。
      */
     public void logout() {
+        if (resolveEnableCookie()) {
+            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName());
+        }
         this.deleteByCredentials(this.getCredentials());
     }
 
@@ -276,6 +319,9 @@ public class AuthProvider {
      * @param request HTTP 请求
      */
     public void logout(HttpServletRequest request) {
+        if (resolveEnableCookie()) {
+            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName());
+        }
         this.deleteByCredentials(this.getCredentials(request));
     }
 
@@ -303,25 +349,39 @@ public class AuthProvider {
      * @return 字符串账号ID
      */
     public String getLoginIdAsString() {
-        return String.valueOf(getLoginId());
+        return String.valueOf(this.getLoginId());
     }
 
     /**
      * 获取当前登录账号ID（整数形式）。
      *
      * @return 整数账号ID
+     * @throws UnAuthorizedException 未登录时
+     * @throws TinySecurityException loginId 非数字时
      */
     public Integer getLoginIdAsInt() {
-        return Integer.parseInt(String.valueOf(getLoginId()));
+        Object loginId = this.getLoginId();
+        try {
+            return Integer.parseInt(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            throw new TinySecurityException("loginId cannot be parsed as Integer: " + loginId);
+        }
     }
 
     /**
      * 获取当前登录账号ID（长整型形式）。
      *
      * @return 长整型账号ID
+     * @throws UnAuthorizedException 未登录时
+     * @throws TinySecurityException loginId 非数字时
      */
     public Long getLoginIdAsLong() {
-        return Long.parseLong(String.valueOf(getLoginId()));
+        Object loginId = this.getLoginId();
+        try {
+            return Long.parseLong(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            throw new TinySecurityException("loginId cannot be parsed as Long: " + loginId);
+        }
     }
 
     /**
@@ -331,7 +391,7 @@ public class AuthProvider {
      */
     public SecurityContext getSecurityContext() {
         // 优先复用拦截器阶段已建立的上下文，避免重复构建
-        SecurityContext context = SecurityContextUtils.getSecurityContext();
+        SecurityContext context = AuthUtil.getSecurityContext();
         if (context != null && context.getLoginSubject() != null) {
             return context;
         }
@@ -347,7 +407,8 @@ public class AuthProvider {
         try {
             return this.checkByCredentials(this.getCredentials());
         } catch (Exception e) {
-            log.error("AuthProvider isLogin failed, Exception：{e}", e);
+            // 匿名请求也会走到这里（无 token），属正常流程，降为 debug 避免刷屏
+            log.debug("AuthProvider isLogin failed, Exception：", e);
             return false;
         }
     }
@@ -371,7 +432,7 @@ public class AuthProvider {
      * @return 超时时间，默认1800秒
      */
     private int resolveTimeout() {
-        Integer timeout = properties.getTimeout();
+        Integer timeout = this.properties.getTimeout();
         return timeout == null ? 1800 : timeout;
     }
 
@@ -381,8 +442,64 @@ public class AuthProvider {
      * @return 最大并发登录数，默认0（不限制）
      */
     private int resolveMaxConcurrentLogins() {
-        Integer maxConcurrentLogins = properties.getMaxConcurrentLogins();
+        Integer maxConcurrentLogins = this.properties.getMaxConcurrentLogins();
         return maxConcurrentLogins == null ? 0 : maxConcurrentLogins;
+    }
+
+    /**
+     * 解析 JWT 密钥：已配置则使用配置值；未配置则生成随机密钥并给出警告
+     * （随机密钥重启后会变化，导致历史会话全部失效，生产环境必须配置固定密钥）。
+     *
+     * @param configuredSecret 配置的密钥
+     * @return 实际生效的密钥
+     */
+    private String resolveJwtSecret(String configuredSecret) {
+        if (StringUtils.hasText(configuredSecret)) {
+            return configuredSecret;
+        }
+        log.warn("tiny-security: tiny-security.jwt-secret is not configured, a temporary random secret has been generated. " +
+                "All sessions will be invalid after restart! Please configure a fixed secret for production environments.");
+        return CredentialsGenUtil.generate("random128");
+    }
+
+    /**
+     * 解析是否启用 Cookie 模式。
+     *
+     * @return 是否启用，默认 false（纯 token 模式）
+     */
+    private boolean resolveEnableCookie() {
+        Boolean enableCookie = this.properties.getEnableCookie();
+        return enableCookie != null && enableCookie;
+    }
+
+    /**
+     * 解析是否允许从 URL 参数读取 token。
+     *
+     * @return 是否允许，默认 false（URL 传 token 存在访问日志/Referer 泄露风险，非必要不建议开启）
+     */
+    private boolean resolveEnableUrlToken() {
+        Boolean enableUrlToken = this.properties.getEnableUrlToken();
+        return enableUrlToken != null && enableUrlToken;
+    }
+
+    /**
+     * 解析 Cookie Secure 属性。
+     *
+     * @return 是否仅 HTTPS 传输，默认 false
+     */
+    private boolean resolveCookieSecure() {
+        Boolean cookieSecure = this.properties.getCookieSecure();
+        return cookieSecure != null && cookieSecure;
+    }
+
+    /**
+     * 解析 Cookie SameSite 属性。
+     *
+     * @return SameSite 属性值，默认 Lax
+     */
+    private String resolveCookieSameSite() {
+        CookieSameSite cookieSameSite = this.properties.getCookieSameSite();
+        return cookieSameSite == null ? CookieSameSite.LAX.getValue() : cookieSameSite.getValue();
     }
 
     /**
@@ -391,9 +508,9 @@ public class AuthProvider {
      * @return 安全事件发布器
      */
     private SecurityEventPublisher resolveSecurityEventPublisher() {
-        if (securityEventPublisher == null) {
+        if (this.securityEventPublisher == null) {
             return new NoopSecurityEventPublisher();
         }
-        return securityEventPublisher;
+        return this.securityEventPublisher;
     }
 }

@@ -7,15 +7,13 @@ import org.springframework.util.Assert;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
-import org.tinycloud.security.session.timedcache.LocalMapContainerByConcurrentHashMap;
 import org.tinycloud.security.session.timedcache.LocalTimeCache;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
 
 /**
  * 单机内存会话仓储实现
@@ -30,14 +28,21 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
      * 维护会话核心内存缓存（线程安全）
      */
     private final LocalTimeCache timedCache = new LocalTimeCache(
-            new LocalMapContainerByConcurrentHashMap<>(),
-            new LocalMapContainerByConcurrentHashMap<>()
+            new ConcurrentHashMap<>(),
+            new ConcurrentHashMap<>()
     );
 
     /**
      * key: loginId（转为String），value: 该账号的所有在线凭证列表
      */
     private final Map<String, List<String>> loginIdToCredentialsMap = new ConcurrentHashMap<>();
+
+    /**
+     * 保护 {@link #loginIdToCredentialsMap} 及其 list 变更的锁。
+     * <p>list 变更（add/remove/就地清理/整体删除）统一在此锁内完成，
+     * 避免并发 {@code add} 与 {@code put} 整体替换交错导致丢失更新。
+     */
+    private final Object onlineLock = new Object();
 
     /**
      * 构造单机内存会话仓储并启动过期清理线程。
@@ -59,6 +64,8 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             if (!canLogin) {
                 throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
             }
+            // 无论是否启用并发限制，登录时都清理该账号在线索引中的失效凭证，否则索引随登录次数无限累积（内存泄漏）
+            this.countValidOnlineSessions(subject.getLoginId());
             this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
             this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
             return true;
@@ -77,8 +84,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
-            return timeout > 0;
+            return isCredentialValid(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
         } catch (Exception e) {
             log.error("SingleSessionRepository checkByCredentials failed, Exception：", e);
             return false;
@@ -92,11 +98,11 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            long timeout = this.timedCache.getObjectTimeout(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
-            if (timeout <= 0) {
+            String cacheKey = AuthConsts.AUTH_CREDENTIALS_KEY + credentials;
+            if (!isCredentialValid(cacheKey)) {
                 return null;
             }
-            Object content = this.timedCache.getObject(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            Object content = this.timedCache.getObject(cacheKey);
             return content == null ? null : (LoginSubject) content;
         } catch (Exception e) {
             log.error("SingleSessionRepository getSubject failed, Exception：", e);
@@ -146,11 +152,16 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String loginIdStr = String.valueOf(loginId);
-            List<String> credentialsList = this.loginIdToCredentialsMap.getOrDefault(loginIdStr, Collections.emptyList());
-            for (String cred : credentialsList) {
-                this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+            List<String> credentialsList;
+            synchronized (onlineLock) {
+                credentialsList = this.loginIdToCredentialsMap.get(loginIdStr);
+                this.loginIdToCredentialsMap.remove(loginIdStr);
             }
-            this.loginIdToCredentialsMap.remove(loginIdStr);
+            if (credentialsList != null && !credentialsList.isEmpty()) {
+                for (String cred : credentialsList) {
+                    this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+                }
+            }
             return true;
         } catch (Exception e) {
             log.error("SingleSessionRepository deleteByLoginId failed, Exception：", e);
@@ -160,29 +171,57 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
 
     /**
      * 统计指定账号有效在线会话数，并清理失效凭证索引。
+     * <p>在 {@link #onlineLock} 锁内对 list 就地过滤（removeIf），
+     * 不再用 {@code put} 整体替换引用，避免与并发 {@code add} 交错丢失更新。
      */
     @Override
     public int countValidOnlineSessions(Object loginId) {
         String loginIdStr = String.valueOf(loginId);
-        List<String> credentialsList = this.loginIdToCredentialsMap.getOrDefault(loginIdStr, Collections.emptyList());
-        if (credentialsList.isEmpty()) {
-            return 0;
-        }
-        List<String> validCredentials = credentialsList.stream()
-                .filter(cred -> {
-                    String cacheKey = AuthConsts.AUTH_CREDENTIALS_KEY + cred;
-                    long timeout = this.timedCache.getObjectTimeout(cacheKey);
-                    return timeout > 0;
-                })
-                .collect(Collectors.toList());
-        if (validCredentials.size() != credentialsList.size()) {
-            if (validCredentials.isEmpty()) {
-                this.loginIdToCredentialsMap.remove(loginIdStr);
-            } else {
-                this.loginIdToCredentialsMap.put(loginIdStr, validCredentials);
+        synchronized (onlineLock) {
+            List<String> credentialsList = this.loginIdToCredentialsMap.get(loginIdStr);
+            if (credentialsList == null || credentialsList.isEmpty()) {
+                return 0;
             }
+            // 就地移除失效凭证，不替换 list 引用（并发 add 不会丢失）
+            credentialsList.removeIf(cred -> !isCredentialValid(AuthConsts.AUTH_CREDENTIALS_KEY + cred));
+            if (credentialsList.isEmpty()) {
+                this.loginIdToCredentialsMap.remove(loginIdStr);
+                return 0;
+            }
+            return credentialsList.size();
         }
-        return validCredentials.size();
+    }
+
+    /**
+     * 获取指定账号下全部有效（未过期）会话凭证。
+     * <p>在 {@link #onlineLock} 锁内先就地清理失效凭证，再返回列表副本，
+     * 避免调用方持有内部 list 引用后与并发变更互相干扰。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        String loginIdStr = String.valueOf(loginId);
+        synchronized (onlineLock) {
+            List<String> credentialsList = this.loginIdToCredentialsMap.get(loginIdStr);
+            if (credentialsList == null || credentialsList.isEmpty()) {
+                return new ArrayList<>();
+            }
+            credentialsList.removeIf(cred -> !isCredentialValid(AuthConsts.AUTH_CREDENTIALS_KEY + cred));
+            if (credentialsList.isEmpty()) {
+                this.loginIdToCredentialsMap.remove(loginIdStr);
+                return new ArrayList<>();
+            }
+            return new ArrayList<>(credentialsList);
+        }
+    }
+
+    /**
+     * 判断指定缓存中的凭证是否有效（存在且未过期）。
+     * 永不过期（剩余存活时间为 NEVER_EXPIRE）的凭证视为有效。
+     */
+    private boolean isCredentialValid(String cacheKey) {
+        long timeout = this.timedCache.getObjectTimeout(cacheKey);
+        return timeout > 0 || timeout == LocalTimeCache.NEVER_EXPIRE;
     }
 
     /**
@@ -193,7 +232,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             return true;
         }
         int currentOnlineCount = countValidOnlineSessions(loginId);
-        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
+        log.debug("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
         return currentOnlineCount < maxConcurrentLogins;
     }
 
@@ -202,7 +241,9 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
      */
     private void addToOnlineList(Object loginId, String credentials) {
         String loginIdStr = String.valueOf(loginId);
-        loginIdToCredentialsMap.computeIfAbsent(loginIdStr, k -> new CopyOnWriteArrayList<>()).add(credentials);
+        synchronized (onlineLock) {
+            this.loginIdToCredentialsMap.computeIfAbsent(loginIdStr, k -> new CopyOnWriteArrayList<>()).add(credentials);
+        }
     }
 
     /**
@@ -210,13 +251,15 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
      */
     private void removeFromOnlineList(Object loginId, String credentials) {
         String loginIdStr = String.valueOf(loginId);
-        List<String> credentialsList = loginIdToCredentialsMap.get(loginIdStr);
-        if (credentialsList == null || credentialsList.isEmpty()) {
-            return;
-        }
-        boolean removed = credentialsList.remove(credentials);
-        if (removed && credentialsList.isEmpty()) {
-            loginIdToCredentialsMap.remove(loginIdStr);
+        synchronized (onlineLock) {
+            List<String> credentialsList = loginIdToCredentialsMap.get(loginIdStr);
+            if (credentialsList == null || credentialsList.isEmpty()) {
+                return;
+            }
+            boolean removed = credentialsList.remove(credentials);
+            if (removed && credentialsList.isEmpty()) {
+                loginIdToCredentialsMap.remove(loginIdStr);
+            }
         }
     }
 

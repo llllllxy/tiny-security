@@ -1,11 +1,15 @@
 package org.tinycloud.security.util.secure.sm3;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.tinycloud.security.util.secure.HexUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 public class SM3Hash {
+
+    private static final Logger log = LoggerFactory.getLogger(SM3Hash.class);
 
     /**
      * 原始值
@@ -80,7 +84,7 @@ public class SM3Hash {
             sm3Digest.update(msgBytes, 0, msgBytes.length);
             sm3Digest.doFinal(hashedBytes, 0);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("SM3Hash SM3Encode failed", e);
         }
         return hashedBytes;
     }
@@ -99,7 +103,7 @@ public class SM3Hash {
             sm3Digest.update(msgBytes, 0, msgBytes.length);
             sm3Digest.doFinal(hashedBytes, 0);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("SM3Hash SM3Encode failed", e);
         }
         return hashedBytes;
     }
@@ -165,19 +169,6 @@ public class SM3Hash {
     @Override
     public String toString() {
         return this.toHex();
-    }
-
-
-    public static void main(String[] args) {
-        System.out.println(new SM3Hash("123456", "323@#@$1234da", 1).toHex());
-        System.out.println(new SM3Hash("123456", "323@#@$1234da").toHex());
-        System.out.println(new SM3Hash("123456").toHex());
-
-        System.out.println(new SM3Hash("123456", "323@#@$1234da", 2).toHex());
-
-        System.out.println(new SM3Hash("123456", "323@#@$1234da", 4).toHex());
-
-        System.out.println(new SM3Hash("123456", "323@#@$1234da").toBase64());
     }
 
 }

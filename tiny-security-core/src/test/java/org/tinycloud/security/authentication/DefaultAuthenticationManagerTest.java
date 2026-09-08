@@ -53,6 +53,58 @@ class DefaultAuthenticationManagerTest {
         assertThrows(UnAuthorizedException.class, () -> authenticationManager.authenticate(request));
     }
 
+    /**
+     * 滑动续期阈值（1.3.3 修正为 20%）：剩余 TTL 大于 timeout*0.2 时不应触发存储写。
+     * timeout=60s，阈值=12s；剩余 50s 时不应刷新。
+     */
+    @Test
+    void shouldNotRefreshWhenRemainingTtlAboveThreshold() {
+        long now = System.currentTimeMillis();
+        LoginSubject subject = new LoginSubject();
+        subject.setLoginId("user-1");
+        subject.setCredentials("cred-1");
+        subject.setLoginTime(now);
+        subject.setLoginExpireTime(now + 50_000); // 剩余 50s > 60s*0.2=12s
+
+        FakeSessionRepository sessionRepository = new FakeSessionRepository();
+        sessionRepository.putSubject(subject);
+        AuthProvider authProvider = new SimpleAuthProvider(sessionRepository);
+        DefaultAuthenticationManager authenticationManager = new DefaultAuthenticationManager(authProvider, sessionRepository, 60);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("token", "cred-1");
+        SecurityContext result = authenticationManager.authenticate(request);
+
+        assertEquals("user-1", result.getLoginSubject().getLoginId());
+        assertFalse(sessionRepository.wasRefreshed());
+        assertEquals(now + 50_000, result.getLoginSubject().getLoginExpireTime());
+    }
+
+    /**
+     * 滑动续期阈值边界（1.3.3 修正为 20%）：剩余 TTL 恰好等于 timeout*0.2 时应触发续期（<= 语义）。
+     */
+    @Test
+    void shouldRefreshWhenRemainingTtlEqualsThreshold() {
+        long now = System.currentTimeMillis();
+        LoginSubject subject = new LoginSubject();
+        subject.setLoginId("user-1");
+        subject.setCredentials("cred-1");
+        subject.setLoginTime(now);
+        subject.setLoginExpireTime(now + 12_000); // 剩余 12s == 60s*0.2
+
+        FakeSessionRepository sessionRepository = new FakeSessionRepository();
+        sessionRepository.putSubject(subject);
+        AuthProvider authProvider = new SimpleAuthProvider(sessionRepository);
+        DefaultAuthenticationManager authenticationManager = new DefaultAuthenticationManager(authProvider, sessionRepository, 60);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("token", "cred-1");
+        SecurityContext result = authenticationManager.authenticate(request);
+
+        assertTrue(sessionRepository.wasRefreshed());
+        assertTrue(result.getLoginSubject().getLoginExpireTime() > now + 50_000);
+    }
+
     static class SimpleAuthProvider extends AuthProvider {
         SimpleAuthProvider(SessionRepository sessionRepository) {
             super(sessionRepository, defaultProperties(), null);
