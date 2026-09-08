@@ -17,6 +17,7 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
@@ -155,13 +156,13 @@ class TinySecurityAutoConfigurationTest {
     }
 
     /**
-     * 端到端：无会话时 AuthUtil 返回 null
+     * 1.4.0 行为统一：无会话时 AuthUtil（委托 Facade）统一抛 UnAuthorizedException（不再返回 null）
      */
     @Test
-    void shouldReturnNullWhenNoSession() {
+    void shouldThrowWhenNoSession() {
         bindRequest();
-        assertNull(AuthUtil.getLoginId());
-        assertNull(AuthUtil.getSecurityContext());
+        assertThrows(UnAuthorizedException.class, AuthUtil::getLoginId);
+        assertThrows(UnAuthorizedException.class, AuthUtil::getSecurityContext);
     }
 
     private void bindRequest() {

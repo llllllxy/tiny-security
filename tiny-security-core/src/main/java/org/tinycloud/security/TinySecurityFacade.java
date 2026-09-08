@@ -6,6 +6,7 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.exception.TinySecurityException;
+import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.web.WebRequestUtils;
 
 import java.util.Set;
@@ -19,6 +20,9 @@ import java.util.Set;
  *     <li>{@link AuthUtil} 是静态外观，delegate 到本类的实例</li>
  *     <li>用户侧调用方式（AuthUtil.getLoginId() 等）完全不变</li>
  * </ul>
+ *
+ * <p><b>1.3.4 行为统一</b>：所有 {@code get*} 与 {@code has*} 方法在未登录/会话失效时统一抛
+ * {@link UnAuthorizedException}（与 {@link AuthProvider} 对齐），不再返回 null。
  *
  * @author liuxingyu01
  * @since 2026-08-08
@@ -39,56 +43,59 @@ public class TinySecurityFacade {
     /**
      * 获取当前请求的安全上下文。
      *
-     * @return 安全上下文，无请求或无会话时返回 null
+     * @return 安全上下文
+     * @throws UnAuthorizedException 无请求上下文或未登录/会话失效时抛出（与 {@link AuthProvider#getSecurityContext()} 语义统一）
      */
     public SecurityContext getSecurityContext() {
         HttpServletRequest request = WebRequestUtils.getRequest();
         if (request != null && securityContextRepository != null) {
-            return securityContextRepository.loadContext(request);
+            SecurityContext context = securityContextRepository.loadContext(request);
+            if (context != null && context.getLoginSubject() != null) {
+                return context;
+            }
         }
-        return null;
+        throw new UnAuthorizedException();
     }
 
     /**
      * 获取当前登录主体。
      *
-     * @return 登录主体，无会话时返回 null
+     * @return 登录主体
+     * @throws UnAuthorizedException 未登录时
      */
     public LoginSubject getLoginSubject() {
-        SecurityContext context = getSecurityContext();
-        return context == null ? null : context.getLoginSubject();
+        return this.getSecurityContext().getLoginSubject();
     }
 
     /**
      * 获取当前登录账号ID。
      *
-     * @return 登录账号ID，无会话时返回 null
+     * @return 登录账号ID
+     * @throws UnAuthorizedException 未登录时
      */
     public Object getLoginId() {
-        LoginSubject subject = getLoginSubject();
-        return subject == null ? null : subject.getLoginId();
+        return this.getLoginSubject().getLoginId();
     }
 
     /**
      * 获取当前登录账号ID（字符串形式）。
      *
-     * @return 字符串账号ID，无会话时返回 null
+     * @return 字符串账号ID
+     * @throws UnAuthorizedException 未登录时
      */
     public String getLoginIdAsString() {
-        Object loginId = getLoginId();
-        return loginId == null ? null : String.valueOf(loginId);
+        return String.valueOf(this.getLoginId());
     }
 
     /**
      * 获取当前登录账号ID（整数形式）。
      *
-     * @return 整数账号ID，无会话时返回 null；loginId 非数字时抛 {@link TinySecurityException}
+     * @return 整数账号ID
+     * @throws UnAuthorizedException 未登录时
+     * @throws TinySecurityException loginId 非数字时
      */
     public Integer getLoginIdAsInt() {
-        Object loginId = getLoginId();
-        if (loginId == null) {
-            return null;
-        }
+        Object loginId = this.getLoginId();
         try {
             return Integer.parseInt(String.valueOf(loginId));
         } catch (NumberFormatException e) {
@@ -99,13 +106,12 @@ public class TinySecurityFacade {
     /**
      * 获取当前登录账号ID（长整型形式）。
      *
-     * @return 长整型账号ID，无会话时返回 null；loginId 非数字时抛 {@link TinySecurityException}
+     * @return 长整型账号ID
+     * @throws UnAuthorizedException 未登录时
+     * @throws TinySecurityException loginId 非数字时
      */
     public Long getLoginIdAsLong() {
-        Object loginId = getLoginId();
-        if (loginId == null) {
-            return null;
-        }
+        Object loginId = this.getLoginId();
         try {
             return Long.parseLong(String.valueOf(loginId));
         } catch (NumberFormatException e) {
@@ -116,21 +122,21 @@ public class TinySecurityFacade {
     /**
      * 获取当前角色集合。
      *
-     * @return 角色集合，无会话时返回 null
+     * @return 角色集合
+     * @throws UnAuthorizedException 未登录时
      */
     public Set<String> getRoleSet() {
-        SecurityContext context = getSecurityContext();
-        return context == null ? null : context.getRoleSet();
+        return this.getSecurityContext().getRoleSet();
     }
 
     /**
      * 获取当前权限集合。
      *
-     * @return 权限集合，无会话时返回 null
+     * @return 权限集合
+     * @throws UnAuthorizedException 未登录时
      */
     public Set<String> getPermissionSet() {
-        SecurityContext context = getSecurityContext();
-        return context == null ? null : context.getPermissionSet();
+        return this.getSecurityContext().getPermissionSet();
     }
 
     /**
@@ -138,6 +144,7 @@ public class TinySecurityFacade {
      *
      * @param role 角色标识
      * @return true-拥有，false-未拥有
+     * @throws UnAuthorizedException 未登录时
      */
     public boolean hasRole(String role) {
         return AuthorizationEvaluator.hasRole(getRoleSet(), role);
@@ -148,6 +155,7 @@ public class TinySecurityFacade {
      *
      * @param roles 角色列表
      * @return true-全部拥有，false-未全部拥有
+     * @throws UnAuthorizedException 未登录时
      */
     public boolean hasAllRole(String... roles) {
         return AuthorizationEvaluator.hasAllRole(getRoleSet(), roles);
@@ -158,6 +166,7 @@ public class TinySecurityFacade {
      *
      * @param roles 角色列表
      * @return true-拥有任意一个，false-全部未拥有
+     * @throws UnAuthorizedException 未登录时
      */
     public boolean hasAnyRole(String... roles) {
         return AuthorizationEvaluator.hasAnyRole(getRoleSet(), roles);
@@ -168,6 +177,7 @@ public class TinySecurityFacade {
      *
      * @param permission 权限标识
      * @return true-拥有，false-未拥有
+     * @throws UnAuthorizedException 未登录时
      */
     public boolean hasPermission(String permission) {
         return AuthorizationEvaluator.hasPermission(getPermissionSet(), permission);
@@ -178,6 +188,7 @@ public class TinySecurityFacade {
      *
      * @param permissions 权限列表
      * @return true-全部拥有，false-未全部拥有
+     * @throws UnAuthorizedException 未登录时
      */
     public boolean hasAllPermission(String... permissions) {
         return AuthorizationEvaluator.hasAllPermission(getPermissionSet(), permissions);
@@ -188,6 +199,7 @@ public class TinySecurityFacade {
      *
      * @param permissions 权限列表
      * @return true-拥有任意一个，false-全部未拥有
+     * @throws UnAuthorizedException 未登录时
      */
     public boolean hasAnyPermission(String... permissions) {
         return AuthorizationEvaluator.hasAnyPermission(getPermissionSet(), permissions);
