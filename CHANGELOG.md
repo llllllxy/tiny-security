@@ -2,7 +2,7 @@
 
 > 分支：`springboot3`（Spring Boot 3.x / JDK 17+）
 > 数据来源：基于 `springboot3` 分支 first-parent 主线，按版本发布提交逐段切分
-> 版本区间：`1.2.0`（2025-05-14）→ `1.4.0`（2026-09-01）
+> 版本区间：`1.2.0`（2025-05-14）→ `1.4.0`（待发版）
 > 更早基线：`1.1.0 全新版本发布`（2024-09-06，springboot3 重生起点）
 
 ---
@@ -45,6 +45,15 @@
     </dependency>
     ```
   - 过期语义与其它仓储一致：由 `LoginSubject.getLoginExpireTime()` 驱动，续期时重新写入即重置。
+
+### 契约修复
+
+- **`getCredentialsByLoginId` 返回空列表时统一为可变 `ArrayList`**：此前空列表分支返回 `Collections.emptyList()`（不可变），非空分支返回 `new ArrayList<>(list)`（可变），同一份语义却给出不同 mutability（外部 `add/remove` 会爆 `UnsupportedOperationException`）。本次将所有内置仓储的空列表分支统一改为 `new ArrayList<>()`，保证契约一致。
+
+### 测试加固
+
+- 新增 `AuthProviderCredentialsTest`（4 用例）：门面透传、空账号返回空列表、`logout()` 后查询收敛、自定义仓储未实现时抛 `UnsupportedOperationException`
+- 四个内置仓储测试各 +2 用例：覆盖多凭证返回、过期凭证排除、空账号可变空列表、返回防御性副本
 
 ---
 
