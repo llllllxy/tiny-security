@@ -9,7 +9,7 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -48,7 +48,9 @@ public class RedisSessionRepository implements SessionRepository {
                 throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
             }
             String credentials = subject.getCredentials();
-            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins);
+            // 无论是否启用并发限制，登录时都清理该账号在线列表中的失效凭证，否则其随登录次数无限累积（内存泄漏）
+            this.countValidOnlineSessions(subject.getLoginId());
+            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins, timeoutSeconds);
             this.redisTemplate.opsForValue().set(
                     AuthConsts.AUTH_CREDENTIALS_KEY + credentials,
                     JsonUtil.writeValueAsString(subject),
@@ -106,6 +108,16 @@ public class RedisSessionRepository implements SessionRepository {
                     timeoutSeconds,
                     TimeUnit.SECONDS
             );
+            // 会话滚动续期（常在线账号可能远超单次超时）时同步刷新在线列表 TTL，
+            // 否则在线列表会先于会话过期，导致常在线账号被误判为离线、踢人/计数失效。
+            // timeout<=0（如配置永不过期）不设置 TTL，避免 expire(key, 负数) 抛异常
+            if (subject != null && subject.getLoginId() != null && timeoutSeconds > 0) {
+                this.redisTemplate.expire(
+                        AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + subject.getLoginId(),
+                        timeoutSeconds * 2L,
+                        TimeUnit.SECONDS
+                );
+            }
             return true;
         } catch (Exception e) {
             log.error("RedisSessionRepository refreshByCredentials failed, Exception：", e);
@@ -140,13 +152,13 @@ public class RedisSessionRepository implements SessionRepository {
         try {
             String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId;
             List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
-            if (credentialsList == null || credentialsList.isEmpty()) {
-                return false;
-            }
-            for (String cred : credentialsList) {
-                redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+            if (credentialsList != null) {
+                for (String cred : credentialsList) {
+                    redisTemplate.delete(AuthConsts.AUTH_CREDENTIALS_KEY + cred);
+                }
             }
             this.redisTemplate.delete(onlineKey);
+            // 幂等语义：无论是否有会话被删除，只要操作正常完成即视为成功
             return true;
         } catch (Exception e) {
             log.error("RedisSessionRepository deleteByLoginId failed, Exception：", e);
@@ -164,6 +176,23 @@ public class RedisSessionRepository implements SessionRepository {
     }
 
     /**
+     * 获取指定账号下全部有效会话凭证。
+     * <p>复用 {@link #clearInvalidCredentials(Object)}：它会在返回有效凭证前
+     * 先把在线列表中的失效凭证清理掉（Redis 会话 key 过期后列表残留）。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        try {
+            List<String> validCredentials = this.clearInvalidCredentials(loginId);
+            return new ArrayList<>(validCredentials);
+        } catch (Exception e) {
+            log.error("RedisSessionRepository getCredentialsByLoginId failed, Exception：", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
      * 清理在线列表中的失效凭证并返回有效凭证。
      */
     private List<String> clearInvalidCredentials(Object loginId) {
@@ -171,7 +200,7 @@ public class RedisSessionRepository implements SessionRepository {
         List<String> credentialsList = this.redisTemplate.opsForList().range(onlineKey, 0, -1);
         if (credentialsList == null || credentialsList.isEmpty()) {
             this.redisTemplate.delete(onlineKey);
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
         List<String> invalidCredentials = credentialsList.stream()
                 .filter(cred -> !this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + cred))
@@ -184,7 +213,7 @@ public class RedisSessionRepository implements SessionRepository {
         }
         if (credentialsList == null || credentialsList.isEmpty()) {
             this.redisTemplate.delete(onlineKey);
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
         return credentialsList;
     }
@@ -197,16 +226,24 @@ public class RedisSessionRepository implements SessionRepository {
             return true;
         }
         int currentOnlineCount = countValidOnlineSessions(loginId);
-        log.info("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
+        log.debug("账号{}当前有效在线人数：{}，最大限制：{}", loginId, currentOnlineCount, maxConcurrentLogins);
         return currentOnlineCount < maxConcurrentLogins;
     }
 
     /**
-     * 将凭证加入账号在线列表。
+     * 将凭证加入账号在线列表，并给列表设置独立的过期时间。
+     *
+     * @param timeoutSeconds    会话超时时间（秒）
      */
-    private void addToOnlineList(Object loginId, String credentials, int maxConcurrentLogins) {
+    private void addToOnlineList(Object loginId, String credentials, int maxConcurrentLogins, int timeoutSeconds) {
         String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId;
         this.redisTemplate.opsForList().rightPush(onlineKey, credentials);
+        // 在线列表与凭证 key 一样必须有 TTL，否则默认配置（未开启并发限制时清理逻辑不触发）
+        // 失效凭证会在列表中永久残留，随登录次数无限累积（内存泄漏）。
+        // 仅在会话超时为正数时设置 TTL；timeout<=0（如配置永不过期）不设置，避免 expire(key, 负数) 抛异常导致登录失败
+        if (timeoutSeconds > 0) {
+            this.redisTemplate.expire(onlineKey, timeoutSeconds * 2L, TimeUnit.SECONDS);
+        }
         if (maxConcurrentLogins > 0) {
             Long size = this.redisTemplate.opsForList().size(onlineKey);
             if (size != null && size > maxConcurrentLogins) {

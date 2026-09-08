@@ -4,12 +4,43 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 /**
- * 基于 ThreadLocal 的安全上下文仓储实现
+ * 基于 ThreadLocal 的安全上下文仓储实现。
+ *
+ * <p>ThreadLocal 直接内联在本类中（原独立的 {@code ThreadLocalSecurityContextHolder}
+ * 纯转发壳类已移除），通过静态方法提供对当前线程上下文的读写清理。
  *
  * @author liuxingyu01
  * @since 2026-04-28
  */
 public class ThreadLocalSecurityContextRepository implements SecurityContextRepository {
+
+    private static final ThreadLocal<SecurityContext> CONTEXT_HOLDER = new ThreadLocal<>();
+
+    /**
+     * 读取当前线程的安全上下文。
+     *
+     * @return 安全上下文，可能为 null
+     */
+    public static SecurityContext getContext() {
+        return CONTEXT_HOLDER.get();
+    }
+
+    /**
+     * 设置当前线程的安全上下文。
+     *
+     * @param context 安全上下文
+     */
+    public static void setContext(SecurityContext context) {
+        CONTEXT_HOLDER.set(context);
+    }
+
+    /**
+     * 清理当前线程的安全上下文。
+     */
+    public static void clearContext() {
+        CONTEXT_HOLDER.remove();
+    }
+
     /**
      * 从当前线程读取安全上下文。
      *
@@ -18,7 +49,7 @@ public class ThreadLocalSecurityContextRepository implements SecurityContextRepo
      */
     @Override
     public SecurityContext loadContext(HttpServletRequest request) {
-        return ThreadLocalSecurityContextHolder.getContext();
+        return getContext();
     }
 
     /**
@@ -30,7 +61,7 @@ public class ThreadLocalSecurityContextRepository implements SecurityContextRepo
      */
     @Override
     public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
-        ThreadLocalSecurityContextHolder.setContext(context);
+        setContext(context);
     }
 
     /**
@@ -41,6 +72,6 @@ public class ThreadLocalSecurityContextRepository implements SecurityContextRepo
      */
     @Override
     public void clearContext(HttpServletRequest request, HttpServletResponse response) {
-        ThreadLocalSecurityContextHolder.clearContext();
+        clearContext();
     }
 }

@@ -36,8 +36,8 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 - 无缝适配前后端分离与不分离项目
 - 完善的文档，包括使用说明、API文档、最佳实践等
 
----
 
+---
 
 # 2、快速入门
 
@@ -64,7 +64,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.3.1</version>
+    <version>1.4.0</version>
 </dependency>
 ```
 
@@ -72,16 +72,21 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 
 ```yaml
 tiny-security:
-   # 存储类型，目前支持jdbc和redis和单机内存三种(redis,jdbc,single)，如不配置，则默认为single
+   # 存储类型，目前支持jdbc、redis、single(单机内存)、caffeine(本地缓存)四种，如不配置，则默认为single
+   # 注意：caffeine 为可选依赖，使用前需自行引入 com.github.ben-manes.caffeine:caffeine
    store-type: single
+   # caffeine 会话仓储的最大缓存条目数（store-type=caffeine 时生效），默认10000，超出按近似LRU驱逐
+   caffeine-maximum-size: 10000
    # token名称 (同时也是cookie名称以适配前后端不分离的模式)
+   # 注意：token 依次从 header、Cookie（开启 enable-cookie 后）中读取；
+   # 默认不再从 URL 参数读取（enable-url-token 默认 false），因为 URL 传 token 会进入访问日志，存在泄露风险
    token-name: token
    # 会话有效期（会话存储中的subject有效时长），单位秒，默认1800秒(30分钟)
-   # 注意：当前版本JWT自身过期时间固定为30天（用于防伪校验），后续版本将支持配置化
    timeout: 1800
    # 最大登录并发数，默认不限制
    max-concurrent-logins: 2
-   # credentials凭证类型，可配置uuid(默认风格)，snowflake(纯数字风格)，objectid(变种uuid)，random128 (随机128位字符串)，nanoid，ulid
+   # credentials凭证类型：仅 uuid(默认)/random128/nanoid 具备密码学随机性，可用于生产；
+   # 其它取值一律回退为 uuid（snowflake/objectid/ulid 等含时间戳的凭证可被预测，已移除）
    credentials-style: uuid
    # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
    table-name: t_auth_storage
@@ -93,12 +98,26 @@ tiny-security:
    force-http-status-200: false
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
-   # jwt密钥，不配置则使用默认值
-   jwt-secret: K$N)A3*sGGf<wo*22*%&(DF
+   # jwt密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥，重启后所有会话将失效）
+   jwt-secret: your-secret-key-please-replace-me
    # jwt主题，不配置则使用默认值
    jwt-subject: tiny-security
+   # jwt自身有效期（秒），默认2592000（即30天）；实际生效值不低于会话timeout，避免token先于会话过期
+   jwt-timeout: 2592000
+   # 是否启用Cookie模式（登录写cookie、登出清理cookie、从cookie读取token）
+   # 默认false纯token模式（前后端分离）；前后端不分离项目需开启
+   enable-cookie: false
+   # 是否允许从 URL 参数读取 token，默认 false（URL 传 token 会进入访问日志/Referer，造成凭证泄露）
+   enable-url-token: false
+   # Cookie 是否仅通过 HTTPS 传输，默认false（本地 http 调试友好，生产环境建议开启）
+   cookie-secure: false
+   # Cookie SameSite 属性，默认LAX（可选 STRICT/LAX/NONE，用于防御 CSRF）
+   cookie-same-site: LAX
+   # 框架异常解析器优先级，默认null（等价HIGHEST_PRECEDENCE，尽早处理安全异常）
+   # 若希望业务侧 @ControllerAdvice 优先处理，可设为 0 或更大的值
+   exception-resolver-order: # 例如 0
    # 要拦截的路径，默认拦截所有路径
-   add-path: /**
+   include-path: /**
    # 要排除的路径，默认不排除任何路径
    exclude-path:
       - /auth/login
@@ -316,6 +335,27 @@ authProvider.deleteTokenByLoginId(loginId);
 
 ```
 
+### 2.2.8 查询指定账号的全部会话凭证
+
+获取某个账号当前所有**有效（未过期）**的会话凭证，常用于多设备管理（列出账号的所有在线设备/会话）、
+定向踢人（只注销其中某一个凭证，而非 `deleteTokenByLoginId` 的全量注销）。
+账号无有效会话时返回空列表（不会返回 null）。
+
+```java
+@Autowired
+private AuthProvider authProvider;
+
+// 获取该账号当前所有有效会话凭证
+List<String> credentialsList = authProvider.getCredentialsByLoginId(loginId);
+
+// 典型用法：只注销该账号的某一个会话（设备），保留其他会话
+authProvider.deleteByCredentials(credentialsList.get(0));
+```
+
+> ⚠️ 凭证即会话钥匙，等同于用户身份凭据，**请勿输出到日志或返回给前端**。
+> 该方法依赖仓储的「账号 → 凭证」反向索引，内置四种仓储（single / caffeine / redis / jdbc）均已支持；
+> 自定义 `SessionRepository` 未实现该方法时，调用会抛 `UnsupportedOperationException`。
+
 ---
 
 
@@ -500,7 +540,7 @@ $.ajax({
    success: function(data){ }
 });
 ```
-3. 前后端不分离的项目会自动从cookie里获取`token`
+3. 前后端不分离的项目在开启 `enable-cookie: true` 后会自动从cookie里获取`token`（登录时也会自动写入cookie）
 
 ---
 
@@ -546,6 +586,13 @@ public class MongoSessionRepository implements SessionRepository {
     @Override
     public int countValidOnlineSessions(Object loginId) {
         return 0;
+    }
+
+    // 可选实现：按账号反查全部有效会话凭证（多设备管理/定向踢人场景需要）
+    // 接口为 default 方法，不实现时调用会抛 UnsupportedOperationException
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        return Collections.emptyList();
     }
 }
 ```

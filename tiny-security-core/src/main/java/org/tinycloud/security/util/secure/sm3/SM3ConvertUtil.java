@@ -129,22 +129,6 @@ public class SM3ConvertUtil {
     }
 
     /**
-     * 打印十六进制字符串
-     *
-     * @param bytes 字节数组
-     */
-    public static void printHexString(byte[] bytes) {
-        for (int i = 0; i < bytes.length; i++) {
-            String hex = Integer.toHexString(bytes[i] & 0xFF);
-            if (hex.length() == 1) {
-                hex = '0' + hex;
-            }
-            System.out.print("0x" + hex.toUpperCase() + ",");
-        }
-        System.out.println("");
-    }
-
-    /**
      * Convert hex string to byte[]
      *
      * @param hexString the hex string

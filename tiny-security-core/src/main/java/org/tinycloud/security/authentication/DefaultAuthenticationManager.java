@@ -57,7 +57,8 @@ public class DefaultAuthenticationManager implements AuthenticationManager {
 
         long expireTime = subject.getLoginExpireTime();
         long currentTime = System.currentTimeMillis();
-        long millsCritical = (long) (this.timeout * 1000L * 0.8);
+        // 滑动续期阈值：剩余存活时间不足 TTL 的 20% 时才刷新会话（避免每个请求都触发存储写，造成写放大）
+        long millsCritical = (long) (this.timeout * 1000L * 0.2);
         if (expireTime - currentTime <= millsCritical) {
             subject.setLoginExpireTime(currentTime + this.timeout * 1000L);
             this.sessionRepository.refreshByCredentials(credentials, subject, this.timeout);

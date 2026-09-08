@@ -1,7 +1,7 @@
 package org.tinycloud.security.interceptor;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -26,7 +26,7 @@ class AuthenticationInterceptorTest {
 
     @AfterEach
     void tearDown() {
-        ThreadLocalSecurityContextHolder.clearContext();
+        ThreadLocalSecurityContextRepository.clearContext();
     }
 
     @Test
@@ -53,7 +53,7 @@ class AuthenticationInterceptorTest {
         );
 
         assertTrue(allowed);
-        assertEquals("user-1", ThreadLocalSecurityContextHolder.getContext().getLoginSubject().getLoginId());
+        assertEquals("user-1", ThreadLocalSecurityContextRepository.getContext().getLoginSubject().getLoginId());
     }
 
     @Test
@@ -92,7 +92,50 @@ class AuthenticationInterceptorTest {
         interceptor.preHandle(request, response, handlerMethod("secured"));
         interceptor.afterCompletion(request, response, handlerMethod("secured"), null);
 
-        assertEquals(1, repository.clearCount.get());
+        // clearContext 在 preHandle 入口防御性清理一次 + afterCompletion 收尾清理一次，共 2 次
+        assertEquals(2, repository.clearCount.get());
+    }
+
+    /**
+     * 1.3.3 防御性清理：preHandle 入口应先清除上一次请求遗留的 ThreadLocal 上下文
+     * （Servlet 异步/异常场景 afterCompletion 可能未执行，线程回池后残留旧身份），
+     * 再写入本次认证结果，避免"用户串号"。
+     */
+    @Test
+    void shouldClearStaleContextAtPreHandleEntry() throws Exception {
+        // 模拟上一个请求遗留的残留上下文（线程池复用场景）
+        LoginSubject staleSubject = new LoginSubject();
+        staleSubject.setLoginId("stale-user");
+        staleSubject.setCredentials("stale-cred");
+        SecurityContext staleContext = new SecurityContext();
+        staleContext.setLoginSubject(staleSubject);
+        ThreadLocalSecurityContextRepository.setContext(staleContext);
+
+        LoginSubject subject = new LoginSubject();
+        subject.setLoginId("user-1");
+        subject.setCredentials("cred-1");
+        subject.setLoginTime(System.currentTimeMillis());
+        subject.setLoginExpireTime(System.currentTimeMillis() + 60_000);
+
+        FakeSessionRepository sessionRepository = new FakeSessionRepository();
+        sessionRepository.putSubject(subject);
+
+        AuthenticationInterceptor interceptor = buildInterceptor(sessionRepository, new ThreadLocalSecurityContextRepository());
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setMethod("GET");
+        request.addHeader("token", "Bearer cred-1");
+
+        boolean allowed = interceptor.preHandle(
+                request,
+                new MockHttpServletResponse(),
+                handlerMethod("secured")
+        );
+
+        assertTrue(allowed);
+        // 残留上下文被清除，当前线程读到的是本次认证的新用户
+        assertNotNull(ThreadLocalSecurityContextRepository.getContext());
+        assertEquals("user-1", ThreadLocalSecurityContextRepository.getContext().getLoginSubject().getLoginId());
     }
 
     private AuthenticationInterceptor buildInterceptor(SessionRepository sessionRepository, SecurityContextRepository securityContextRepository) {
@@ -181,18 +224,18 @@ class AuthenticationInterceptorTest {
 
         @Override
         public SecurityContext loadContext(HttpServletRequest request) {
-            return ThreadLocalSecurityContextHolder.getContext();
+            return ThreadLocalSecurityContextRepository.getContext();
         }
 
         @Override
         public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
-            ThreadLocalSecurityContextHolder.setContext(context);
+            ThreadLocalSecurityContextRepository.setContext(context);
         }
 
         @Override
         public void clearContext(HttpServletRequest request, HttpServletResponse response) {
             clearCount.incrementAndGet();
-            ThreadLocalSecurityContextHolder.clearContext();
+            ThreadLocalSecurityContextRepository.clearContext();
         }
     }
 }
