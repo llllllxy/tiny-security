@@ -119,6 +119,81 @@ class SingleSessionRepositoryTest {
     }
 
     /**
+     * getCredentialsByLoginId：返回该账号全部有效凭证（多会话场景）。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldReturnAllValidCredentials() {
+        assertTrue(repository.save(buildSubject(10007L, "cred-a"), 60, 0));
+        assertTrue(repository.save(buildSubject(10007L, "cred-b"), 60, 0));
+
+        List<String> credentials = repository.getCredentialsByLoginId(10007L);
+
+        assertEquals(2, credentials.size());
+        assertTrue(credentials.contains("cred-a"));
+        assertTrue(credentials.contains("cred-b"));
+    }
+
+    /**
+     * getCredentialsByLoginId：不应包含已过期凭证，且顺带清理索引中的失效项。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldExcludeExpiredCredentials() throws Exception {
+        assertTrue(repository.save(buildSubject(10008L, "cred-old"), 60, 0));
+        assertTrue(repository.save(buildSubject(10008L, "cred-new"), 60, 0));
+        backdateExpire("cred-old");
+
+        List<String> credentials = repository.getCredentialsByLoginId(10008L);
+
+        assertEquals(List.of("cred-new"), credentials);
+        // 索引中的失效项应被就地清理
+        Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
+        assertEquals(List.of("cred-new"), index.get("10008"));
+    }
+
+    /**
+     * getCredentialsByLoginId：账号无会话时返回空列表（不返回 null）。
+     * <p>且必须是<b>可变</b>空列表：与"有会话时返回副本"保持行为一致，
+     * 避免调用方对结果做 add/clear 时在"0 个会话"这一边界上抛
+     * UnsupportedOperationException。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldReturnEmptyListWhenNoSession() {
+        List<String> credentials = repository.getCredentialsByLoginId(99999L);
+
+        assertNotNull(credentials);
+        assertTrue(credentials.isEmpty());
+        assertDoesNotThrow(() -> credentials.add("cred-x"));
+    }
+
+    /**
+     * getCredentialsByLoginId：会话全部过期后同样返回可变空列表。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldReturnMutableEmptyListAfterAllExpired() throws Exception {
+        assertTrue(repository.save(buildSubject(10010L, "cred-expired"), 60, 0));
+        backdateExpire("cred-expired");
+
+        List<String> credentials = repository.getCredentialsByLoginId(10010L);
+
+        assertTrue(credentials.isEmpty());
+        assertDoesNotThrow(() -> credentials.add("cred-x"));
+    }
+
+    /**
+     * getCredentialsByLoginId：返回的是副本，调用方修改不会影响仓储内部索引。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldReturnDefensiveCopy() throws Exception {
+        assertTrue(repository.save(buildSubject(10009L, "cred-a"), 60, 0));
+
+        List<String> credentials = repository.getCredentialsByLoginId(10009L);
+        credentials.clear();
+
+        Map<String, List<String>> index = fieldValue("loginIdToCredentialsMap", Map.class);
+        assertEquals(List.of("cred-a"), index.get("10009"));
+    }
+
+    /**
      * 把指定凭证的到期时间改到过去，模拟会话自然过期。
      */
     private void backdateExpire(String credentials) throws Exception {

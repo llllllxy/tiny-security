@@ -24,6 +24,7 @@ import org.tinycloud.security.util.JwtUtil;
 import org.tinycloud.security.web.WebRequestUtils;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -236,6 +237,25 @@ public class AuthProvider {
      */
     public boolean deleteByLoginId(Object loginId) {
         return this.sessionRepository.deleteByLoginId(loginId);
+    }
+
+    /**
+     * 获取指定账号下全部有效（未过期）会话凭证。
+     *
+     * <p>典型用途：多设备管理（列出账号的所有在线设备/会话）、定向下线
+     * （配合 {@link #deleteByCredentials(String)} 只踢掉某个凭证，
+     * 而非 {@link #deleteByLoginId(Object)} 的全量踢出）。
+     *
+     * <p>注意：凭证即会话钥匙，等同于用户身份凭据，请勿输出到日志或返回给前端；
+     * 且该方法依赖仓储的"账号 → 凭证"反向索引，内置四种仓储均已实现，
+     * 自定义仓储未实现时抛 {@link UnsupportedOperationException}。
+     *
+     * @param loginId 账号ID
+     * @return 有效会话凭证列表，无有效会话时返回空列表
+     * @throws UnsupportedOperationException 当前会话仓储不支持按账号反查凭证时抛出
+     */
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        return this.sessionRepository.getCredentialsByLoginId(loginId);
     }
 
     /**

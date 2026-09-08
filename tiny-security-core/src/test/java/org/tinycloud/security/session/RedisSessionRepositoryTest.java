@@ -14,6 +14,8 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
@@ -141,6 +143,40 @@ class RedisSessionRepositoryTest {
         verify(redisTemplate).delete("tiny:security:credentials:cred-a");
         verify(redisTemplate).delete("tiny:security:credentials:cred-b");
         verify(redisTemplate).delete(ONLINE_KEY);
+    }
+
+    /**
+     * getCredentialsByLoginId：复用失效清理逻辑，只返回仍有效的凭证。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldReturnOnlyValidCredentials() {
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        // 第一次读取在线列表（含失效项），清理后第二次读取只剩有效项
+        when(listOperations.range(ONLINE_KEY, 0L, -1L))
+                .thenReturn(List.of("cred-alive", "cred-dead"), List.of("cred-alive"));
+        when(redisTemplate.hasKey("tiny:security:credentials:cred-alive")).thenReturn(true);
+        when(redisTemplate.hasKey("tiny:security:credentials:cred-dead")).thenReturn(false);
+
+        List<String> credentials = repository.getCredentialsByLoginId(10001L);
+
+        assertEquals(1, credentials.size());
+        assertTrue(credentials.contains("cred-alive"));
+        // 失效凭证应从在线列表中被清理
+        verify(listOperations).remove(ONLINE_KEY, 1L, "cred-dead");
+    }
+
+    /**
+     * getCredentialsByLoginId：账号无在线会话时返回空列表（不返回 null）。
+     */
+    @Test
+    void getCredentialsByLoginIdShouldReturnEmptyListWhenNoOnlineSession() {
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(null);
+
+        List<String> credentials = repository.getCredentialsByLoginId(10001L);
+
+        assertNotNull(credentials);
+        assertTrue(credentials.isEmpty());
     }
 
     /**

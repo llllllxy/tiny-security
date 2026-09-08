@@ -10,6 +10,7 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -191,6 +192,25 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
         } catch (Exception e) {
             log.error("JdbcSessionRepository countValidOnlineSessions failed", e);
             return 0;
+        }
+    }
+
+    /**
+     * 获取指定账号下全部有效（未过期）会话凭证。
+     * <p>与 {@link #countValidOnlineSessions(Object)} 口径一致：按字符串化的 login_id
+     * 精确匹配，且只取 credentials_expire_time 大于当前时间的行。
+     */
+    @Override
+    public List<String> getCredentialsByLoginId(Object loginId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        String sql = "SELECT credentials FROM " + tableName + " WHERE login_id = ? AND credentials_expire_time > ?";
+        try {
+            List<String> credentialsList = jdbcTemplate.queryForList(sql, String.class,
+                    normalizeLoginId(loginId), System.currentTimeMillis());
+            return credentialsList == null ? new ArrayList<>() : credentialsList;
+        } catch (Exception e) {
+            log.error("JdbcSessionRepository getCredentialsByLoginId failed", e);
+            return new ArrayList<>();
         }
     }
 

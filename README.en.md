@@ -232,6 +232,28 @@ Set<String> roles = AuthUtil.getRoleSet();
 boolean isAdmin = AuthUtil.hasRole("admin");
 ```
 
+### 2.2.5 List all session credentials of an account
+
+Returns all **valid (non-expired)** session credentials of an account — useful for
+multi-device management (list online devices) or targeted kick-out (revoke one
+credential instead of all sessions). Returns an empty list (never `null`) when the
+account has no valid session.
+
+```java
+@Autowired
+private AuthProvider authProvider;
+
+List<String> credentialsList = authProvider.getCredentialsByLoginId(loginId);
+
+// Typical usage: revoke only one session (device), keep the others
+authProvider.deleteByCredentials(credentialsList.get(0));
+```
+
+> ⚠️ A credential **is** the session key — never write it to logs or return it to clients.
+> This method relies on an "account → credentials" reverse index. All four built-in
+> repositories (single / caffeine / redis / jdbc) support it; a custom `SessionRepository`
+> that does not override it throws `UnsupportedOperationException`.
+
 ---
 
 ## 2.3 Samples & Docs

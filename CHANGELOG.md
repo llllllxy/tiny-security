@@ -31,6 +31,11 @@
 
 ### 新增特性
 
+- **新增按账号查询会话凭证 `getCredentialsByLoginId(Object loginId)`**：返回该账号下全部**有效（未过期）**会话凭证列表，无会话时返回空列表（不返回 null）。
+  - 用途：多设备管理（列出账号所有在线设备/会话）、定向下线（配合 `deleteByCredentials` 只踢指定凭证，而非 `deleteByLoginId` 全量踢出）
+  - 入口：`AuthProvider.getCredentialsByLoginId(loginId)`；四个内置仓储（single / caffeine / redis / jdbc）均已实现
+  - 接口方法声明为 `default`，默认实现抛 `UnsupportedOperationException`：自定义仓储未实现时**显式报错**而非静默返回空列表，同时保持存量自定义仓储的编译兼容
+  - ⚠️ 安全提示：凭证等同于会话钥匙，请勿写入日志或返回给前端
 - **新增 Caffeine 本地缓存会话仓储**（`store-type=caffeine`）：提供容量上限保护（`caffeine-maximum-size`，默认 10000，近似 LRU 驱逐）与惰性过期驱逐，适合"单机部署、会话量大、需内存上限"场景。
   - **可选依赖**：caffeine 以 `provided` 提供，使用前需自行引入：
     ```xml
