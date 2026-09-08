@@ -53,6 +53,12 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
      * @param tableName    会话表名
      */
     public JdbcSessionRepository(JdbcTemplate jdbcTemplate, String tableName) {
+        Assert.hasText(tableName, "The tableName cannot be empty!");
+        // 表名来自配置（无用户输入，注入面极小），但仍做白名单校验，杜绝任何形式的 SQL 拼接注入。
+        // 允许：字母/下划线/数字开头，可含点号以支持 schema.table 形式（如 dbo.t_auth_storage）
+        if (!tableName.matches("^[a-zA-Z_][a-zA-Z0-9_.]*$")) {
+            throw new IllegalArgumentException("Invalid tableName '" + tableName + "', only letters, digits, '_' and '.' are allowed, and must start with a letter or '_'");
+        }
         this.jdbcTemplate = jdbcTemplate;
         this.tableName = tableName;
         this.initCleanThread();
@@ -164,8 +170,9 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
         Assert.notNull(loginId, "The loginId cannot be null!");
         try {
             String sql = "DELETE FROM " + tableName + " WHERE login_id = ?";
-            int num = jdbcTemplate.update(sql, normalizeLoginId(loginId));
-            return num > 0;
+            // 幂等语义：无论是否有会话被删除，只要操作正常完成即视为成功
+            jdbcTemplate.update(sql, normalizeLoginId(loginId));
+            return true;
         } catch (Exception e) {
             log.error("JdbcSessionRepository deleteByLoginId failed, Exception: ", e);
             return false;
