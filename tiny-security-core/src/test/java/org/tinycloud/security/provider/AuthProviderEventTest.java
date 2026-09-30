@@ -17,10 +17,7 @@ import org.tinycloud.security.session.SessionRepository;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthProviderEventTest {
 
@@ -72,6 +69,29 @@ class AuthProviderEventTest {
         assertEquals(0, publisher.loginFailureCount.get());
     }
 
+    /**
+     * 凭证格式回归：credentials 固定为「UUID 去横线」（32 位小写十六进制，内部走 SecureRandom），
+     * 不再有 credentials-style 配置项可切换——避免用户选到弱随机源。
+     *
+     * <p>同时锁定 token 形态：{@code Bearer <credentials>.<base64url(HMAC-SHA256)>}。
+     */
+    @Test
+    void shouldAlwaysUseUuidCredentialsWithoutDashes() {
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(false), defaultProperties(), new CapturingSecurityEventPublisher());
+        bindRequestContext();
+
+        String token = authProvider.login("user-1", null);
+
+        assertNotNull(token);
+        assertTrue(token.startsWith("Bearer "), token);
+        String signedToken = token.substring("Bearer ".length());
+        int separatorIndex = signedToken.lastIndexOf('.');
+        assertTrue(separatorIndex > 0, "token 应形如 credentials.signature，实际为: " + token);
+
+        String credentials = signedToken.substring(0, separatorIndex);
+        assertTrue(credentials.matches("[0-9a-f]{32}"), "credentials 应为 32 位小写十六进制 UUID，实际为: " + credentials);
+    }
+
     private void bindRequestContext() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -83,10 +103,8 @@ class AuthProviderEventTest {
         properties.setBanner(false);
         properties.setTokenName("token");
         properties.setTimeout(1800);
-        properties.setCredentialsStyle("uuid");
         properties.setMaxConcurrentLogins(0);
-        properties.setJwtSecret("test-secret");
-        properties.setJwtSubject("test-subject");
+        properties.setTokenSecret("test-secret");
         return properties;
     }
 

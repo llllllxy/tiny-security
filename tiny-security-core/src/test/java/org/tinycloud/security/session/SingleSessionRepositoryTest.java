@@ -51,6 +51,22 @@ class SingleSessionRepositoryTest {
     }
 
     /**
+     * 凭证碰撞必须明确失败：不能静默覆盖已有会话（否则两个用户会共用同一条会话记录）。
+     */
+    @Test
+    void saveShouldFailWhenCredentialsCollide() {
+        assertTrue(repository.save(buildSubject(10001L, "cred-dup"), 60, 0));
+
+        // 后一个用户拿到了完全相同的凭证
+        assertFalse(repository.save(buildSubject(10002L, "cred-dup"), 60, 0));
+
+        // 原会话必须完好无损，不能被后一个用户覆盖
+        LoginSubject kept = repository.getSubject("cred-dup");
+        assertNotNull(kept);
+        assertEquals(10001L, kept.getLoginId());
+    }
+
+    /**
      * 已过期的会话：校验失败、读取为空、不计入在线统计。
      */
     @Test

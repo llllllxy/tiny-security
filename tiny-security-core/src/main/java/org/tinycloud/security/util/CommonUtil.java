@@ -1,11 +1,11 @@
 package org.tinycloud.security.util;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 
 
 /**
@@ -16,6 +16,13 @@ import java.util.concurrent.ThreadLocalRandom;
  **/
 public class CommonUtil {
     private final static String TIME_FORMAT = "yyyyMMddHHmmss";
+
+    /**
+     * 密码学安全随机源。
+     * <p>凭证类随机串必须走它：此前这里用的是 {@code ThreadLocalRandom}（非 CSPRNG，
+     * 内部状态只有 64 位、且可被观测到的输出反推），会让生成出来的 token 变得可预测。
+     */
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
      * 获取当前时间 比如 DateTool.getCurrentTime(); 返回值为 20120515234420
@@ -44,6 +51,8 @@ public class CommonUtil {
     /**
      * 生成指定长度的随机字符串（包括大小写字母，数字和下划线）
      *
+     * <p>使用 {@link SecureRandom} 生成，具备密码学随机性，可用于会话凭证等安全场景。
+     *
      * @param length 字符串的长度
      * @return 一个随机字符串
      */
@@ -51,7 +60,7 @@ public class CommonUtil {
         String str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < length; i++) {
-            int number = ThreadLocalRandom.current().nextInt(63);
+            int number = SECURE_RANDOM.nextInt(str.length());
             sb.append(str.charAt(number));
         }
         return sb.toString();

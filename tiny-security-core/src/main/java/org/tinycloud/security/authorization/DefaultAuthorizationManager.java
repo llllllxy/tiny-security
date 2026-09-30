@@ -9,7 +9,6 @@ import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
-import java.util.Set;
 
 /**
  * 默认授权管理器
@@ -50,22 +49,22 @@ public class DefaultAuthorizationManager implements AuthorizationManager {
             return AuthorizationDecision.grant();
         }
 
-        Set<String> roleSet = Collections.emptySet();
+        // 只为「本次注解校验真正需要」的集合调用 SPI（保留 1.3.1 的性能设计）。
+        // 未调用的集合必须保持「未加载」状态、不能写空集进去，否则会把"未加载"误标成"已加载"，
+        // 导致 AuthUtil.hasRole/hasPermission 永远读到空集（P0-1）。按需懒加载见 TinySecurityFacade。
         if (AnnotationUtils.findRequiresRoles(method) != null) {
-            roleSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getRoleSet(subject) : Collections.emptySet();
+            context.setRoleSet(this.authorizationInfoGet != null
+                    ? this.authorizationInfoGet.getRoleSet(subject) : Collections.emptySet());
         }
-        context.setRoleSet(roleSet);
-
-        Set<String> permissionSet = Collections.emptySet();
         if (this.permissionMode == PermissionMode.URL || AnnotationUtils.findRequiresPermissions(method) != null) {
-            permissionSet = this.authorizationInfoGet != null ? this.authorizationInfoGet.getPermissionSet(subject) : Collections.emptySet();
+            context.setPermissionSet(this.authorizationInfoGet != null
+                    ? this.authorizationInfoGet.getPermissionSet(subject) : Collections.emptySet());
         }
-        context.setPermissionSet(permissionSet);
 
         boolean hasPermission = this.permissionMode == PermissionMode.URL
-                ? AuthorizationEvaluator.checkUrlPermission(request, permissionSet)
-                : AuthorizationEvaluator.checkPermission(method, permissionSet);
-        boolean hasRole = AuthorizationEvaluator.checkRole(method, roleSet);
+                ? AuthorizationEvaluator.checkUrlPermission(request, context.getPermissionSet())
+                : AuthorizationEvaluator.checkPermission(method, context.getPermissionSet());
+        boolean hasRole = AuthorizationEvaluator.checkRole(method, context.getRoleSet());
         return hasPermission && hasRole ? AuthorizationDecision.grant() : AuthorizationDecision.deny();
     }
 }

@@ -10,7 +10,6 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
@@ -68,8 +67,7 @@ class AuthProviderSecurityContextTest {
         AuthProperties properties = new AuthProperties();
         properties.setBanner(false);
         properties.setTokenName("token");
-        properties.setJwtSecret("test-secret");
-        properties.setJwtSubject("test-subject");
+        properties.setTokenSecret("test-secret");
         return properties;
     }
 

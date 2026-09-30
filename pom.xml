@@ -33,7 +33,7 @@
 
     <properties>
         <!-- 项目版本 -->
-        <revision>1.4.0</revision>
+        <revision>1.5.0</revision>
         <!-- 编译配置 -->
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
@@ -41,7 +41,6 @@
         <!-- 依赖版本 -->
         <springboot.version>3.2.12</springboot.version>
         <servlet.version>6.0.0</servlet.version>
-        <jwt.version>3.19.4</jwt.version>
     </properties>
 
     <developers>
@@ -90,12 +89,6 @@
                 <groupId>jakarta.servlet</groupId>
                 <artifactId>jakarta.servlet-api</artifactId>
                 <version>${servlet.version}</version>
-            </dependency>
-            <!-- jwt -->
-            <dependency>
-                <groupId>com.auth0</groupId>
-                <artifactId>java-jwt</artifactId>
-                <version>${jwt.version}</version>
             </dependency>
             <dependency>
                 <groupId>top.lxyccc</groupId>

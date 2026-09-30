@@ -2,8 +2,60 @@
 
 > 分支：`springboot3`（Spring Boot 3.x / JDK 17+）
 > 数据来源：基于 `springboot3` 分支 first-parent 主线，按版本发布提交逐段切分
-> 版本区间：`1.2.0`（2025-05-14）→ `1.4.0`（待发版）
+> 版本区间：`1.2.0`（2025-05-14）→ `1.5.0`（待发版）
 > 更早基线：`1.1.0 全新版本发布`（2024-09-06，springboot3 重生起点）
+
+---
+
+## 1.5.0
+
+> 升级路径：1.4.0 → 1.5.0 ｜ 本次为**移除 JWT + 凭证固定为 UUID**（破坏性变更）
+
+### ⚠️ 行为变更（升级必读）
+
+- **移除 JWT，token 改为 HMAC-SHA256 签名信封**：token 形态从 `Bearer <JWT>` 变为
+  `Bearer <credentials>.<base64url(HMAC-SHA256(credentials, token-secret))>`。
+  - **不再依赖 `com.auth0:java-jwt`**（签名改用 JDK 自带的 `javax.crypto`），依赖树更干净；token 里**没有算法字段**，算法在代码中写死 `HmacSHA256`，`alg=none` / 算法混淆风险面归零。
+  - **移除第二条过期时间线**：原先 JWT 有效期取 `max(jwt-timeout, 会话 timeout)`，有效期有两个来源；现在 token 只是凭证的签名信封，**有效期完全以会话为准**（`tiny-security.timeout`）。
+  - token 格式与签名算法都变了，**升级后所有老 token 立即失效**，在线用户需重新登录。
+- **配置项重命名与删除**：
+  - `tiny-security.jwt-secret` → **`tiny-security.token-secret`**（未配置时仍自动生成临时随机密钥并打印 WARN，行为不变）
+  - **删除** `tiny-security.jwt-subject`、`tiny-security.jwt-timeout`（不再有任何作用，即使配置了也不会生效）
+- **常量重命名**：`AuthConsts.JWT_TOKEN_PREFIX` → `AuthConsts.TOKEN_PREFIX`（值仍为 `"Bearer "`，解析行为不变）。**破坏性**：若外部代码引用了旧常量名，请改用 `TOKEN_PREFIX`。
+- **`AuthProvider.getCredentialsByToken(String)` 对外行为不变**（仍返回 `credentials`、失败抛 `UnAuthorizedException`），仅内部由"解码 JWT"改为"验签后取 credentials"，调用方无需改动。**破坏性**：`JwtUtil` 工具类**已删除**，直接使用过它的代码需改用 `TokenSignUtil`。
+- **删除 `credentials-style` 配置项，凭证固定为 UUID**：凭证是会话的唯一钥匙，而可选的凭证风格只会带来"用户选到弱随机源"的风险，收益为零。
+  - 现在固定为 `UUID.randomUUID().toString().replace("-", "")`（32 位十六进制，内部走 `SecureRandom`，122 bit 随机性）——**与原默认值 `uuid` 逐字节一致**，因此从未显式配置过 `credentials-style` 的项目**凭证格式不变**。
+  - **删除** `tiny-security.credentials-style`（即使配置了也不再生效）。若曾配成 `random128` / `nanoid`，升级后凭证格式统一变为 32 位十六进制。
+  - **破坏性**：工具类 `CredentialsGenUtil` 与 `org.tinycloud.security.util.idgen.NanoId` 一并**删除**。直接调用过它们的代码需自行替换，UUID 一行即可：`UUID.randomUUID().toString().replace("-", "")`。
+- **凭证碰撞不再静默覆盖**：四个会话仓储的 `save` 由"无条件写入"改为"不存在才写入"（`single` 用 `putIfAbsent`、`caffeine` 用 `asMap().putIfAbsent`、`redis` 用 `setIfAbsent`、`jdbc` 由 `credentials` 唯一约束拦下）。
+  - 碰撞时 `save` 返回 `false`、登录失败并打印 ERROR 日志，**不再覆盖已有会话**。
+  - 碰撞概率约 2⁻¹²²，正常永远不会触发；一旦触发，说明随机源异常或有人在构造会话固定攻击。
+  - **破坏性**：自定义实现 `SessionRepository` 时，`save` 也应在凭证已存在时返回 `false`，与该语义保持一致。
+
+### 🔒 安全加固
+
+- **`CommonUtil.getRandomString` 改用 `SecureRandom`**：此前使用 `ThreadLocalRandom`（非密码学安全随机源，内部状态只有 64 位且可被观测输出反推）。该函数现在只服务于「未配置 `token-secret` 时生成临时签名密钥」，改用 `SecureRandom` 后兜底密钥的材料质量合格。
+- **清除可预测随机源的所有可达路径**：随 `CredentialsGenUtil` / `NanoId` 一并移除，框架内**不再存在任何非 CSPRNG 的凭证或密钥来源**——凭证只有 UUID，签名密钥只有"配置值"或 `SecureRandom`。
+
+### 🐛 缺陷修复
+
+- **修复 `AuthUtil.hasRole` / `hasPermission` 在无权限注解接口上恒返回 `false` 的回归**（1.3.1 引入）：
+  - **根因**：1.3.1 为"只做注解需要的 SPI 调用"做性能优化后，授权管理器仅当方法上存在 `@RequiresRoles` / `@RequiresPermissions` 时才去查对应的角色/权限集合，无注解接口更是直接放行、一次都不查。于是 `SecurityContext` 里的 `roleSet` / `permissionSet` 恒为空集，而 `AuthUtil.hasRole/hasPermission` 读的正是这个空集 —— 代码式鉴权 API 静默失效（只声明 `@RequiresPermissions` 时 `hasRole` 为 false，只声明 `@RequiresRoles` 时 `hasPermission` 为 false）。
+  - **修复**：保留原有性能设计（无注解接口**依然不做任何 SPI 调用**），把加载时机推迟到 `AuthUtil.has*` 真正被调用时，由 `TinySecurityFacade` 按需懒加载，并把结果缓存回本次请求的上下文（每类数据每次请求最多查一次）。
+  - `SecurityContext` 现在区分「尚未加载」与「已加载但确实为空」（新增 `isRoleSetLoaded()` / `isPermissionSetLoaded()`），只有前者才触发懒加载；`getRoleSet()` / `getPermissionSet()` 的返回值语义不变（未加载时仍是空集合）。
+  - **新增** `TinySecurityFacade(SecurityContextRepository, AuthorizationInfoGet)` 构造重载；原单参构造保留且行为不变（不做懒加载）。**经 starter 自动配置的用户无需任何改动** —— `AuthAutoConfiguration` 已自动注入 `AuthorizationInfoGet`。
+
+### 升级检查清单
+
+- [ ] 把 `tiny-security.jwt-secret` 改名为 `tiny-security.token-secret`（**务必配置固定值**，否则重启后会话全失效、多实例之间互不认可）
+- [ ] 删除配置文件中的 `tiny-security.jwt-subject` 与 `tiny-security.jwt-timeout`
+- [ ] 删除配置文件中的 `tiny-security.credentials-style`（已失效）
+- [ ] 若代码直接使用过 `CredentialsGenUtil` 或 `NanoId`：两者已删除，请自行替换（UUID 一行即可）
+- [ ] 若代码引用了 `AuthConsts.JWT_TOKEN_PREFIX`，改为 `AuthConsts.TOKEN_PREFIX`
+- [ ] 若直接使用过 `JwtUtil`：该类已删除，请改用 `TokenSignUtil`
+- [ ] 若自定义实现了 `SessionRepository`：确认 `save` 在凭证已存在时返回 `false`，不要静默覆盖
+- [ ] 通知用户升级后需重新登录（token 格式变更）
+- [ ] 若手工注册过安全门面（`new TinySecurityFacade(repo)`）：改用双参构造并传入 `AuthorizationInfoGet`，否则无注解接口上的 `AuthUtil.hasRole/hasPermission` 仍只会读到空集（**使用 starter 自动配置的项目无需处理**）
 
 ---
 

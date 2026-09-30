@@ -9,24 +9,24 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
+import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.NoopSecurityEventPublisher;
 import org.tinycloud.security.event.SecurityEventPublisher;
-import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
+import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.CookieUtil;
-import org.tinycloud.security.util.CredentialsGenUtil;
-import org.tinycloud.security.util.JwtUtil;
+import org.tinycloud.security.util.TokenSignUtil;
 import org.tinycloud.security.web.WebRequestUtils;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 操作 token 和会话的兼容外观类（Facade）
@@ -42,9 +42,10 @@ public class AuthProvider {
     private final SecurityEventPublisher securityEventPublisher;
 
     /**
-     * 实际生效的 JWT 密钥：优先取配置值；未配置时生成随机密钥（重启后所有会话失效）
+     * 实际生效的 token 签名密钥：优先取配置值；未配置时生成随机密钥
+     * （重启后所有会话失效，多实例部署下各实例互不认可）
      */
-    private final String jwtSecret;
+    private final String tokenSecret;
 
     /**
      * 构造 AuthProvider 外观。
@@ -61,7 +62,7 @@ public class AuthProvider {
         this.sessionRepository = sessionRepository;
         this.properties = properties;
         this.securityEventPublisher = securityEventPublisher;
-        this.jwtSecret = resolveJwtSecret(properties.getJwtSecret());
+        this.tokenSecret = resolveTokenSecret(properties.getTokenSecret());
     }
 
     /**
@@ -71,12 +72,12 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken(HttpServletRequest request) {
-        String jwtToken = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
-        if (!StringUtils.hasText(jwtToken)) {
+        String token = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
+        if (!StringUtils.hasText(token)) {
             throw new UnAuthorizedException();
         }
-        if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            return jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        if (token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            return token.substring(AuthConsts.TOKEN_PREFIX.length());
         }
         throw new UnAuthorizedException();
     }
@@ -87,18 +88,21 @@ public class AuthProvider {
      * @return 去前缀后的 token
      */
     public String getToken() {
-        String jwtToken = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
-        if (!StringUtils.hasText(jwtToken)) {
+        String token = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
+        if (!StringUtils.hasText(token)) {
             throw new UnAuthorizedException();
         }
-        if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            return jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        if (token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            return token.substring(AuthConsts.TOKEN_PREFIX.length());
         }
         throw new UnAuthorizedException();
     }
 
     /**
      * 根据 token 解析会话凭证 credentials。
+     *
+     * <p>先用签名密钥校验 token 完整性（防伪造），通过后再取出其中的 credentials；
+     * credentials 是否对应一个有效会话，由会话仓储在后续 {@code checkByCredentials} 中判定。
      *
      * @param token token 字符串（可包含 Bearer 前缀）
      * @return 会话凭证
@@ -107,14 +111,14 @@ public class AuthProvider {
         if (!StringUtils.hasText(token)) {
             throw new UnAuthorizedException();
         }
-        if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        if (token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            token = token.substring(AuthConsts.TOKEN_PREFIX.length());
         }
-        Map<String, String> claims = JwtUtil.getClaims(this.jwtSecret, token);
-        if (Objects.isNull(claims)) {
+        String credentials = TokenSignUtil.verifyAndExtract(this.tokenSecret, token);
+        if (Objects.isNull(credentials)) {
             throw new UnAuthorizedException();
         }
-        return claims.get("credentials");
+        return credentials;
     }
 
     /**
@@ -148,12 +152,9 @@ public class AuthProvider {
         Assert.isTrue(loginId instanceof Number || loginId instanceof String,
                 "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
 
-        String credentials = CredentialsGenUtil.generate(this.properties.getCredentialsStyle());
-        Map<String, String> payload = new HashMap<>();
-        payload.put("credentials", credentials);
-        // JWT 有效期取 jwt-timeout 与会话 timeout 的较大值，避免 token 先于会话过期
-        long jwtExpireSeconds = Math.max(this.properties.getJwtTimeout(), this.resolveTimeout());
-        String jwtToken = JwtUtil.sign(this.jwtSecret, this.properties.getJwtSubject(), payload, jwtExpireSeconds);
+        // 凭证是会话的唯一钥匙，必须不可预测：固定用 UUID（内部走 SecureRandom，122 bit 随机性）再去掉横线。
+        // 不再提供 credentials-style 配置项——可选的凭证风格只会带来"用户选到弱随机源"的风险，没有收益
+        String credentials = UUID.randomUUID().toString().replace("-", "");
 
         long currentTime = System.currentTimeMillis();
         int timeout = this.resolveTimeout();
@@ -168,7 +169,7 @@ public class AuthProvider {
         if (!success) {
             throw new TinySecurityException("Failed to create auth. Please retry!");
         }
-        return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
+        return AuthConsts.TOKEN_PREFIX + TokenSignUtil.sign(this.tokenSecret, credentials);
     }
 
     /**
@@ -447,19 +448,20 @@ public class AuthProvider {
     }
 
     /**
-     * 解析 JWT 密钥：已配置则使用配置值；未配置则生成随机密钥并给出警告
-     * （随机密钥重启后会变化，导致历史会话全部失效，生产环境必须配置固定密钥）。
+     * 解析 token 签名密钥：已配置则使用配置值；未配置则生成随机密钥并给出警告
+     * （随机密钥重启后会变化，导致历史会话全部失效，且多实例之间互不认可，生产环境必须配置固定密钥）。
      *
      * @param configuredSecret 配置的密钥
      * @return 实际生效的密钥
      */
-    private String resolveJwtSecret(String configuredSecret) {
+    private String resolveTokenSecret(String configuredSecret) {
         if (StringUtils.hasText(configuredSecret)) {
             return configuredSecret;
         }
-        log.warn("tiny-security: tiny-security.jwt-secret is not configured, a temporary random secret has been generated. " +
-                "All sessions will be invalid after restart! Please configure a fixed secret for production environments.");
-        return CredentialsGenUtil.generate("random128");
+        log.warn("tiny-security: tiny-security.token-secret is not configured, a temporary random secret has been generated. " +
+                "All sessions will be invalid after restart, and in a multi-instance deployment each instance will reject tokens issued by the others! " +
+                "Please configure a fixed secret for production environments.");
+        return CommonUtil.getRandomString(128);
     }
 
     /**

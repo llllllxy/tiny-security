@@ -120,8 +120,7 @@ class DefaultAuthenticationManagerTest {
         AuthProperties properties = new AuthProperties();
         properties.setBanner(false);
         properties.setTokenName("token");
-        properties.setJwtSecret("test-secret");
-        properties.setJwtSubject("test-subject");
+        properties.setTokenSecret("test-secret");
         return properties;
     }
 

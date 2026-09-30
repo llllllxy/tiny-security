@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 基于 Caffeine 本地缓存的会话仓储实现。
@@ -116,7 +115,14 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
             }
             // 无论是否启用并发限制，登录时都清理该账号在线索引中的失效凭证，否则索引随登录次数无限累积（内存泄漏）
             this.countValidOnlineSessions(subject.getLoginId());
-            this.cache.put(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject);
+            // 凭证是随机生成的会话唯一钥匙，理论上不会重复。一旦重复，说明随机源异常或有人在构造会话固定攻击，
+            // 此时必须明确失败，绝不能静默覆盖掉另一个用户的会话
+            LoginSubject existing = this.cache.asMap()
+                    .putIfAbsent(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject);
+            if (existing != null) {
+                log.error("CaffeineSessionRepository save failed: credentials collision detected, the generated token already exists!");
+                return false;
+            }
             this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {

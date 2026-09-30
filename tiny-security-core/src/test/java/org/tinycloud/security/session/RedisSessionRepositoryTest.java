@@ -14,10 +14,7 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -57,12 +54,13 @@ class RedisSessionRepositoryTest {
     void saveShouldSetOnlineListTtlToTwiceSessionTimeout() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-1"), 60, 0));
 
         verify(listOperations).rightPush(ONLINE_KEY, "cred-1");
         verify(redisTemplate).expire(ONLINE_KEY, 120L, TimeUnit.SECONDS);
-        verify(valueOperations).set(eq("tiny:security:credentials:cred-1"), anyString(), eq(60L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).setIfAbsent(eq("tiny:security:credentials:cred-1"), anyString(), eq(60L), eq(TimeUnit.SECONDS));
     }
 
     /**
@@ -75,6 +73,7 @@ class RedisSessionRepositoryTest {
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("dead-cred"), List.of());
         when(redisTemplate.hasKey("tiny:security:credentials:dead-cred")).thenReturn(false);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-new"), 60, 0));
 
@@ -110,8 +109,23 @@ class RedisSessionRepositoryTest {
         assertThrows(ConcurrentLoginOverLimitException.class,
                 () -> repository.save(buildSubject(10001L, "cred-2"), 60, 1));
 
-        verify(valueOperations, never()).set(anyString(), anyString(), anyLong(), any(TimeUnit.class));
+        verify(valueOperations, never()).setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class));
         verify(redisTemplate, never()).expire(anyString(), anyLong(), any(TimeUnit.class));
+    }
+
+    /**
+     * 凭证碰撞必须明确失败：不能静默覆盖已有会话（否则两个用户会共用同一条会话记录）。
+     */
+    @Test
+    void saveShouldFailWhenCredentialsCollide() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(false);
+
+        assertFalse(repository.save(buildSubject(10001L, "cred-dup"), 60, 0));
+
+        // 碰撞时不得把该凭证写进在线列表，避免污染索引
+        verify(listOperations, never()).rightPush(anyString(), anyString());
     }
 
     /**
