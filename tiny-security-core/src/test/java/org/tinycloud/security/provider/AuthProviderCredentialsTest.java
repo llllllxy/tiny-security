@@ -16,7 +16,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * AuthProvider#getCredentialsByLoginId 门面方法测试。
@@ -99,7 +98,7 @@ class AuthProviderCredentialsTest {
 
     private AuthProperties properties() {
         AuthProperties properties = new AuthProperties();
-        properties.setJwtSecret("test-jwt-secret-for-credentials-lookup");
+        properties.setTokenSecret("test-token-secret-for-credentials-lookup");
         return properties;
     }
 

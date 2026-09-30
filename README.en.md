@@ -84,9 +84,6 @@ tiny-security:
    timeout: 1800
    # Max concurrent logins per account, 0 = unlimited (default)
    max-concurrent-logins: 2
-   # Credential style. Only uuid / random128 / nanoid are cryptographically random and safe for production.
-   # Any other value falls back to uuid (snowflake/objectid/ulid were removed as predictable).
-   credentials-style: uuid
    # Table name for JDBC storage, default t_auth_storage
    table-name: t_auth_storage
    # Enable permission/role checks, default false. When true, implement AuthorizationInfoGet.
@@ -97,13 +94,10 @@ tiny-security:
    force-http-status-200: false
    # Permission check mode: ANNOTATION (@RequiresPermissions/@RequiresRoles) | URL (ant-style path match)
    perm-check-mode: ANNOTATION
-   # JWT secret. Strongly recommended to set a fixed high-entropy random value.
-   # If unset, a temporary random secret is generated and all sessions invalidate on restart.
-   jwt-secret: your-secret-key-please-replace-me
-   # JWT subject, uses default if unset
-   jwt-subject: tiny-security
-   # JWT self expiry (seconds), default 2592000 (30 days). Effective value is max(jwt-timeout, timeout).
-   jwt-timeout: 2592000
+    # Token signing secret. Strongly recommended to set a fixed high-entropy random value.
+    # If unset, a temporary random secret is generated: all sessions invalidate on restart, and in a
+    # multi-instance deployment the instances will not accept each other's tokens.
+    token-secret: your-secret-key-please-replace-me
    # Cookie mode (login writes cookie, logout clears cookie, token read from cookie). Default false (pure token).
    enable-cookie: false
    # Allow reading token from URL parameter, default false (URL tokens leak into access logs/Referer)

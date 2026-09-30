@@ -13,12 +13,7 @@ import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthProviderCookieTest {
 
@@ -62,7 +57,7 @@ class AuthProviderCookieTest {
     void shouldNotReadTokenFromCookieWhenCookieDisabled() {
         AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), defaultProperties(), null);
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setCookies(new Cookie("token", "Bearer some-jwt"));
+        request.setCookies(new Cookie("token", "Bearer some-token"));
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
 
@@ -78,11 +73,11 @@ class AuthProviderCookieTest {
         properties.setEnableCookie(true);
         AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setCookies(new Cookie("token", "Bearer some-jwt"));
+        request.setCookies(new Cookie("token", "Bearer some-token"));
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
 
-        assertEquals("some-jwt", authProvider.getToken());
+        assertEquals("some-token", authProvider.getToken());
     }
 
     /**
@@ -176,7 +171,7 @@ class AuthProviderCookieTest {
     void shouldNotReadTokenFromUrlParameterWhenUrlTokenDisabled() {
         AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), defaultProperties(), null);
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addParameter("token", "Bearer some-jwt");
+        request.addParameter("token", "Bearer some-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
 
@@ -192,11 +187,11 @@ class AuthProviderCookieTest {
         properties.setEnableUrlToken(true);
         AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addParameter("token", "Bearer some-jwt");
+        request.addParameter("token", "Bearer some-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
 
-        assertEquals("some-jwt", authProvider.getToken());
+        assertEquals("some-token", authProvider.getToken());
     }
 
     private MockHttpServletResponse bindRequestContext() {
@@ -211,10 +206,8 @@ class AuthProviderCookieTest {
         properties.setBanner(false);
         properties.setTokenName("token");
         properties.setTimeout(1800);
-        properties.setCredentialsStyle("uuid");
         properties.setMaxConcurrentLogins(0);
-        properties.setJwtSecret("test-secret");
-        properties.setJwtSubject("test-subject");
+        properties.setTokenSecret("test-secret");
         return properties;
     }
 

@@ -17,12 +17,15 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -46,6 +49,24 @@ class TinySecurityAutoConfigurationTest {
         @Bean
         SessionRepository sessionRepository() {
             return new InMemorySessionRepository();
+        }
+
+        /**
+         * P0-1 需要容器里存在 AuthorizationInfoGet，Facade 才能按需懒加载角色/权限。
+         */
+        @Bean
+        AuthorizationInfoGet authorizationInfoGet() {
+            return new AuthorizationInfoGet() {
+                @Override
+                public Set<String> getPermissionSet(LoginSubject subject) {
+                    return Set.of("user:read");
+                }
+
+                @Override
+                public Set<String> getRoleSet(LoginSubject subject) {
+                    return Set.of("admin");
+                }
+            };
         }
     }
 
@@ -74,6 +95,9 @@ class TinySecurityAutoConfigurationTest {
     void tearDown() {
         AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
+        // ThreadLocalSecurityContextRepository 用的是静态 ThreadLocal，不清理会跨用例泄漏上下文，
+        // 导致 shouldThrowWhenNoSession 之类依赖"无会话"的用例受执行顺序影响
+        ThreadLocalSecurityContextRepository.clearContext();
         ((InMemorySessionRepository) sessionRepository).clear();
     }
 
@@ -96,7 +120,6 @@ class TinySecurityAutoConfigurationTest {
     void shouldHaveDefaultProperties() {
         assertEquals("token", properties.getTokenName());
         assertEquals(1800, properties.getTimeout());
-        assertEquals("uuid", properties.getCredentialsStyle());
         assertEquals(0, properties.getMaxConcurrentLogins());
     }
 
@@ -153,6 +176,31 @@ class TinySecurityAutoConfigurationTest {
         authProvider.logout();
 
         assertFalse(sessionRepository.checkByCredentials(credentials));
+    }
+
+    /**
+     * P0-1 端到端（自动装配层）：容器里的 AuthorizationInfoGet 必须被注入到 Facade，
+     * 这样在接口上没有权限注解、上下文里也没加载过角色/权限时，AuthUtil.hasRole/hasPermission 依然正确。
+     * 修复前这里会返回 false —— 因为它读到的是永不被填充的空集。
+     */
+    @Test
+    void shouldLazilyLoadRoleAndPermissionThroughAutoConfiguredFacade() {
+        bindRequest();
+
+        String token = authProvider.login("authz-user");
+        String credentials = authProvider.getCredentialsByToken(token);
+        LoginSubject subject = sessionRepository.getSubject(credentials);
+        assertNotNull(subject);
+
+        // 只放 loginSubject，不手工塞角色/权限集合——与无权限注解接口上的真实状态一致
+        SecurityContext context = new SecurityContext();
+        context.setLoginSubject(subject);
+        securityContextRepository.saveContext(context, currentRequest(), currentResponse());
+
+        assertTrue(AuthUtil.hasRole("admin"));
+        assertTrue(AuthUtil.hasPermission("user:read"));
+        assertFalse(AuthUtil.hasRole("guest"));
+        assertFalse(AuthUtil.hasPermission("user:delete"));
     }
 
     /**

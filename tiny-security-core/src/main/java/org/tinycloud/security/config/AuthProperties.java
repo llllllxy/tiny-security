@@ -29,22 +29,18 @@ public class AuthProperties {
 
     private Integer timeout = 1800;
 
-    private String credentialsStyle = "uuid";
-
     private String tableName = "t_auth_storage";
 
     private Boolean authorizationEnabled = false;
 
     private PermissionMode permCheckMode;
 
-    private String jwtSecret;
-
-    private String jwtSubject;
-
     /**
-     * jwt自身有效期（秒），默认30天（2592000秒）
+     * token 签名密钥（HMAC-SHA256）。
+     * <p>未配置时启动会生成一个随机密钥并打印 WARN：随机密钥在重启后会变化，且多实例部署下
+     * 各实例互不认可对方签发的 token（A 发的 token 到 B 上必然 401），生产环境必须配置固定值。
      */
-    private Integer jwtTimeout = 30 * 24 * 60 * 60;
+    private String tokenSecret;
 
     private Integer maxConcurrentLogins = 0;
 
@@ -129,14 +125,6 @@ public class AuthProperties {
         this.timeout = timeout;
     }
 
-    public String getCredentialsStyle() {
-        return credentialsStyle;
-    }
-
-    public void setCredentialsStyle(String credentialsStyle) {
-        this.credentialsStyle = credentialsStyle;
-    }
-
     public String getTableName() {
         return tableName;
     }
@@ -161,28 +149,12 @@ public class AuthProperties {
         this.permCheckMode = permCheckMode;
     }
 
-    public String getJwtSecret() {
-        return jwtSecret;
+    public String getTokenSecret() {
+        return tokenSecret;
     }
 
-    public void setJwtSecret(String jwtSecret) {
-        this.jwtSecret = jwtSecret;
-    }
-
-    public String getJwtSubject() {
-        return jwtSubject;
-    }
-
-    public void setJwtSubject(String jwtSubject) {
-        this.jwtSubject = jwtSubject;
-    }
-
-    public Integer getJwtTimeout() {
-        return jwtTimeout;
-    }
-
-    public void setJwtTimeout(Integer jwtTimeout) {
-        this.jwtTimeout = jwtTimeout;
+    public void setTokenSecret(String tokenSecret) {
+        this.tokenSecret = tokenSecret;
     }
 
     public Integer getMaxConcurrentLogins() {

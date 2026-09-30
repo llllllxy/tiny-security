@@ -12,11 +12,7 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.session.CaffeineSessionRepository;
-import org.tinycloud.security.session.JdbcSessionRepository;
-import org.tinycloud.security.session.RedisSessionRepository;
-import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.session.SingleSessionRepository;
+import org.tinycloud.security.session.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -162,7 +158,7 @@ class AuthAutoConfigurationTest {
         @Bean
         AuthProvider customAuthProvider(SessionRepository sessionRepository) {
             AuthProperties properties = new AuthProperties();
-            properties.setJwtSecret("test-secret");
+            properties.setTokenSecret("test-secret");
             return new AuthProvider(sessionRepository, properties, null);
         }
     }

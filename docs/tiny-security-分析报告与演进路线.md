@@ -5,8 +5,9 @@
 >
 > | 项目 | 内容 |
 > |---|---|
-> | 文档版本 | v1.0 |
+> | 文档版本 | v1.2 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载。测试 core 169 / starter 16 全绿 |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -50,11 +51,11 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 维度 | 现状 |
 |---|---|
 | 定位（自我描述） | 「基于 SpringBoot 的轻量级 Java Web 权限认证框架」 |
-| 技术栈 | JDK 17、Spring Boot 3.2.12、jakarta.servlet 6.0、java-jwt 3.19.4、Jackson |
-| 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ JWT 仅用于携带 `credentials` |
+| 技术栈 | JDK 17、Spring Boot 3.2.12、jakarta.servlet 6.0、Jackson（**无第三方 JWT / 加密依赖**，token 签名走 JDK `javax.crypto`） |
+| 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 60 个；测试类 30 个 / 194 个用例 |
+| 代码规模 | 生产类 57 个；测试类 27 个 / 178 个用例（`1.5.0` 移除 JWT、`CredentialsGenUtil`、`NanoId` 后的实测值） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | **无**（无 `.github/`，无任何 workflow） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -74,14 +75,14 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 `AuthProvider` / `AuthUtil` / `TinySecurityFacade` 三套入口语义重复，靠 `AuthUtil.setFacade()` 这个静态变量互连。1.3.1 引入门面、1.4.0 统一语义又要删转发类——**三个版本都在重铺同一条管线，产品能力没有前进**。这是"改了很多但感觉没进步"的直接原因。
 
 **根因三：差异化未被回答。**
-语义上（`login` / `deleteByLoginId` / `max-concurrent-logins` / `credentials-style` / `getCredentialsByLoginId`）几乎处处对标 Sa-Token。因此"为什么用 tiny-security 而不是 Sa-Token / Spring Security / Shiro"目前**没有答案**。没有答案的库，功能只会越加越迷茫——因为每个需求都能加，但加完都不构成理由。
+语义上（`login` / `deleteByLoginId` / `max-concurrent-logins` / `getCredentialsByLoginId`）几乎处处对标 Sa-Token。因此"为什么用 tiny-security 而不是 Sa-Token / Spring Security / Shiro"目前**没有答案**。没有答案的库，功能只会越加越迷茫——因为每个需求都能加，但加完都不构成理由。
 
 ### 2.2 最该先做的 7 件事（按顺序）
 
 | 顺序 | 事项 | ID | 为什么排这个位置 |
 |---|---|---|---|
-| 1 | 修 `AuthUtil.hasRole/hasPermission` 无注解接口恒 false 的回归（含 3 个测试同步改） | P0-1 / P0-2 | 用户最容易踩到的**功能性失效**，且改动小、价值立现 |
-| 2 | `random128` 与兜底 JWT 密钥改用 `SecureRandom` | P0-3 | **默认路径**下的弱密钥材料；文档还反向保证了安全性 |
+| 1 | ~~修 `AuthUtil.hasRole/hasPermission` 无注解接口恒 false 的回归（含测试同步改）~~ ✅ **`1.5.0` 已完成** | P0-1 / P0-2 | 用户最容易踩到的**功能性失效**，且改动小、价值立现 |
+| 2 | ~~`random128` 与兜底 JWT 密钥改用 `SecureRandom`~~ ✅ **`1.5.0` 已完成** | P0-3 | **默认路径**下的弱密钥材料；文档还反向保证了安全性 |
 | 3 | `JsonUtil` 注册模块 + 容忍未知字段 | P0-4 | 一行代码量级，同时解除「加字段=全员登出」的升级炸弹 |
 | 4 | `BCrypt.checkpw` 契约修正（畸形 hash 返回 false） | P0-5 | 登录路径上的 500/DoS 与互操作性风险 |
 | 5 | 修 `WebRequestUtils` 便捷重载默认允许 URL 传 token | P0-6 | 公开 API 的安全默认值与框架策略相反 |
@@ -131,9 +132,21 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   | `authorization-enabled: false`（默认） | ❌ 恒 false | ❌ 恒 false |
 
 - **影响**：README §2.3.2 把这两个方法当可用 API 介绍 —— **文档级误导 + 功能性失效**。这是 1.3.1「按注解类型按需调用 SPI」性能优化引入的**回归**，CHANGELOG 只描述了"Redis 访问减半"，没意识到同时抽掉了代码式鉴权 API 的数据来源。
-- **修复方向**：保留"不为注解服务就不做 SPI 调用"的性能设计，但让 `AuthUtil.has*` 在上下文缺数据时**按需从 SPI 懒加载并缓存到本次请求的上下文**（而不是返回空集）。
-- **必须同批处理**：P0-2。
-- **状态**：`TODO`
+- **修复方案（`1.5.0` 已实施）**：保留"不为注解服务就不做 SPI 调用"的性能设计，但让 `AuthUtil.has*` 在上下文缺数据时**按需从 SPI 懒加载并缓存到本次请求的上下文**（而不是返回空集）。
+  - `SecurityContext` 用 `null` 表示「尚未加载」，与「已加载、但确实一个都没有」区分开（新增 `isRoleSetLoaded()` / `isPermissionSetLoaded()`）。`getRoleSet()` / `getPermissionSet()` 对外返回值语义不变（未加载时仍是空集合），因此 `AuthorizationEvaluator` 等既有调用方无需改动。
+  - `DefaultAuthorizationManager` 改为**只在真的查了 SPI 时**才写回集合。这是根因所在：此前无论是否查询都无条件 `context.setRoleSet(...)`，把"未加载"直接标成了"已加载"。
+  - `TinySecurityFacade` 新增 `(SecurityContextRepository, AuthorizationInfoGet)` 构造重载，`getRoleSet()` / `getPermissionSet()` 在未加载时懒加载并回写上下文；原单参构造保留、行为不变。`AuthAutoConfiguration` 已自动注入 SPI，**starter 用户无感**。
+  - 修复后的行为矩阵：
+
+    | 接口注解 | `hasRole` | `hasPermission` | 注解校验期间的 SPI 调用 |
+    |---|---|---|---|
+    | 无注解 | ✅ 懒加载 | ✅ 懒加载 | 0 次（性能设计保留） |
+    | 仅 `@RequiresPermissions` | ✅ 懒加载 | ✅ 复用 | 1 次（权限） |
+    | 仅 `@RequiresRoles` | ✅ 复用 | ✅ 懒加载 | 1 次（角色） |
+    | `authorization-enabled: false` | ✅ 懒加载 | ✅ 懒加载 | 0 次 |
+
+  - 隐藏收益：`authorization-enabled: false`（**默认值**）下关卡不再恒 false。此前的表格显示该配置下两个方法都失效，是同一根因的另一种表现。
+- **状态**：`DONE`（`1.5.0`）
 
 #### P0-2 · 测试固化了 P0-1（改 P0-1 必须先改这三处）
 
@@ -143,23 +156,34 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   - [`AuthorizationInterceptorTest.java:54-70`](../tiny-security-core/src/test/java/org/tinycloud/security/interceptor/AuthorizationInterceptorTest.java#L54-L70)（断言无注解放行，但**完全没断言上下文里的 roleSet/permissionSet 被填充**）
   - [`EndToEndFlowTest.java:166-193`](../tiny-security-core/src/test/java/org/tinycloud/security/EndToEndFlowTest.java#L166-L193)（号称端到端，实际**手工 `context.setRoleSet(roles)`** 后再断言 `AuthUtil.hasRole`，绕过了真实链路）
 - **影响**：不改这三处，P0-1 修完测试会"变红"，容易被误判为"改坏了"而回滚。
-- **修复方向**：把断言从"只查了一半"改为"上下文中两份数据都可用"；`EndToEndFlowTest` 改为真正驱动拦截器（见 TST-1）。
-- **状态**：`TODO`
+- **判断修正（`1.5.0` 实测）**：原文认为这三处都会"变红"，实测**只有第三处成立**，前两处的定性不准确：
 
-#### P0-3 · `credentials-style: random128` 不是密码学随机，且兜底 JWT 签名密钥走同一路径
+  | 证据 | 实测结论 | 处理 |
+  |---|---|---|
+  | `DefaultAuthorizationManagerTest:133` / `:156` | 断言的是**授权管理器只为注解查询**，而这恰恰是 P0-1 修复要**保留**的性能设计 —— 修复前后均通过，**不是回归锁** | 不改（断言依然有效，继续锁住性能边界） |
+  | `AuthorizationInterceptorTest:54-70` | 只断言"无注解放行"，从未断言集合被填充 —— 修复前后均通过 | **已就地加强**：同时断言「一次 SPI 都不调」+「上下文保持未加载」 |
+  | `EndToEndFlowTest:166-193` | 确认存在问题：手工 `context.setRoleSet(roles)` 后再断言 `AuthUtil.hasRole`，绕过了真实链路 | **已重写**：只放 `loginSubject`，由 `AuthUtil.has*` 触发真实懒加载 |
+
+- **真正的回归测试缺口**：原文找错了地方。P0-1 之所以能长期潜伏，根因是**没有任何用例覆盖"上下文未加载"这一状态** —— 所有涉及 `has*` 的测试都先手工 `setRoleSet` / `setPermissionSet`，于是改前改后一样绿。
+- **本次新增的回归测试**（`TinySecurityFacadeTest`）：懒加载角色、懒加载权限、每请求每类数据只查一次、已加载则不重复查、未提供 SPI 时行为不变、经 `AuthUtil` 的完整调用路径；`EndToEndFlowTest` 补断言懒加载结果回写上下文。
+- **已做反向验证**：把懒加载分支短路后重跑，其中 **5 个用例立刻变红**（`hasRole` 返回 false、SPI 查询次数为 0），确认这些用例真的能抓住 P0-1，而不是"陪着一起绿"。
+- **状态**：`DONE`（`1.5.0`）
+
+#### P0-3 · `credentials-style: random128` 不是密码学随机，且兜底 JWT 签名密钥走同一路径（`1.5.0` 已随配置项删除而彻底消失）
 
 - **类别**：安全 / 弱随机
 - **证据**：
   - [`CommonUtil.java:54`](../tiny-security-core/src/main/java/org/tinycloud/security/util/CommonUtil.java#L54)：`ThreadLocalRandom.current().nextInt(63)`（非 CSPRNG）
-  - [`CredentialsGenUtil.java:39-41`](../tiny-security-core/src/main/java/org/tinycloud/security/util/CredentialsGenUtil.java#L39-L41)（`random128` 走上面那个函数）
-  - [`AuthProvider.java:462`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L462)：未配置 `jwt-secret` 时的兜底密钥 = `CredentialsGenUtil.generate("random128")`
-  - [`CredentialsGenUtil.java:24-25`](../tiny-security-core/src/main/java/org/tinycloud/security/util/CredentialsGenUtil.java#L24-L25) 与 README §2.1.3、CHANGELOG 1.3.3 均声称 `random128` **具备密码学随机性**（事实错误）
+  - `CredentialsGenUtil.generate("random128")` 走上面那个函数（**该类已在 `1.5.0` 删除**，链接随之失效）
+  - `AuthProvider` 中未配置密钥时的兜底材料 = `CredentialsGenUtil.generate("random128")`（`1.5.0` 起改为 `CommonUtil.getRandomString(128)`）
+  - `CredentialsGenUtil` 的 javadoc 与 README §2.1.3、CHANGELOG 1.3.3 均声称 `random128` **具备密码学随机性**（事实错误）
 - **影响**：
   - 会话凭证本身在 JWT payload 中**明文可见**（base64 可解），唯一屏障就是不可预测性 —— 而它被破坏了；
   - 默认路径下**签名密钥的材料质量不合格**（`resolveJwtSecret` 只在 `:460` 打了 WARN）。
 - **对照**：`uuid`（`UUID.randomUUID` → SecureRandom）与 `nanoid`（SecureRandom + 拒绝采样，已逐行核实正确）**是真的**；`getRandomString` 的 `nextInt(63)` 边界也**没有 off-by-one**（字母表正好 63 个字符）。问题只在"用了非 CSPRNG"。
 - **修复方向**：`random128` 改用 `SecureRandom`；同步修正 README / CHANGELOG 中"密码学随机"的措辞（要么改成事实描述，要么真的做到）。
-- **状态**：`TODO`
+- **修复记录**（`1.5.0`）：[`CommonUtil.getRandomString`](../tiny-security-core/src/main/java/org/tinycloud/security/util/CommonUtil.java) 改用类级 `java.security.SecureRandom`（`nextInt(str.length())`，取模与字母表长度恒等）。更重要的是**把这条路径整个删掉了**：`credentials-style` 配置项、`CredentialsGenUtil`、`util.idgen.NanoId` 均已删除，凭证固定为 `UUID.randomUUID().toString().replace("-", "")`，签名密钥的兜底材料改为 `CommonUtil.getRandomString(128)`。框架内**不再存在任何非 CSPRNG 的凭证或密钥来源**——不是"把弱的那条修好"，而是"让它无法被选中"。
+- **状态**：`DONE`
 
 #### P0-4 · `JsonUtil` 用裸 `ObjectMapper`：既会让登录直接失败，又是滚动发布炸弹
 
@@ -352,8 +376,8 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | P2-7 | `getToken()` 返回**不带** `Bearer ` 的裸 JWT，而解码侧强制要求前缀 → 把返回值放回 header 会 401 | [`AuthProvider.java:89-97`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L89-L97) vs [`:78-81`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L78-L81) | 统一前缀语义或放宽解析 | `TODO` |
 | P2-8 | `extraInfo` 无大小限制，而 `login_subject` 是 `varchar(5000)` → 超长时登录失败（且失败信息不直观） | [`t_auth_storage.sql:11`](../tiny-security-boot-starter/src/main/resources/sql/t_auth_storage.sql#L11) | 序列化后长度校验 + 明确报错 + 文档写明上限 | `TODO` |
 | P2-9 | `cookie-same-site: NONE` + `cookie-secure: false` 无校验/告警（浏览器会直接丢弃 Cookie） | `AuthProperties` / `AuthProvider.resolveCookie*` | 启动期校验或自动强制 Secure + WARN | `TODO` |
-| P2-10 | `NanoId` 的 `size` 无上界（`Integer.MAX_VALUE` → OOM）；`randomNanoId(Random, ...)` 公开允许传入弱随机源且无警告 | [`NanoId.java:109-127`](../tiny-security-core/src/main/java/org/tinycloud/security/util/idgen/NanoId.java#L109-L127) | 加上界；弱随机源重载收窄或显著警告 | `TODO` |
-| P2-11 | `JwtUtil` 对密钥**无最小长度校验**（`jwt-secret: 123` 也接受）；`expireSeconds` 无下界 | [`JwtUtil.java:63-74`](../tiny-security-core/src/main/java/org/tinycloud/security/util/JwtUtil.java#L63-L74)、[`:124-137`](../tiny-security-core/src/main/java/org/tinycloud/security/util/JwtUtil.java#L124-L137) | 强制最小长度（如 ≥32 字节）+ 参数校验 | `TODO` |
+| P2-10 | ~~`NanoId` 的 `size` 无上界（`Integer.MAX_VALUE` → OOM）；`randomNanoId(Random, ...)` 公开允许传入弱随机源且无警告~~ —— **`1.5.0` 已随 `NanoId` 整体删除而消失**（凭证固定为 UUID，不再需要 NanoId） | 类已删除 | — | `WONTFIX` |
+| P2-11 | token 签名密钥**无最小长度校验**（`token-secret: 123` 也接受，只判非空）。原 `JwtUtil` 的同类问题随 JWT 移除而消失（§4.3 IR-1），但校验缺口本身还在 | [`TokenSignUtil.java`](../tiny-security-core/src/main/java/org/tinycloud/security/util/TokenSignUtil.java) | 弱密钥启动期 WARN + 强制最小长度（如 ≥32 字节） | `TODO` |
 | P2-12 | `SM3.iv`/`SM3.Tj` 是 **public static 可变数组**（任何代码可全局污染 SM3 常量）；`SM3Digest` 拷贝构造漏拷 `cntBlock`；`doFinal(out,outOff)` 忽略 `outOff` 且不 `reset()` | [`SM3.java:9-14`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3.java#L9-L14)、[`SM3Digest.java:45-62`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3Digest.java#L45-L62) | 改 `private static final` + 防御性拷贝；补齐拷贝构造与 `doFinal` 语义 | `TODO` |
 | P2-13 | jBCrypt 遗留缺陷：`char64` 差一（`x==128` 越界）、不支持 `$2b$`/`$2y$`、`gensalt` 只校验上界、`checkpw` 提前返回泄露 hash 长度；`gensalt` 每次 `new SecureRandom()` | [`BCrypt.java:397-401`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L397-L401)、[`:686-726`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L686-L726) | 随 P0-5 一并处理 | `TODO` |
 | P2-14 | 异常消息硬编码中文（`"未登录或会话已失效！"`）而翻译器兜底是英文；无 i18n | [`UnAuthorizedException.java:14-16`](../tiny-security-core/src/main/java/org/tinycloud/security/exception/UnAuthorizedException.java#L14-L16) | 引入 `MessageSource` 或统一为英文 + 由业务侧本地化 | `TODO` |
@@ -409,7 +433,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | TST-2 | **零测试的生产类**：`TinySecurityHandlerExceptionResolver`、`WebRequestUtils`、`CookieUtil`、`AnnotationUtils`、`VersionUtil`、`CommonUtil`、`HexUtil`、`SpringSecurityEventPublisher`（没有任何用例断言事件真的被发布）、`AuthProperties`（仅 2 项绑定）、以及 **`AuthAutoConfiguration.addInterceptors` 的全部逻辑** | 逐类 grep 确认 | 按 §4.2 补齐 P0 相关部分 | `TODO` |
 | TST-3 | **空转 / 永真断言**（抽查代表）：`AuthAutoConfigurationTest.java:96-97` 的 `isInstanceOf(SessionRepository.class)` 恒真；`AuthProviderCookieTest.java:34-43` 名为"验证非 Web 线程写 Cookie 不 NPE"，但 `enableCookie` 默认 false → **根本没走到写 Cookie**（1.3.2 修的 NPE 已失去回归保护）；`CaffeineSessionRepositoryTest.java:91-102` 改的是存进去的同一个对象引用，`refresh` 改成空实现也照样绿；`DefaultExceptionTranslatorTest.java:50-57` 名为"code 缺失兜底"，实际兜底分支从未进入；`DefaultAuthenticationManagerTest.java:86-106` 号称测 `<=` 边界，实际恒小于 | 各测试文件 | 逐个修正为可证伪的断言 | `TODO` |
 | TST-4 | **静态状态污染 / 并行不安全**：`AuthUtil.facade` 是全局静态被 6 个测试类写；`AuthAutoConfigurationTest` 建 9 个上下文却**没有 `@AfterEach`**，静态门面最后指向**已关闭的上下文**；全项目无 `junit-platform.properties` / `@ResourceLock`。一旦开启并行或漏写一次 `clearContext()`，就会出现"用户串号"式污染 | 各测试文件 | 去静态化（随 P1-1/P1-2）；或至少加 `@ResourceLock` | `TODO` |
-| TST-5 | H2 建表语句**内联复制**在测试里，从不使用随包发布的 `t_auth_storage.sql` → 已发布 SQL 与代码存在漂移风险；`credentials` 唯一约束从未被测 | `JdbcSessionRepositoryTest.java:35-43` | 让测试加载真实 SQL 脚本 | `TODO` |
+| TST-5 | H2 建表语句**内联复制**在测试里，从不使用随包发布的 `t_auth_storage.sql` → 已发布 SQL 与代码存在漂移风险。`1.5.0` 先补上了漏掉的 `credentials` 唯一约束（碰撞路径这才可测），**整体仍未收敛到"加载真实 SQL 脚本"** | `JdbcSessionRepositoryTest.java:35-44` | 让测试加载真实 SQL 脚本 | `DOING` |
 | TST-6 | Redis 仓储测试全 Mockito，无真实 Redis → TTL / 原子性 / 序列化全未验证 | `RedisSessionRepositoryTest` | 引入 Testcontainers 或嵌入式 Redis（至少覆盖 TTL 与序列化往返） | `TODO` |
 | TST-7 | 白盒反射测试脆弱：`SingleSessionRepositoryTest` 反射写 `LocalTimeCache.expireMap`；`SessionRepositoryLifecycleTest` 反射读 `executorService` 字段名 | 各测试文件 | 改为通过公开 API 或提供 `isShutdown()` 之类可观测点 | `TODO` |
 | TST-8 | **没有仓储契约 TCK**（同一套用例跑 4 个实现）—— 这是防止四仓储再次行为分叉的唯一有效手段 | — | 建 `SessionRepositoryContractTest` 抽象基类 | `TODO` |
@@ -434,7 +458,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 顺序 | 事项 | IDs |
 |---|---|---|
 | 1 | 修 `AuthUtil.has*` 回归 + 同步改 3 个测试 | P0-1、P0-2 |
-| 2 | 换 CSPRNG（凭证 + 兜底密钥）并修正措辞 | P0-3 |
+| 2 | ~~换 CSPRNG（凭证 + 兜底密钥）并修正措辞~~ ✅ **`1.5.0` 已完成** | P0-3 |
 | 3 | `JsonUtil` 注册模块 + 容忍未知字段 | P0-4 |
 | 4 | `BCrypt` 契约修正 | P0-5、P2-13 部分 |
 | 5 | `WebRequestUtils` 默认值 | P0-6 |
@@ -447,9 +471,42 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 ### 4.3 阶段 1 · 把「会话内核」做扎实（1.5）
 
+#### IR-1 · 移除 JWT，改为 HMAC 签名 token（`1.5.0` 已完成）
+
+**决策**（对应 §5 决策 1，已拍板：**移除**）：本框架是**有状态会话**，每个请求无论如何都要查一次会话仓储，JWT「无状态自证」的收益根本兑现不了；而它的成本是实打实的。逐条核对 JWT 到底提供了什么：
+
+| JWT 声称提供的 | 在本框架里的实际价值 |
+|---|---|
+| 防伪造 | **部分有效**。凭证走 `UUID.randomUUID`（SecureRandom，122 bit），本就不可能猜中，签名纯属冗余；只有历史上的 `random128`（当时非 CSPRNG）场景下签名才真的在兜底——而这个洞已在 P0-3 补上，且 `credentials-style` 已在 `1.5.0` **整体删除**，凭证不再有第二种可能 |
+| 防撞 token | **完全没有**。仓储的 key 恒为 `credentials`，两个相同的 credentials 会覆盖同一条记录，但两个 JWT 看上去完全不同——碰撞被签名**掩盖**了，签名在这里是负价值 |
+
+**token 形态**：
+
+```
+token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secret))
+```
+
+- 新增 [`TokenSignUtil`](../tiny-security-core/src/main/java/org/tinycloud/security/util/TokenSignUtil.java)，只用 JDK 的 `javax.crypto.Mac` 与 `MessageDigest.isEqual`（常量时间比对），**约 150 行含注释**。
+- `credentials`（uuid / random128 / nanoid）与 base64url 的字母表都不含 `.`，故按**最后一个** `.` 切分即可；格式非法一律返回 `null` → 401，不抛异常穿透。
+- **收益**：删掉 `java-jwt` 依赖（pom 里 `jwt.version` 与 dependencyManagement 条目一并删除）；删掉 payload 编解码；删掉**第二条过期时间线**（原 `jwt-timeout` 与会话 `timeout` 取较大值的语义陷阱）；token 里**没有算法字段**，算法在代码里写死 `HmacSHA256`，`alg=none` / 算法混淆风险面归零。
+- **配置**：`tiny-security.jwt-secret` → `tiny-security.token-secret`（本就是破坏性变更，顺带改名以免误导）；`jwt-subject` / `jwt-timeout` **直接删除，不留兼容垫片**。
+- **API**：`AuthConsts.JWT_TOKEN_PREFIX` → `TOKEN_PREFIX`（前缀保留，值仍为 `"Bearer "`）；`AuthProvider.getCredentialsByToken(String)` **保留原名**，内部由「解 JWT」换成「验签后取 credentials」。
+
+**同时完成的三项加固**：
+
+- **凭证碰撞检测**：四个仓储的 `save` 从「静默覆盖」改为「不存在才写入」——`single` 用 `LocalTimeCache.setObjectIfAbsent`（`ConcurrentHashMap.putIfAbsent`）、`caffeine` 用 `asMap().putIfAbsent`、`redis` 用 `setIfAbsent`、`jdbc` 由 `credentials` 唯一约束拦下并翻译成明确的 ERROR 日志 + `save=false`。碰撞概率约 2⁻¹²²，正常永远不触发；**一旦触发即说明随机源异常或有人在构造会话固定攻击，必须失败而不是覆盖掉别人的会话**。
+- **TST-5 部分**：`JdbcSessionRepositoryTest` 的内联建表语句此前漏了 `credentials` 唯一约束（正是 TST-5 担心的漂移），已补齐，碰撞路径这才真正可测。
+- **删除 `credentials-style`，凭证固定为 UUID**：原 `CredentialsGenUtil` 支持 `uuid` / `random128` / `nanoid` 三种风格，而它的全部价值就是"让用户挑一个随机源"——这是一个**只有下行风险的选择**：历史上前三种风格（snowflake / objectid / ulid）就因为可预测被删过一轮，`random128` 又因非 CSPRNG 被修过一轮（P0-3）。现在固定为 `UUID.randomUUID().toString().replace("-", "")`，并删除 `CredentialsGenUtil`、`util.idgen.NanoId` 及 `tiny-security.credentials-style` 配置项。
+  - **对绝大多数用户零影响**：`uuid` 本来就是默认值，删除配置项后凭证格式**逐字节不变**。
+  - 收益：框架内不再存在任何非 CSPRNG 的凭证来源；配置面少一个"能被配坏"的项；少 3 个类（`NanoId` 的 `size` 无上界等 P2-10 问题一并消失）。
+
+**验证**：`mvn -B clean test`（JDK 17）core 175 / starter 15 全绿。
+
+#### 剩余事项
+
 | 顺序 | 事项 | IDs |
 |---|---|---|
-| 1 | **决定 JWT 去留**（见 §5 决策 1） | — |
+| 1 | ~~决定 JWT 去留~~ ✅ 已决定：**移除**（见上） | — |
 | 2 | `SecurityContext` 懒加载 + 请求级缓存（治 P0-1 的类根因） | P0-1（收尾） |
 | 3 | 异步上下文传播 | P1-3 |
 | 4 | 绝对过期校验下沉内核；并发上限改原子实现 | P1-6、P1-7 |
@@ -485,11 +542,11 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 ## 5. 需要拍板的决策
 
-> 这 4 个问题没回答，阶段 1 及之后的工作都是白做。**建议在阶段 0 期间给出答案。**
+> 原为 4 个问题；**决策 1 已于 `1.5.0` 拍板并落地**（见 §4.3 IR-1），剩余 3 个仍需回答。
 
 | # | 决策 | 我的建议 | 理由 |
 |---|---|---|---|
-| 1 | **会话是有状态还是无状态？JWT 留不留？** | **有状态**；因此 **JWT 应被移除**（或降级为可选兼容模式，`token-style: opaque` 设为默认） | 既然每请求都查存储，JWT 只贡献成本（第二条过期线、密钥坑、`Bearer ` 强制、签名开销）。现在这种"伪无状态"是概念债的源头 |
+| 1 | ~~**会话是有状态还是无状态？JWT 留不留？**~~ ✅ **已拍板：有状态，移除 JWT**（`1.5.0` 已落地，见 §4.3 IR-1） | **有状态**；因此 **JWT 应被移除**（或降级为可选兼容模式，`token-style: opaque` 设为默认） | 既然每请求都查存储，JWT 只贡献成本（第二条过期线、密钥坑、`Bearer ` 强制、签名开销）。现在这种"伪无状态"是概念债的源头 |
 | 2 | **三套 API 面怎么收敛？** | 保留 `AuthProvider`（唯一实例门面）+ `AuthUtil`（静态便捷外观，但**不再依赖可变静态全局**），**删除 `TinySecurityFacade` 的公开性**（降为内部实现） | 现在三套语义重复且靠静态桥互连，是 P1-1/P1-2/TST-4 的共同根因 |
 | 3 | **授权做多深？** | 押注"**角色继承 + 数据范围 + 权限缓存**" | 只做"注解 + 权限码"的话，与 Sa-Token 的差异只剩体积；做深才有不可替代性 |
 | 4 | **是否继续维护 Spring Boot 2 分支？** | **终止** | 双分支手工 cherry-pick 是持续性精力消耗，而 SB2 上游早已 EOL |
@@ -501,7 +558,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 ## 6. 明确不做的事（迷茫时的禁忌清单）
 
 - ❌ **不要再给 `AuthUtil` / `AuthProvider` / `TinySecurityFacade` 加第四个入口**，也不要再"统一一次语义"。先让现有三套收敛成两套。
-- ❌ **不要再加新的 `credentials-style`**（历史已证明这条路上全是坑：snowflake / objectid / ulid 全因可预测被删）。
+- ❌ **不要再加回 `credentials-style`**。`1.5.0` 已把它连同 `CredentialsGenUtil` / `NanoId` 整体删除，凭证固定为 `UUID.randomUUID().toString().replace("-", "")`。历史已三次证明这条路上全是坑（snowflake / objectid / ulid 因可预测被删，`random128` 因非 CSPRNG 被修）——**凭证生成器不是配置项，是安全基线**。
 - ❌ **不要为了"看起来完整"再加 `AESUtil` / `RSAUtil` 这类不属于认证框架职责的工具**（1.3.1 删得对，不要回退）。
 - ❌ **不要继续自研密码学**：SM3 维护了两套实现（`SM3`+`SM3ConvertUtil` 与 `SM3Digest`）、jBCrypt 移植版、一堆十六进制转换器。密码哈希只留 `BCrypt`（或改用成熟库），摘要算法用 JDK + 一个成熟库，把自研密码学面积压到接近零。
 - ❌ **不要在补齐 CI、集成测试、文档真实性之前发新功能版本** —— 现在每加一个特性，都在给 §3.5/§3.6 的欠账加息。
@@ -539,13 +596,13 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 | 项 | 结论 |
 |---|---|
-| `NanoId` 的随机性 | **确实密码学安全**：`SecureRandom` + 拒绝采样（`bytes[i] & mask`），对默认 64 字符字母表映射均匀、无取模偏差；`INSTANCE` 通过 enum 安全发布 |
+| ~~`NanoId` 的随机性~~（`1.5.0` 已删除该类） | 删除前经核实**确实密码学安全**：`SecureRandom` + 拒绝采样（`bytes[i] & mask`），对默认 64 字符字母表映射均匀、无取模偏差；`INSTANCE` 通过 enum 安全发布。它被删**不是因为不安全**，而是因为"可选的凭证风格"这个设计本身没有必要 |
 | `uuid` 凭证 | `UUID.randomUUID()` 走 `SecureRandom`，安全 |
 | SM3 摘要内核 | 符合 GM/T 0004-2012：IV / Tj / FF / GG / P0 / P1 / 消息扩展 / 填充均正确；填充边界（0/55/56/57/63/64/119/120 字节）已解析验证；KAT 已由 `SM3HashTest` 锁定。**所有 SM3 问题都在外围 API，不在算法本身** |
 | `BCrypt` 的移植保真度 | 是 jBCrypt 0.4 的忠实移植（`P_orig`=18、`S_orig`=1024、`base64_code`=64、`index_64`=128、EksBlowfish 一致）；盐用 `SecureRandom`；`checkpw` 的比较**确实是恒定时间**（比上游的 `String.equals` 更好） |
-| `JwtUtil` 的算法锁定 | 使用 `JWT.require(Algorithm.HMAC256(...))`，**不存在 `alg=none` / 算法混淆绕过**；密钥为空时 fail-loud |
+| ~~`JwtUtil` 的算法锁定~~ → `TokenSignUtil` | 原 `JwtUtil` 用 `JWT.require(Algorithm.HMAC256(...))`，**不存在 `alg=none` / 算法混淆绕过**。`1.5.0` 换成自实现 HMAC 后，算法在代码里写死 `HmacSHA256`、token 里**根本没有算法字段**，该类风险面归零；密钥为空时仍 fail-loud |
 | `JsonUtil` 的反序列化安全 | 未开启 Jackson 默认类型信息，**不存在多态 gadget RCE**；`writeValueAsString` 是 fail-loud 的（失败抛 `TinySecurityException` 而非静默返回空串） |
-| `CommonUtil.getRandomString` 的取模 | `nextInt(63)` 与 63 字符字母表**精确对应，没有 off-by-one**。问题只在"用了非 CSPRNG"（P0-3），不在取模 |
+| `CommonUtil.getRandomString` 的取模 | `nextInt(63)` 与 63 字符字母表**精确对应，没有 off-by-one**。问题只在"用了非 CSPRNG"（P0-3），不在取模。`1.5.0` 已换 `SecureRandom`，取模改写为 `nextInt(str.length())`，与字母表长度恒等 |
 | `AuthProvider.login` 的事件隔离 | **成功路径已正确隔离**（[`:298-302`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L298-L302) 单独 try/catch + WARN）。只有失败路径未隔离（P1-11） |
 | `AuthorizationInterceptor` 对 `@Ignore` / OPTIONS 的处理 | 两个拦截器对 `@Ignore` 与 OPTIONS 的处理一致，逻辑正确 |
 | `JdbcSessionRepository` 的表名白名单 | `^[a-zA-Z_][a-zA-Z0-9_.]*$` 校验有效，**杜绝了表名 SQL 拼接注入**；相关测试完备 |

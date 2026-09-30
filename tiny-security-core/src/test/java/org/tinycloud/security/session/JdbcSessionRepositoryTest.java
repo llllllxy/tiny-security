@@ -38,7 +38,8 @@ class JdbcSessionRepositoryTest {
                     credentials VARCHAR(256) NOT NULL,
                     login_id VARCHAR(64) NOT NULL,
                     login_subject VARCHAR(5000) NOT NULL,
-                    credentials_expire_time BIGINT NOT NULL
+                    credentials_expire_time BIGINT NOT NULL,
+                    CONSTRAINT t_auth_storage_unique_credentials UNIQUE (credentials)
                 )
                 """);
         repository = new JdbcSessionRepository(jdbcTemplate, "t_auth_storage");
@@ -60,6 +61,23 @@ class JdbcSessionRepositoryTest {
         assertEquals(1, repository.countValidOnlineSessions(10001L));
         assertTrue(repository.deleteByLoginId(10001L));
         assertEquals(0, repository.countValidOnlineSessions(10001L));
+    }
+
+    /**
+     * 凭证碰撞必须明确失败：表上的 credentials 唯一约束会拦下重复写入，
+     * 仓储必须把它翻译成 save=false，而不是静默覆盖已有会话。
+     */
+    @Test
+    void saveShouldFailWhenCredentialsCollide() {
+        assertTrue(repository.save(buildSubject(10001L, "cred-dup"), 60, 0));
+
+        // 后一个用户拿到了完全相同的凭证
+        assertFalse(repository.save(buildSubject(10002L, "cred-dup"), 60, 0));
+
+        // 原会话必须完好无损，不能被后一个用户覆盖
+        LoginSubject kept = repository.getSubject("cred-dup");
+        assertNotNull(kept);
+        assertEquals("10001", String.valueOf(kept.getLoginId()));
     }
 
     /**

@@ -85,9 +85,6 @@ tiny-security:
    timeout: 1800
    # 最大登录并发数，默认不限制
    max-concurrent-logins: 2
-   # credentials凭证类型：仅 uuid(默认)/random128/nanoid 具备密码学随机性，可用于生产；
-   # 其它取值一律回退为 uuid（snowflake/objectid/ulid 等含时间戳的凭证可被预测，已移除）
-   credentials-style: uuid
    # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
    table-name: t_auth_storage
    # 是否开启权限(角色)校验，默认false不开启，开启后需要实现AuthorizationInfoGet接口
@@ -98,12 +95,8 @@ tiny-security:
    force-http-status-200: false
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
-   # jwt密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥，重启后所有会话将失效）
-   jwt-secret: your-secret-key-please-replace-me
-   # jwt主题，不配置则使用默认值
-   jwt-subject: tiny-security
-   # jwt自身有效期（秒），默认2592000（即30天）；实际生效值不低于会话timeout，避免token先于会话过期
-   jwt-timeout: 2592000
+    # token签名密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥：重启后所有会话将失效，多实例部署下各实例也互不认可对方的token）
+    token-secret: your-secret-key-please-replace-me
    # 是否启用Cookie模式（登录写cookie、登出清理cookie、从cookie读取token）
    # 默认false纯token模式（前后端分离）；前后端不分离项目需开启
    enable-cookie: false

@@ -13,7 +13,6 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
 import org.tinycloud.security.event.LoginFailureEvent;
@@ -28,8 +27,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthorizationInterceptorTest {
 
@@ -51,9 +49,19 @@ class AuthorizationInterceptorTest {
         assertTrue(allowed);
     }
 
+    /**
+     * ANNOTATION 模式且方法无权限注解时直接放行，**并且不为本次请求调用 SPI**
+     * ——这是 1.3.1 引入的性能设计，必须保留（否则每个请求都要白白多查一次角色/权限）。
+     *
+     * <p>正因为这里不加载，{@code AuthUtil.hasRole/hasPermission} 才必须能在上下文缺数据时
+     * 按需懒加载（P0-1 的根因与修复见 {@code TinySecurityFacade#getRoleSet}）。
+     */
     @Test
-    void shouldSkipAuthorizationWhenNoAuthorizationAnnotationInAnnotationMode() throws Exception {
-        AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION, emptyAuthorizationInfo(), new CapturingSecurityEventPublisher());
+    void shouldSkipAuthorizationAndSkipSpiCallWhenNoAuthorizationAnnotationInAnnotationMode() throws Exception {
+        AtomicInteger roleQueryCount = new AtomicInteger();
+        AtomicInteger permissionQueryCount = new AtomicInteger();
+        AuthorizationInterceptor interceptor = buildInterceptor(PermissionMode.ANNOTATION,
+                countingAuthorizationInfo(roleQueryCount, permissionQueryCount), new CapturingSecurityEventPublisher());
         LoginSubject subject = new LoginSubject();
         subject.setLoginId("user-1");
         SecurityContext context = new SecurityContext();
@@ -67,6 +75,11 @@ class AuthorizationInterceptorTest {
         );
 
         assertTrue(allowed);
+        // 无注解 → 不查 SPI；上下文保持「未加载」，把加载时机留给 AuthUtil.has* 按需触发
+        assertEquals(0, roleQueryCount.get());
+        assertEquals(0, permissionQueryCount.get());
+        assertFalse(context.isRoleSetLoaded());
+        assertFalse(context.isPermissionSetLoaded());
     }
 
     @Test
@@ -116,6 +129,25 @@ class AuthorizationInterceptorTest {
 
             @Override
             public Set<String> getRoleSet(LoginSubject subject) {
+                return Collections.emptySet();
+            }
+        };
+    }
+
+    /**
+     * 会累加查询次数的角色权限数据源，用于验证「不该查的时候一次都不查」。
+     */
+    private AuthorizationInfoGet countingAuthorizationInfo(AtomicInteger roleQueryCount, AtomicInteger permissionQueryCount) {
+        return new AuthorizationInfoGet() {
+            @Override
+            public Set<String> getPermissionSet(LoginSubject subject) {
+                permissionQueryCount.incrementAndGet();
+                return Collections.emptySet();
+            }
+
+            @Override
+            public Set<String> getRoleSet(LoginSubject subject) {
+                roleQueryCount.incrementAndGet();
                 return Collections.emptySet();
             }
         };

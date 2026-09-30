@@ -30,11 +30,7 @@ import org.tinycloud.security.interceptor.AuthenticationInterceptor;
 import org.tinycloud.security.interceptor.AuthorizationInterceptor;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.session.CaffeineSessionRepository;
-import org.tinycloud.security.session.JdbcSessionRepository;
-import org.tinycloud.security.session.RedisSessionRepository;
-import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.session.SingleSessionRepository;
+import org.tinycloud.security.session.*;
 import org.tinycloud.security.support.DefaultExceptionTranslator;
 import org.tinycloud.security.support.ExceptionTranslator;
 import org.tinycloud.security.support.TinySecurityHandlerExceptionResolver;
@@ -250,13 +246,18 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
     /**
      * 注册安全门面，并注入到 {@link AuthUtil} 静态外观。
      *
+     * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
+     * 角色/权限（性能设计），此时 {@code AuthUtil.hasRole/hasPermission} 依赖门面按需懒加载（P0-1）。
+     *
      * @param securityContextRepository 安全上下文仓储
+     * @param authorizationInfoGet      角色权限数据提供器，未提供时为 null
      * @return 安全门面
      */
     @Bean
     @ConditionalOnMissingBean(TinySecurityFacade.class)
-    public TinySecurityFacade tinySecurityFacade(SecurityContextRepository securityContextRepository) {
-        TinySecurityFacade facade = new TinySecurityFacade(securityContextRepository);
+    public TinySecurityFacade tinySecurityFacade(SecurityContextRepository securityContextRepository,
+                                                 @Autowired(required = false) AuthorizationInfoGet authorizationInfoGet) {
+        TinySecurityFacade facade = new TinySecurityFacade(securityContextRepository, authorizationInfoGet);
         AuthUtil.setFacade(facade);
         if (authProperties.getBanner()) {
             printBanner();

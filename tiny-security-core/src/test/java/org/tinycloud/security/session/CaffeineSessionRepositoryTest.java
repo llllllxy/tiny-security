@@ -8,12 +8,7 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Caffeine 本地缓存会话仓储测试。
@@ -44,6 +39,22 @@ class CaffeineSessionRepositoryTest {
         assertNotNull(loaded);
         assertEquals("cred-1", loaded.getCredentials());
         assertEquals(1, repository.countValidOnlineSessions(10001L));
+    }
+
+    /**
+     * 凭证碰撞必须明确失败：不能静默覆盖已有会话（否则两个用户会共用同一条会话记录）。
+     */
+    @Test
+    void saveShouldFailWhenCredentialsCollide() {
+        assertTrue(repository.save(buildSubject(10001L, "cred-dup"), 60, 0));
+
+        // 后一个用户拿到了完全相同的凭证
+        assertFalse(repository.save(buildSubject(10002L, "cred-dup"), 60, 0));
+
+        // 原会话必须完好无损，不能被后一个用户覆盖
+        LoginSubject kept = repository.getSubject("cred-dup");
+        assertNotNull(kept);
+        assertEquals(10001L, kept.getLoginId());
     }
 
     /**

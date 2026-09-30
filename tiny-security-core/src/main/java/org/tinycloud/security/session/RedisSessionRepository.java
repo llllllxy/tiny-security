@@ -50,13 +50,19 @@ public class RedisSessionRepository implements SessionRepository {
             String credentials = subject.getCredentials();
             // 无论是否启用并发限制，登录时都清理该账号在线列表中的失效凭证，否则其随登录次数无限累积（内存泄漏）
             this.countValidOnlineSessions(subject.getLoginId());
-            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins, timeoutSeconds);
-            this.redisTemplate.opsForValue().set(
+            // 凭证是随机生成的会话唯一钥匙，理论上不会重复。一旦重复，说明随机源异常或有人在构造会话固定攻击，
+            // 此时必须明确失败，绝不能静默覆盖掉另一个用户的会话
+            Boolean absent = this.redisTemplate.opsForValue().setIfAbsent(
                     AuthConsts.AUTH_CREDENTIALS_KEY + credentials,
                     JsonUtil.writeValueAsString(subject),
                     timeoutSeconds,
                     TimeUnit.SECONDS
             );
+            if (!Boolean.TRUE.equals(absent)) {
+                log.error("RedisSessionRepository save failed: credentials collision detected, the generated token already exists!");
+                return false;
+            }
+            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins, timeoutSeconds);
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;

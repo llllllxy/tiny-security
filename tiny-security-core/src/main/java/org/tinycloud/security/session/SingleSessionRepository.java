@@ -66,7 +66,16 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             }
             // 无论是否启用并发限制，登录时都清理该账号在线索引中的失效凭证，否则索引随登录次数无限累积（内存泄漏）
             this.countValidOnlineSessions(subject.getLoginId());
-            this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
+            // 凭证是随机生成的会话唯一钥匙，理论上不会重复。一旦重复，说明随机源异常或有人在构造会话固定攻击，
+            // 此时必须明确失败，绝不能静默覆盖掉另一个用户的会话。
+            // （timeout 非法时 setObjectIfAbsent 同样不写入并返回 false；此时登录失败也是正确行为——
+            //   宁可不发 token，也不能发出一个后端查不到的 token）
+            boolean saved = this.timedCache.setObjectIfAbsent(
+                    AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
+            if (!saved) {
+                log.error("SingleSessionRepository save failed: credentials collision detected, or the timeout {} is invalid. The session was not created!", timeoutSeconds);
+                return false;
+            }
             this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {

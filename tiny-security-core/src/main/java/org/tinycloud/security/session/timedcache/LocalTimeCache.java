@@ -78,6 +78,31 @@ public class LocalTimeCache {
     }
 
     /**
+     * 往缓存中存入数据（Object），仅当 key 尚不存在时才写入。
+     *
+     * <p>用于需要「不存在才写入」语义的场景（例如会话凭证的碰撞检测）。
+     * 借助 {@link ConcurrentHashMap#putIfAbsent} 保证并发下的原子性，
+     * 不会出现「两个线程都判断不存在、然后互相覆盖」的竞态。
+     *
+     * @param key     键
+     * @param object  值
+     * @param timeout 有效时间（秒）
+     * @return true-写入成功；false-该 key 已存在（或 timeout 非法）
+     */
+    public boolean setObjectIfAbsent(String key, Object object, long timeout) {
+        if (timeout == 0 || timeout < NOT_VALUE_EXPIRE) {
+            return false;
+        }
+        // 已过期的同名 key 不算冲突，先惰性清掉，避免把过期残留误判为碰撞
+        clearKeyByTimeout(key);
+        if (dataMap.putIfAbsent(key, object) != null) {
+            return false;
+        }
+        expireMap.put(key, timeout == NEVER_EXPIRE ? NEVER_EXPIRE : System.currentTimeMillis() + timeout * 1000);
+        return true;
+    }
+
+    /**
      * 更新缓存数据（Object）
      *
      * @param key    键

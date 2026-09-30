@@ -7,6 +7,7 @@ import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.web.WebRequestUtils;
 
 import java.util.Set;
@@ -32,12 +33,32 @@ public class TinySecurityFacade {
     private final SecurityContextRepository securityContextRepository;
 
     /**
-     * 构造安全门面。
+     * 角色权限数据提供器；可能为 null（未提供时 getRoleSet/getPermissionSet 只返回上下文中已有的数据）。
+     */
+    private final AuthorizationInfoGet authorizationInfoGet;
+
+    /**
+     * 构造安全门面（不含角色权限数据源）。
+     *
+     * <p>该重载下 {@link #getRoleSet()} / {@link #getPermissionSet()} 只返回上下文中已有的数据，
+     * 不做按需懒加载。需要 {@code AuthUtil.hasRole/hasPermission} 在任何接口上都能正确判断时，
+     * 请使用 {@link #TinySecurityFacade(SecurityContextRepository, AuthorizationInfoGet)}。
      *
      * @param securityContextRepository 安全上下文仓储
      */
     public TinySecurityFacade(SecurityContextRepository securityContextRepository) {
+        this(securityContextRepository, null);
+    }
+
+    /**
+     * 构造安全门面。
+     *
+     * @param securityContextRepository 安全上下文仓储
+     * @param authorizationInfoGet      角色权限数据提供者，可为 null
+     */
+    public TinySecurityFacade(SecurityContextRepository securityContextRepository, AuthorizationInfoGet authorizationInfoGet) {
         this.securityContextRepository = securityContextRepository;
+        this.authorizationInfoGet = authorizationInfoGet;
     }
 
     /**
@@ -122,21 +143,35 @@ public class TinySecurityFacade {
     /**
      * 获取当前角色集合。
      *
+     * <p><b>按需懒加载</b>：若本次请求尚未加载过角色（典型场景是接口上没有权限注解、
+     * 授权管理器因此没为注解做 SPI 调用），这里会向 {@link AuthorizationInfoGet} 查询一次，
+     * 并把结果缓存回本次请求的上下文——后续调用不会重复查询。
+     *
      * @return 角色集合
      * @throws UnAuthorizedException 未登录时
      */
     public Set<String> getRoleSet() {
-        return this.getSecurityContext().getRoleSet();
+        SecurityContext context = this.getSecurityContext();
+        if (!context.isRoleSetLoaded() && this.authorizationInfoGet != null) {
+            context.setRoleSet(this.authorizationInfoGet.getRoleSet(context.getLoginSubject()));
+        }
+        return context.getRoleSet();
     }
 
     /**
      * 获取当前权限集合。
      *
+     * <p><b>按需懒加载</b>：语义同 {@link #getRoleSet()}，只查询并缓存权限集合。
+     *
      * @return 权限集合
      * @throws UnAuthorizedException 未登录时
      */
     public Set<String> getPermissionSet() {
-        return this.getSecurityContext().getPermissionSet();
+        SecurityContext context = this.getSecurityContext();
+        if (!context.isPermissionSetLoaded() && this.authorizationInfoGet != null) {
+            context.setPermissionSet(this.authorizationInfoGet.getPermissionSet(context.getLoginSubject()));
+        }
+        return context.getPermissionSet();
     }
 
     /**
