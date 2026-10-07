@@ -5,9 +5,9 @@
 >
 > | 项目 | 内容 |
 > |---|---|
-> | 文档版本 | v1.2 |
+> | 文档版本 | v1.3 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载。测试 core 169 / starter 16 全绿 |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段。测试 core 172 / starter 16 全绿 |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -83,7 +83,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 |---|---|---|---|
 | 1 | ~~修 `AuthUtil.hasRole/hasPermission` 无注解接口恒 false 的回归（含测试同步改）~~ ✅ **`1.5.0` 已完成** | P0-1 / P0-2 | 用户最容易踩到的**功能性失效**，且改动小、价值立现 |
 | 2 | ~~`random128` 与兜底 JWT 密钥改用 `SecureRandom`~~ ✅ **`1.5.0` 已完成** | P0-3 | **默认路径**下的弱密钥材料；文档还反向保证了安全性 |
-| 3 | `JsonUtil` 注册模块 + 容忍未知字段 | P0-4 | 一行代码量级，同时解除「加字段=全员登出」的升级炸弹 |
+| 3 | ~~`JsonUtil` 注册模块 + 容忍未知字段~~ ✅ **`1.5.0` 已完成** | P0-4 | 一行代码量级，同时解除「加字段=全员登出」的升级炸弹 |
 | 4 | `BCrypt.checkpw` 契约修正（畸形 hash 返回 false） | P0-5 | 登录路径上的 500/DoS 与互操作性风险 |
 | 5 | 修 `WebRequestUtils` 便捷重载默认允许 URL 传 token | P0-6 | 公开 API 的安全默认值与框架策略相反 |
 | 6 | 修 `SM3Hash` null salt 碰撞 + 静默返回全 0 哈希 | P0-7 | 真碰撞 + 静默失败，两者都违反自身规范 |
@@ -196,8 +196,16 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
      // → InvalidDefinitionException → TinySecurityException("Json serialize failed")
      ```
   2. 默认 `FAIL_ON_UNKNOWN_PROPERTIES = true` ⇒ **将来给 `LoginSubject` 加一个字段，滚动发布期间旧实例读到新实例写的 Redis/JDBC 会话会反序列化失败 → `readValue` 返回 null → 全员 401**。对一个"会话库"这是升级事故级隐患。
-- **修复方向**：注册 JSR-310 模块（或改用 Spring 容器里的 `ObjectMapper`）；`LoginSubject` 加 `@JsonIgnoreProperties(ignoreUnknown = true)`。
-- **状态**：`TODO`
+- **修复记录（`1.5.0`）**：
+  - `JsonUtil` 的 `ObjectMapper` 由裸 `new ObjectMapper()` 改为 `new ObjectMapper().findAndRegisterModules().disable(WRITE_DATES_AS_TIMESTAMPS)`：
+    - `findAndRegisterModules()` 按 classpath 自动注册 JSR-310 / Jdk8 / ParameterNames 模块，`extraInfo` 里的 `LocalDateTime` 不再让登录 500；
+    - 关闭 `WRITE_DATES_AS_TIMESTAMPS`，java.time 写成 ISO-8601 字符串（与 Spring Boot 自动配置的 ObjectMapper 一致），便于排查 Redis/JDBC 里的会话内容。
+    - **选择 `findAndRegisterModules()` 而非显式 `new JavaTimeModule()`**：jsr310 只是 `spring-boot-starter-web` 的传递依赖，若被使用者 exclude，显式 new 会在类初始化阶段抛 `NoClassDefFoundError` 把整个框架一起拖垮；前者在缺少该模块时只是退回原行为。
+  - `LoginSubject` 加 `@JsonIgnoreProperties(ignoreUnknown = true)`，新实例写入的会话在旧实例上仍可反序列化；并在类 javadoc 中写明「**只增字段，不改名不删除**」的演进约定。
+  - 保留 `LoginSubject` 上的定向注解、**未**全局关闭 `FAIL_ON_UNKNOWN_PROPERTIES`：框架自有类型只有 `LoginSubject` 一个，其余读取目标都是 `Map`（本身已宽容），没必要为此放宽 `JsonUtil` 这个公开工具的整体严格性。
+  - 新增回归测试 3 个：`JsonUtilTest` 的 java.time 值往返 + `extraInfo` 内 java.time 序列化；`LoginSubjectTest` 的未知字段容忍。
+  - **反向验证**：撤掉这两处修复后重跑，3 个用例全部变红，报错正是本条描述的两个症状（`Java 8 date/time type java.time.LocalDateTime not supported by default`、`readValue` 返回 `null`）。
+- **状态**：`DONE`（`1.5.0`）
 
 #### P0-5 · `BCrypt.checkpw` 契约违反 + 72 字节静默截断 + work factor 取自存储值
 
