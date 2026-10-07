@@ -1,0 +1,57 @@
+name: CI
+
+# ENG-1：本项目此前完全没有 CI，一个要发布到 Maven Central 的双分支库全靠手跑 mvn test。
+# 这里做三件事：JDK 17/21 矩阵构建、跑完整 verify（含测试）、产出并上传覆盖率报告。
+
+on:
+  push:
+    branches: [ master, springboot3 ]
+  pull_request:
+    branches: [ master, springboot3 ]
+  # 允许在 Actions 页面手动触发，便于排查
+  workflow_dispatch:
+
+# 同一分支的旧运行自动取消，避免推送连环触发时排队
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (JDK ${{ matrix.java }})
+    runs-on: ubuntu-latest
+    strategy:
+      # 不因一个 JDK 失败就取消另一个，两个矩阵的结果都要看到
+      fail-fast: false
+      matrix:
+        java: [ '17', '21' ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+          # 缓存 ~/.m2/repository，显著缩短后续构建时间
+          cache: maven
+
+      # -Dgpg.skip=true 是必须的：maven-gpg-plugin 的 sign-artifacts 绑定在 verify 阶段，
+      # CI 环境没有 GPG 私钥，不加此参数会在 verify 直接失败。
+      # 覆盖率门槛（jacoco:check）也在 verify 阶段，因此此行同时完成构建、测试与门槛校验。
+      - name: Build and test
+        run: mvn -B -ntp verify -Dgpg.skip=true
+
+      # 无论成功失败都上传，便于排查覆盖率门槛为何未通过
+      - name: Upload JaCoCo coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-jdk${{ matrix.java }}
+          path: '**/target/site/jacoco/'
+          if-no-files-found: ignore
