@@ -5,9 +5,9 @@
 >
 > | 项目 | 内容 |
 > |---|---|
-> | 文档版本 | v1.3 |
+> | 文档版本 | v1.6 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段。测试 core 172 / starter 16 全绿 |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决。测试 core 184 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,12 +55,12 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 57 个；测试类 27 个 / 178 个用例（`1.5.0` 移除 JWT、`CredentialsGenUtil`、`NanoId` 后的实测值） |
+| 代码规模 | 生产类 58 个；测试类 28 个 / 200 个用例（`1.5.0` 实测值） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
-| CI | **无**（无 `.github/`，无任何 workflow） |
+| CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
 
-**一句话评价**：认证内核已经成形、仓储层测试相对扎实；但**授权层存在功能性失效**，**加密工具层有一批真实缺陷**，**文档与代码已经脱节到会误导用户的程度**，且**没有任何 CI 兜底**。当前瓶颈不是功能不足，而是「边界不清 + 工程欠账」。
+**一句话评价**：认证内核已经成形、仓储层测试相对扎实；但**授权层存在功能性失效**，**加密工具层有一批真实缺陷**，**文档与代码已经脱节到会误导用户的程度**，且**长期没有任何 CI 兜底**（`1.5.0` 已由 ENG-1 补上）。当前瓶颈不是功能不足，而是「边界不清 + 工程欠账」。
 
 ---
 
@@ -77,17 +77,18 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 **根因三：差异化未被回答。**
 语义上（`login` / `deleteByLoginId` / `max-concurrent-logins` / `getCredentialsByLoginId`）几乎处处对标 Sa-Token。因此"为什么用 tiny-security 而不是 Sa-Token / Spring Security / Shiro"目前**没有答案**。没有答案的库，功能只会越加越迷茫——因为每个需求都能加，但加完都不构成理由。
 
-### 2.2 最该先做的 7 件事（按顺序）
+### 2.2 最该先做的 6 件事（按顺序，已完成 5 / 6）
 
 | 顺序 | 事项 | ID | 为什么排这个位置 |
 |---|---|---|---|
 | 1 | ~~修 `AuthUtil.hasRole/hasPermission` 无注解接口恒 false 的回归（含测试同步改）~~ ✅ **`1.5.0` 已完成** | P0-1 / P0-2 | 用户最容易踩到的**功能性失效**，且改动小、价值立现 |
 | 2 | ~~`random128` 与兜底 JWT 密钥改用 `SecureRandom`~~ ✅ **`1.5.0` 已完成** | P0-3 | **默认路径**下的弱密钥材料；文档还反向保证了安全性 |
 | 3 | ~~`JsonUtil` 注册模块 + 容忍未知字段~~ ✅ **`1.5.0` 已完成** | P0-4 | 一行代码量级，同时解除「加字段=全员登出」的升级炸弹 |
-| 4 | `BCrypt.checkpw` 契约修正（畸形 hash 返回 false） | P0-5 | 登录路径上的 500/DoS 与互操作性风险 |
-| 5 | 修 `WebRequestUtils` 便捷重载默认允许 URL 传 token | P0-6 | 公开 API 的安全默认值与框架策略相反 |
-| 6 | 修 `SM3Hash` null salt 碰撞 + 静默返回全 0 哈希 | P0-7 | 真碰撞 + 静默失败，两者都违反自身规范 |
-| 7 | **加 CI**（`mvn -B verify` + JDK 17/21 矩阵） | ENG-1 | 性价比高于之后所有功能；没有它，前面 6 项修完还会退回去 |
+| 4 | ~~修 `WebRequestUtils` 便捷重载默认允许 URL 传 token~~ ✅ **`1.5.0` 已完成** | P0-6 | 公开 API 的安全默认值与框架策略相反 |
+| 5 | ~~修 `SM3Hash` null salt 碰撞 + 静默返回全 0 哈希~~ ✅ **`1.5.0` 已完成** | P0-7 | 真碰撞 + 静默失败，两者都违反自身规范 |
+| 6 | ~~**加 CI**（`mvn -B verify` + JDK 17/21 矩阵）~~ ✅ **`1.5.0` 已完成** | ENG-1 | 性价比高于之后所有功能；没有它，前面 5 项修完还会退回去 |
+
+> **`1.5.0` 定级修正**：原第 4 项 `BCrypt` 已移出本清单。复核确认它是**原样引入、在 `src/main/java` 中零引用**的第三方工具类，不在框架认证链路上；且原条目中"72 字节截断"与"work factor 取自存储值"两条实为 **bcrypt 算法规格，属误报**。详见 P0-5 与 P2-13 条目。
 
 ### 2.3 建议的定位（详见 §4.1 / §5）
 
@@ -207,21 +208,33 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   - **反向验证**：撤掉这两处修复后重跑，3 个用例全部变红，报错正是本条描述的两个症状（`Java 8 date/time type java.time.LocalDateTime not supported by default`、`readValue` 返回 `null`）。
 - **状态**：`DONE`（`1.5.0`）
 
-#### P0-5 · `BCrypt.checkpw` 契约违反 + 72 字节静默截断 + work factor 取自存储值
+#### P0-5 · `BCrypt` —— **定级修正：原样引入的 jBCrypt 0.4、零引用，降级合入 P2-13，本版本不修改**
 
-- **类别**：安全 / 可用性
-- **证据**：
-  - [`BCrypt.java:736-748`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L736-L748)（`checkpw`）
-  - [`BCrypt.java:652`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L652)（`(password + ...)` → `null` 密码被静默当成字符串 `"null"`，即 `checkpw(null, hashOf("null"))` 返回 `true`）
-  - [`BCrypt.java:635-651`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L635-L651)（`salt.charAt(...)` / `substring(...)` 无长度校验）
-  - [`BCrypt.java:492-504`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L492-L504)（只读前 72 字节，超出部分**完全不参与**哈希）
-  - [`BCrypt.java:649`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L649)、[`:397-401`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L397-L401)（work factor 取自存储 hash，最高 2³⁰；`char64` 差一错误 `>` 应为 `>=`）
-- **影响**：
-  - 畸形 / 截断 / `$2b$` / `$2y$` 前缀的**存量 hash 会抛异常而不是返回 `false`** → 登录流程表现为 **500 而不是登录失败**，且从其他 bcrypt 实现迁移过来的数据直接不可用；
-  - 前 72 字节相同的两个密码**互相可验证通过**；
-  - 若存储的 hash 有任何用户可控来源（导入、重置、租户数据），`$2a$30$` 构成**未认证的 CPU 耗尽**向量。
-- **修复方向**：畸形输入一律 `return false` + 记录日志；明确支持或明确拒绝 `$2b$`/`$2y$`；`hashpw` 增加 72 字节上限校验；`checkpw` 不泄露 hash 长度。
-- **状态**：`TODO`
+- **类别**：第三方工具类 / 非框架链路
+- **修正说明（`1.5.0` 复核）**：本条目原定级 `P0` 并列出 5 条"证据"。复核后确认**其中 2 条是误报**（把 bcrypt 算法规格当成了实现缺陷），定级也过高。更正如下。
+
+**❌ 原文误报的两条 —— 实为 bcrypt 算法规格，任何实现都如此，不是缺陷：**
+
+| 原文说法 | 实际情况 |
+|---|---|
+| "前 72 字节相同的两个密码**互相可验证通过**"（把 72 字节截断列为缺陷） | **算法固有**。`streamtoword` 按 `% data.length` 循环取字节，`key()` / `ekskey()` 各消费 P 数组 18 个字 = **72 字节**，password 第 73 字节起永不被读取。OpenBSD / jBCrypt / Spring Security 全部如此。**实测**：`checkpw("a"×72+"Y", hashpw("a"×72+"X", salt))` → `true` |
+| "work factor 取自存储 hash，最高 2³⁰"（列为缺陷） | **bcrypt 要求 cost 必须编码在 hash 里**，否则无从校验；`crypt_raw` 自身已把 `log_rounds` 限制在 4~30。`$2a$30$` 的 CPU 开销只有在"存储的 hash 被外部输入控制"时才成立，属**条件性风险**，不是代码错误 |
+
+**✅ 原文成立、已实测复现的部分（现集中记录在 P2-13）：**
+
+- `char64` 差一错误 —— `index_64.length` 实测 = **128**，而边界写成 `> index_64.length`，故 `char64((char)128)` 会执行 `index_64[128]` → **`ArrayIndexOutOfBoundsException`**。**这是真 bug**。
+- 畸形 / 截断 hash **抛异常而不是返回 `false`**（实测：`"$2a$"`、`"$2a$10$tooshort"` → `StringIndexOutOfBoundsException`；`"$2a$1a$…"` → `NumberFormatException`；`"not-a-hash"` → `IllegalArgumentException`），与 `checkpw` 自身 javadoc 的 `@return true/false` 契约冲突。
+- `$2b$` / `$2y$` 一律 `IllegalArgumentException` → PHP `password_hash`、新版 OpenBSD 产物无法校验。
+- `checkpw(null, hashOf("null"))` → **`true`**（`(password + "\000")` 把 `null` 拼成了字符串 `"null"`）。触发面很窄：仅当某用户口令字面量就是 `null` 时才会被空口令登入。
+
+**🎯 影响面修正（这是降级的主要依据）：**
+
+- 全 `src/main/java` grep `BCrypt`：**除该类自带的 `main()` 演示方法与 `BCryptTest` 外，没有任何生产代码引用它**；
+- 因此它**不在认证链路上**，`checkpw` 的入参完全由使用者自己决定，框架不会向它传入任何数据；
+- 影响面 = "主动调用 `BCrypt` 且传入脏数据 / 外来 hash 的使用者"，**不是全体用户**。原文"登录流程表现为 500"的措辞会让人误以为框架登录会 500，不准确。
+
+- **结论**：**`WONTFIX`**（`1.5.0` 评估后决定不修改）。它就是一个原样引入的第三方工具类，上述问题与上游 jBCrypt 0.4 完全一致 —— "从官方复制的"这一点属实，但**上游原版本身就有这些写法问题**，两者并不矛盾。若将来要动，最小改动是 `char64` 的 `>` 改 `>=`（对合法 hash 零行为变化：合法字符码均在 46~122）。
+- **状态**：`WONTFIX`
 
 #### P0-6 · `WebRequestUtils` 的便捷重载默认**允许从 URL 读取 token**
 
@@ -233,8 +246,12 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   getToken(request, tokenName) → getToken(request, tokenName, true) → enableUrlToken = true  ❌
   ```
 - **影响**：1.3.3 刚把"URL 传 token"默认关闭（`AuthProvider` 走 [`resolveEnableUrlToken()`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L480-L483) = false，**生产路径是安全的**），但**公开工具类的默认值仍是开**。用户直接调 `WebRequestUtils.getToken(request, "token")` 就把凭证重新暴露到访问日志 / Referer。同一份安全策略在两个入口给出相反默认值。
-- **修复方向**：便捷重载的 `enableUrlToken` 默认改为 `false`；或在 javadoc 中显著警告。
-- **状态**：`TODO`
+- **修复记录（`1.5.0`）**：`getToken(String)`、`getToken(String, boolean)`、`getToken(HttpServletRequest, String)`、`getToken(HttpServletRequest, String, boolean)` 四个便捷重载的 `enableUrlToken` 默认值由 `true` 改为 **`false`**，与 `AuthProperties.enableUrlToken = false` 的策略对齐；每个重载的 javadoc 均写明"1.5.0 起不再从 URL 读取 token"以及逃生通道。
+  - **不受影响**：`AuthProvider` 一直显式调用四参重载（[`AuthProvider.java:75`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L75)、[`:91`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L91)），**生产鉴权路径行为完全不变**。
+  - **破坏性**：依赖便捷重载从 `?token=xxx` 取值的外部代码会失效；确需从 URL 读取时改用四参重载并传 `true`。
+  - 新增 `WebRequestUtilsTest` 共 7 个用例：header 读取、cookie 读取、**便捷重载不再读 URL**（覆盖 3 个重载）、显式开启后仍可读 URL、header 优先级、`enableCookie=false`、无来源返回 null。
+  - **反向验证**：把四个默认值改回 `true` 后重跑，`shouldNotReadTokenFromUrlByDefault` 立即变红（`expected: <null> but was: <Bearer from-url>`）。
+- **状态**：`DONE`（`1.5.0`）
 
 #### P0-7 · `SM3Hash` null salt 与字符串 `"null"` **产生相同哈希**；失败时静默返回全 0
 
@@ -247,8 +264,15 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   - `salt=null` 与 `salt="null"` 是**真碰撞**（两个逻辑上不同的输入产生同一哈希）；
   - `setSalt(null)` 与不设 salt（默认 `""`）结果也不同；
   - 哈希失败时调用方拿到一个看起来合法的常量 `00…00`，无法区分"算错了"和"算完了"。
-- **修复方向**：salt 归一化（null → `""`），并统一盐序为 `H(salt‖source)`（与 JDK 分支对齐）；编码失败改为抛异常。
-- **状态**：`TODO`
+- **修复记录（`1.5.0`）**：
+  - **salt 归一化**：`SM3Encode(String, String)` 中 `salt == null` 时按 `""` 处理，杜绝了 `(source + salt)` 把 `null` 拼成字面量 `"null"` 造成的真碰撞；语义与 `SimpleHash` 的 JDK 分支保持一致。
+  - **失败不再静默**：删除 `SM3Encode` 两处的 `catch (Exception)`，不再返回预分配的全 0 数组。同时移除了因此不再使用的 `Logger` 字段与 `slf4j` 导入。
+    - 补充说明：该 `catch` 实为**死代码** —— `SM3Digest.update/doFinal` 均不抛受检异常，且 `source = null` 也不会触发异常（字符串拼接容忍 `null`）。因此这处改动是**消除隐患**而非修复现有故障，没有可直接构造的失败面；成功路径由既有的国密标准向量用例（`SM3("abc")`）守住。
+  - **未采纳本条原建议的"统一盐序为 `H(salt‖source)`"**：SM3 分支盐序**保持** `H(source‖salt)` 不变。理由是——调换盐序会改变**所有带盐 SM3 哈希**的值（不只是 `salt=null` 这条路径），从而让使用者已存储的全部 SM3 哈希失效，而盐序本身不带来任何安全性差异，**收益为零、代价是又一次静默的数据失效**。若将来确需对齐，应作为独立的、显式公告的破坏性变更处理。
+  - **兼容性影响（务必注意）**：`salt = null` 的调用哈希值会变，**存量哈希将无法校验通过**。受影响的具体调用已在 CHANGELOG「行为变更」中逐一列出 —— 特别提醒 `new SimpleHash("SM3", source)` 这个两参构造，它内部传的正是 `null`。
+  - 新增回归测试 4 个：`SM3HashTest` 的「`null` 与 `""` 等价」「不再与字面量 `"null"` 碰撞」「`setSalt(null)` 与默认一致」「三参构造一致」；`SimpleHashTest` 的「SM3 分支与 JDK 分支语义对齐」。
+  - **反向验证**：撤掉归一化后重跑，上述 4 个用例全部变红，且报错信息本身即实证 —— `expected: <08594e14…> but was: <e5ba5dc3…>`：前者是空盐哈希，后者正是**字面量 `"null"` 盐**的哈希，说明修复前 `salt=null` 走的确实是 `"null"` 那条路，两者相等即碰撞。
+- **状态**：`DONE`（`1.5.0`）
 
 ---
 
@@ -387,7 +411,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | P2-10 | ~~`NanoId` 的 `size` 无上界（`Integer.MAX_VALUE` → OOM）；`randomNanoId(Random, ...)` 公开允许传入弱随机源且无警告~~ —— **`1.5.0` 已随 `NanoId` 整体删除而消失**（凭证固定为 UUID，不再需要 NanoId） | 类已删除 | — | `WONTFIX` |
 | P2-11 | token 签名密钥**无最小长度校验**（`token-secret: 123` 也接受，只判非空）。原 `JwtUtil` 的同类问题随 JWT 移除而消失（§4.3 IR-1），但校验缺口本身还在 | [`TokenSignUtil.java`](../tiny-security-core/src/main/java/org/tinycloud/security/util/TokenSignUtil.java) | 弱密钥启动期 WARN + 强制最小长度（如 ≥32 字节） | `TODO` |
 | P2-12 | `SM3.iv`/`SM3.Tj` 是 **public static 可变数组**（任何代码可全局污染 SM3 常量）；`SM3Digest` 拷贝构造漏拷 `cntBlock`；`doFinal(out,outOff)` 忽略 `outOff` 且不 `reset()` | [`SM3.java:9-14`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3.java#L9-L14)、[`SM3Digest.java:45-62`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3Digest.java#L45-L62) | 改 `private static final` + 防御性拷贝；补齐拷贝构造与 `doFinal` 语义 | `TODO` |
-| P2-13 | jBCrypt 遗留缺陷：`char64` 差一（`x==128` 越界）、不支持 `$2b$`/`$2y$`、`gensalt` 只校验上界、`checkpw` 提前返回泄露 hash 长度；`gensalt` 每次 `new SecureRandom()` | [`BCrypt.java:397-401`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L397-L401)、[`:686-726`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L686-L726) | 随 P0-5 一并处理 | `TODO` |
+| P2-13 | jBCrypt 0.4 遗留写法（`1.5.0` 已实测复现）：`char64` 差一 —— `index_64.length`=128 而边界写作 `>`，`char64((char)128)` → `ArrayIndexOutOfBoundsException`；`$2b$`/`$2y$` → `IllegalArgumentException`（PHP `password_hash`、新版 OpenBSD 产物无法校验）；畸形 hash 抛 `StringIndexOutOfBoundsException`/`NumberFormatException` 而非返回 `false`；`checkpw(null, hashOf("null"))` → `true`；`gensalt` 只校验上界、每次 `new SecureRandom()` | [`BCrypt.java:397-401`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L397-L401)、[`:686-726`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/BCrypt.java#L686-L726) | **定级修正**：本类在 `src/main/java` 中**零引用**（仅有自带的 `main()` 演示方法），不在认证链路上，影响面限于主动调用者 —— 由 P0-5 降级合并至此。若修，最小改动是 `char64` 的 `>` → `>=` | `WONTFIX` |
 | P2-14 | 异常消息硬编码中文（`"未登录或会话已失效！"`）而翻译器兜底是英文；无 i18n | [`UnAuthorizedException.java:14-16`](../tiny-security-core/src/main/java/org/tinycloud/security/exception/UnAuthorizedException.java#L14-L16) | 引入 `MessageSource` 或统一为英文 + 由业务侧本地化 | `TODO` |
 | P2-15 | `SM3Hash` 提供 `getSource()` 返回明文口令；字段可变非 final（非线程安全） | [`SM3Hash.java:29-51`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3Hash.java#L29-L51) | 去 setter / 去 getSource / 明确不可变 | `TODO` |
 | P2-16 | `SM3` 的 public `rotateLeft` 用算术 `>>` 而非 `>>>`（负数返回错值）；`SM3.padding` 的 `8 * in.length` 在 int 内先算后转 long（≥256MB 输入溢出） | [`SM3.java:219-221`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3.java#L219-L221)、[`:185,192`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/sm3/SM3.java#L185-L192) | 随"删死代码"一并收敛（见 P3-2） | `TODO` |
@@ -434,7 +458,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 | ID | 问题 | 证据 | 建议 | 状态 |
 |---|---|---|---|---|
-| ENG-1 | **完全没有 CI**：无 `.github/`、无任何 workflow。一个要发布到 Maven Central 的双分支库全靠手跑 `mvn test` | 已 glob 确认 | 建 `mvn -B verify` + JDK 17/21 矩阵 + 覆盖率门槛 | `TODO` |
+| ENG-1 | ~~**完全没有 CI**：无 `.github/`、无任何 workflow。一个要发布到 Maven Central 的双分支库全靠手跑 `mvn test`~~ ✅ **`1.5.0` 已完成** | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | 见下方"实施记录" | `DONE` |
 | ENG-2 | 双分支（`master`=SB2/javax、`springboot3`=SB3/jakarta）靠**手工 cherry-pick** 同步，历史上已出现"需备份 tag""合并后要人工确认未误引入 jakarta"等高风险动作；Spring Boot 2.7 上游 OSS 支持已于 2023-11 终止 | [`.workbuddy/memory/2026-08-08.md`](../.workbuddy/memory/2026-08-08.md) | 宣布 SB2 分支 EOL（只留安全补丁），精力回收 | `TODO` |
 | ENG-3 | `AuthAutoConfiguration` 用**字段注入**（`@Autowired private AuthProperties`），可测试性差；`@ConditionalOnBean(StringRedisTemplate.class)` 未配 `@AutoConfigureAfter(RedisAutoConfiguration.class)`，存在装配顺序风险 | [`AuthAutoConfiguration.java:113-118`](../tiny-security-boot-starter/src/main/java/org/tinycloud/security/AuthAutoConfiguration.java#L113-L118) | 后续重构为构造注入 + 显式排序 | `TODO` |
 | TST-1 | **没有任何 MockMvc / 真正跑过拦截器的集成测试** —— 两个"端到端"测试都是手工构造 `SecurityContext` 再存进仓储来**模拟**拦截器。P0-1 这类"拦截器↔门面"回归在结构上根本发现不了 | `EndToEndFlowTest`、`TinySecurityAutoConfigurationTest` | 补 MockMvc 全链路测试（含路径排除、异常翻译） | `TODO` |
@@ -468,14 +492,39 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 1 | 修 `AuthUtil.has*` 回归 + 同步改 3 个测试 | P0-1、P0-2 |
 | 2 | ~~换 CSPRNG（凭证 + 兜底密钥）并修正措辞~~ ✅ **`1.5.0` 已完成** | P0-3 |
 | 3 | `JsonUtil` 注册模块 + 容忍未知字段 | P0-4 |
-| 4 | `BCrypt` 契约修正 | P0-5、P2-13 部分 |
-| 5 | `WebRequestUtils` 默认值 | P0-6 |
-| 6 | `SM3Hash` null salt + 失败不再静默 | P0-7 |
+| 4 | ~~`BCrypt` 契约修正~~ ⏭️ **`1.5.0` 评估后不修改**（定级修正：零引用的第三方工具类，原条目两条"缺陷"为误报） | ~~P0-5、P2-13 部分~~ |
+| 5 | ~~`WebRequestUtils` 默认值~~ ✅ **`1.5.0` 已完成** | P0-6 |
+| 6 | ~~`SM3Hash` null salt + 失败不再静默~~ ✅ **`1.5.0` 已完成** | P0-7 |
 | 7 | 删死代码与违规残留 | P3-1、P3-2、P3-5、P3-6 |
 | 8 | **文档纠错一次性做完** | DOC-1 ~ DOC-13 |
-| 9 | **加 CI** | ENG-1 |
+| 9 | ~~**加 CI**~~ ✅ **`1.5.0` 已完成** | ENG-1 |
 
-**退出标准**：CI 绿灯；P0 全部 `DONE`；README 中的每条 API 示例都能实际编译通过。
+**退出标准**：CI 绿灯；P0 全部收敛（`DONE`，或经复核判定 `WONTFIX` —— 当前仅 P0-5）；README 中的每条 API 示例都能实际编译通过。
+
+#### ENG-1 实施记录（`1.5.0`）
+
+新增 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)：`master` / `springboot3` 的 push 与 PR 触发，JDK **17 / 21** 矩阵（`fail-fast: false`），执行 `mvn -B -ntp verify -Dgpg.skip=true`，并上传 JaCoCo 报告为构建产物。父 pom 增加 JaCoCo，`LINE` 覆盖率门槛 `jacoco.line.minimum = 0.50`（实测 core 68.4% / starter 58.1%，取值保守，意在防止无声退化而非逼着刷覆盖率）。
+
+**建立 CI 的过程本身发现了两个此前不可见的问题：**
+
+1. **`mvn -B verify` 在 CI 里根本跑不通** —— `maven-gpg-plugin` 的 `sign-artifacts` 绑定在 `verify` 阶段，无 GPG 私钥必然失败。故命令必须带 `-Dgpg.skip=true`。这解释了为什么此前一直只跑 `mvn test`。
+2. **JDK 21 下 9 个测试报 Mockito 错误**（真因不是 JDK，而是依赖冲突）：
+   - `assertj-core:3.24.2` 传递进来的 `byte-buddy:1.12.21` 与 `mockito-core:5.7.0` 需要的 `1.14.9` **处在同一依赖深度**，Maven 按「声明顺序」选中了前者（assertj 在前）；
+   - 报错为 `Java 21 (65) is not supported by the current version of Byte Buddy which officially supports Java 20 (64)`；
+   - 本项目**未 import `spring-boot-dependencies` BOM**，没有 BOM 来仲裁该冲突 —— 这是根因；
+   - 修复：父 pom **`import` `spring-boot-dependencies` BOM**。**仅影响构建期的依赖仲裁，不改变发布产物的依赖声明。**
+   - **为什么是 BOM，而不是写死 `bytebuddy.version`**：根因是本项目**从未 import Spring Boot BOM** —— 逐条声明构件只能拿到「传递版本」，拿不到用于「冲突仲裁」的 `dependencyManagement`，于是同深度冲突只能靠声明顺序碰运气。三个方案的实测对比：
+
+     | 方案 | 能否修好 JDK 21 | 是否结构性 | 影响依赖条目 |
+     |---|---|---|---|
+     | 写死 `bytebuddy.version=1.14.19` | ✅ | ❌ 下一个冲突仍会复现 | 1 |
+     | **import `spring-boot-dependencies` BOM**（采用） | ✅ | ✅ Spring Boot 自己的仲裁生效 | 12 |
+     | 升级 `springboot.version` 到 3.3.12 | ✅ | ❌ 冲突结构不变 | 大量 |
+
+     第三条需要特别说明：3.3.12 之所以也能过，是因为它带的 `assertj-core:3.25.3` 传递的是 `byte-buddy:1.14.11`（≥1.14.10 即支持 Java 21），**冲突结构一模一样**（assertj 依然靠声明顺序胜出），只是两个候选版本恰好都够新 —— 属于"被版本号顺带治好"，版本组合一旦再错开就会原样复现。
+   - **BOM 方案的可见影响**：除 `byte-buddy` → `1.14.19` 外，还把 11 个传递依赖对齐到 Spring Boot 3.2.12 自己管理的版本 —— `netty-*`（9 个）`4.1.107.Final → 4.1.115.Final`、`reactor-core 3.6.4 → 3.6.12`、`micrometer-* 1.12.12 → 1.12.13`、`slf4j-api 2.0.2 → 2.0.16`。方向上都是**升到 Spring Boot 期望的版本**（原先那些是 lettuce 等传递依赖带进来的、比 Spring Boot 期望的更旧），属于修正而非引入风险。`jakarta.servlet-api` 与 `caffeine` 因在 `dependencyManagement` 中显式声明（优先级高于 BOM），**版本未变**。
+
+**遗留提醒**：若把本 workflow cherry-pick 到 `master`（SB2/javax）分支，需同时带上父 pom 的 BOM import，否则该分支的 JDK 21 矩阵会复现上述 Mockito 失败。另：仓库**没有 Maven Wrapper**，CI 用的是 runner 自带的 Maven；如需锁定 Maven 版本可后续补 `mvn wrapper:wrapper`。
 
 ### 4.3 阶段 1 · 把「会话内核」做扎实（1.5）
 
@@ -594,7 +643,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 - ❌ **未做 git 校验**，因此无法给出精确的分析 commit hash；
 - ✅ 所有结论来自**逐文件静态阅读**，并对下列内容做了交叉核对：Spring `InterceptorRegistration` 源码（确认 `excludePathPatterns` 对空数组不会抛异常）、Jackson 默认配置、`BCrypt`/`NanoId`/`SM3` 的逐行实现、README/CHANGELOG 中每条 API 引用的类与方法是否真实存在（用 grep 逐个确认）。
 
-**建议**：等 CI 建好后（ENG-1），把 TST-3 里每一条都补一个"能证伪"的测试，用运行结果替换本文档中基于阅读的判断。
+**建议**：CI 已建好（ENG-1），把 TST-3 里每一条都补一个"能证伪"的测试，用运行结果替换本文档中基于阅读的判断。
 
 ---
 
