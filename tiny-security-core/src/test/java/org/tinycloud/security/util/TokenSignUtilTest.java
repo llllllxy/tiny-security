@@ -2,6 +2,8 @@ package org.tinycloud.security.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.regex.Pattern;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -75,6 +77,30 @@ class TokenSignUtilTest {
         assertNull(TokenSignUtil.verifyAndExtract(SECRET, ".only-signature"));
         assertNull(TokenSignUtil.verifyAndExtract(SECRET, "only-credentials."));
         assertNull(TokenSignUtil.verifyAndExtract(SECRET, "cred-1.!!!not-base64url!!!"));
+        // 标准 base64 的 + / 不属于 base64url 字母表：必须走「失败即拒绝」，不能抛异常穿透到调用方
+        assertNull(TokenSignUtil.verifyAndExtract(SECRET, "cred-1.ab+cd/ef"));
+    }
+
+    /**
+     * token 的字符集必须落在 base64url 字母表加分隔符之内（{@code [A-Za-z0-9._-]}）。
+     *
+     * <p>这不是洁癖：token 可能经 {@code enable-url-token} 出现在 URL 上，而标准 base64 的
+     * {@code +} 会被表单解码成空格、{@code /} 会被当成路径分隔符，两者都会让签名在服务端还原不出来。
+     * 同理 {@code =} 填充符也去掉了，避免在查询串里与 {@code name=value} 的分隔符混淆。
+     *
+     * <p>这里遍历大量凭证而不是只测一个样本：单个签名只有 43 个字符，可能碰巧不含危险字符，
+     * 那样这个用例就抓不住「把 {@code getUrlEncoder()} 改成 {@code getEncoder()}」的改动。
+     */
+    @Test
+    void shouldProduceUrlSafeToken() {
+        Pattern urlSafe = Pattern.compile("^[A-Za-z0-9._-]+$");
+
+        for (int i = 0; i < 500; i++) {
+            String token = TokenSignUtil.sign(SECRET, "cred-" + i);
+
+            assertTrue(urlSafe.matcher(token).matches(),
+                    "token 含非 URL-safe 字符（标准 base64 的 + / 会破坏 URL 传参）: " + token);
+        }
     }
 
     /**

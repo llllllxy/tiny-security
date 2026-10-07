@@ -44,6 +44,10 @@
   - **修复**：保留原有性能设计（无注解接口**依然不做任何 SPI 调用**），把加载时机推迟到 `AuthUtil.has*` 真正被调用时，由 `TinySecurityFacade` 按需懒加载，并把结果缓存回本次请求的上下文（每类数据每次请求最多查一次）。
   - `SecurityContext` 现在区分「尚未加载」与「已加载但确实为空」（新增 `isRoleSetLoaded()` / `isPermissionSetLoaded()`），只有前者才触发懒加载；`getRoleSet()` / `getPermissionSet()` 的返回值语义不变（未加载时仍是空集合）。
   - **新增** `TinySecurityFacade(SecurityContextRepository, AuthorizationInfoGet)` 构造重载；原单参构造保留且行为不变（不做懒加载）。**经 starter 自动配置的用户无需任何改动** —— `AuthAutoConfiguration` 已自动注入 `AuthorizationInfoGet`。
+- **修复 `JsonUtil` 用裸 `ObjectMapper` 带来的两个问题**：
+  - **`extraInfo` 里放 `java.time` 类型会让登录直接 500**（`InvalidDefinitionException`）。现在 `ObjectMapper` 调用 `findAndRegisterModules()` 自动注册 JSR-310 等模块，并关闭 `WRITE_DATES_AS_TIMESTAMPS` —— java.time 写成 ISO-8601 字符串（与 Spring Boot 默认 ObjectMapper 一致），便于直接排查 Redis/JDBC 里存的会话内容。
+  - **给 `LoginSubject` 加字段在滚动发布期间会变成升级事故**：Jackson 默认 `FAIL_ON_UNKNOWN_PROPERTIES=true`，旧实例读到新实例写入的会话时反序列化失败、`readValue` 返回 null，被当成"会话不存在"而把在线用户**全打成 401**。现在 `LoginSubject` 标注 `@JsonIgnoreProperties(ignoreUnknown = true)`。
+  - **约定**：`LoginSubject` **只增字段，不改名不删除**；变更字段语义时请按「新增字段 + 兼容旧字段」的方式演进。
 
 ### 升级检查清单
 

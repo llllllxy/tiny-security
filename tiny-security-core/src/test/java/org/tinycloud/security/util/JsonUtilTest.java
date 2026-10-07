@@ -2,17 +2,16 @@ package org.tinycloud.security.util;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.junit.jupiter.api.Test;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.TinySecurityException;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * JsonUtil 测试。
@@ -83,6 +82,40 @@ class JsonUtilTest {
         assertEquals(2, result.size());
         assertEquals("a", result.get(0));
         assertEquals("b", result.get(1));
+    }
+
+    /**
+     * P0-4 回归：java.time 类型必须能序列化。
+     * 修复前（裸 {@code new ObjectMapper()}，未注册 JSR-310 模块）这里会抛
+     * {@link TinySecurityException}（InvalidDefinitionException）。
+     */
+    @Test
+    void shouldRoundTripJavaTimeValue() {
+        LocalDateTime dateTime = LocalDateTime.of(2026, 9, 30, 15, 4, 5);
+
+        String json = JsonUtil.writeValueAsString(dateTime);
+
+        // 1.5.0：写成 ISO-8601 字符串（与 Spring Boot 默认 ObjectMapper 一致），不是时间戳数组
+        assertEquals("\"2026-09-30T15:04:05\"", json);
+        assertEquals(dateTime, JsonUtil.readValue(json, LocalDateTime.class));
+    }
+
+    /**
+     * P0-4 回归（真实触发场景）：登录时把 java.time 值放进 {@code extraInfo}，不再让登录直接 500。
+     */
+    @Test
+    void shouldSerializeJavaTimeInsideLoginSubjectExtraInfo() {
+        Map<String, Object> extraInfo = new HashMap<>();
+        extraInfo.put("loginMoment", LocalDateTime.of(2026, 9, 30, 15, 4, 5));
+        LoginSubject subject = new LoginSubject();
+        subject.setLoginId("user-1");
+        subject.setExtraInfo(extraInfo);
+
+        String json = JsonUtil.writeValueAsString(subject);
+        LoginSubject restored = JsonUtil.readValue(json, LoginSubject.class);
+
+        assertNotNull(restored);
+        assertEquals("2026-09-30T15:04:05", restored.getExtraInfo().get("loginMoment"));
     }
 
     /**

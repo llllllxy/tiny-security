@@ -1,12 +1,12 @@
 package org.tinycloud.security.context;
 
 import org.junit.jupiter.api.Test;
+import org.tinycloud.security.util.JsonUtil;
 
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class LoginSubjectTest {
 
@@ -46,5 +46,24 @@ class LoginSubjectTest {
         assertTrue(text.contains("loginId=10086"));
         assertTrue(text.contains("ip=10.0.0.1"));
         assertTrue(text.contains("loginExpireTime=1700001800000"));
+    }
+
+    /**
+     * P0-4 回归（滚动发布）：新实例写入的会话带上了旧实例不认识的字段时，旧实例必须仍能反序列化。
+     * 修复前 Jackson 默认的 FAIL_ON_UNKNOWN_PROPERTIES 会让 readValue 返回 null，
+     * 上层把它当成"会话不存在"→ 所有在线用户被打成 401。
+     */
+    @Test
+    void shouldIgnoreUnknownFieldsWhenDeserializing() {
+        String jsonWrittenByNewerInstance = "{\"loginId\":\"user-1\",\"credentials\":\"cred-1\","
+                + "\"loginTime\":1759215845000,\"loginExpireTime\":1759217645000,"
+                + "\"fieldAddedInFutureVersion\":\"whatever\"}";
+
+        LoginSubject subject = JsonUtil.readValue(jsonWrittenByNewerInstance, LoginSubject.class);
+
+        assertNotNull(subject);
+        assertEquals("user-1", subject.getLoginId());
+        assertEquals("cred-1", subject.getCredentials());
+        assertEquals(1759215845000L, subject.getLoginTime());
     }
 }
