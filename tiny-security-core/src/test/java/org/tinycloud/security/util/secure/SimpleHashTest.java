@@ -2,9 +2,7 @@ package org.tinycloud.security.util.secure;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * SimpleHash 通用哈希工具测试。
@@ -59,5 +57,23 @@ class SimpleHashTest {
     void shouldRejectIterationsBelowOne() {
         assertThrows(IllegalArgumentException.class,
                 () -> new SimpleHash("MD5", "password", null, 0));
+    }
+
+    /**
+     * P0-7 回归：SM3 分支的 {@code salt=null} 现在与 JDK 分支语义一致（都视为不加盐），
+     * 不再被拼成字面量 {@code "null"} 而与 {@code salt="null"} 碰撞。
+     */
+    @Test
+    void sm3BranchShouldTreatNullSaltAsEmptyLikeJdkBranch() {
+        SimpleHash sm3Null = new SimpleHash("SM3", "password", null, 1);
+        SimpleHash sm3Empty = new SimpleHash("SM3", "password", "", 1);
+        SimpleHash sm3LiteralNull = new SimpleHash("SM3", "password", "null", 1);
+
+        assertEquals(sm3Empty.toHex(), sm3Null.toHex());
+        assertNotEquals(sm3LiteralNull.toHex(), sm3Null.toHex());
+
+        // JDK 分支的既有语义：null salt 等同于不加盐（作为对齐基准）
+        assertEquals(new SimpleHash("SHA-256", "password", "", 1).toHex(),
+                new SimpleHash("SHA-256", "password", null, 1).toHex());
     }
 }

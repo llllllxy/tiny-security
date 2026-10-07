@@ -31,6 +31,15 @@
   - 碰撞时 `save` 返回 `false`、登录失败并打印 ERROR 日志，**不再覆盖已有会话**。
   - 碰撞概率约 2⁻¹²²，正常永远不会触发；一旦触发，说明随机源异常或有人在构造会话固定攻击。
   - **破坏性**：自定义实现 `SessionRepository` 时，`save` 也应在凭证已存在时返回 `false`，与该语义保持一致。
+- **`WebRequestUtils` 的便捷重载不再从 URL 参数读取 token**：`getToken(request, tokenName)` 等便捷重载的 `enableUrlToken` 默认值由 `true` 改为 **`false`**，与框架自身策略（`tiny-security.enable-url-token` 默认 `false`）对齐 —— URL 上的 token 会进入访问日志与 Referer 头，造成凭证泄露。
+  - **破坏性**：此前依赖便捷重载从 `?token=xxx` 取 token 的代码将取不到值。确需从 URL 读取时，请显式调用四参重载 `getToken(request, tokenName, enableCookie, true)`。
+  - **不受影响**：`AuthProvider` 内部一直显式调用四参重载，**生产鉴权路径行为完全不变**。
+- **`SM3Hash` / `SimpleHash` 的 `salt=null` 语义修正，会改变哈希值**：此前 `(source + salt)` 把 `null` 拼成了字面量 `"null"`（导致 `salt=null` 与 `salt="null"` 产生同一哈希），现在 `null` 统一归一化为空串，等价于"不加盐"。
+  - **破坏性**：以下调用的哈希结果会变，**用它存储过的哈希将无法再校验通过**，需重新生成或做数据迁移：
+    - `new SimpleHash("SM3", source)` —— 两参构造内部传的正是 `null`
+    - `new SimpleHash("SM3", source, null)` / `new SimpleHash("SM3", source, null, n)`
+    - `new SM3Hash(source, null)` / `new SM3Hash(source, null, n)` / `setSalt(null)`
+  - **不受影响**：`salt` 非 null（含 `""`）的调用；`new SM3Hash(source)`（单参构造，盐本就是 `""`）；`SimpleHash` 的所有 JDK 算法分支（其 `null` salt 语义本来就是"不加盐"）。
 
 ### 🔒 安全加固
 
@@ -48,6 +57,8 @@
   - **`extraInfo` 里放 `java.time` 类型会让登录直接 500**（`InvalidDefinitionException`）。现在 `ObjectMapper` 调用 `findAndRegisterModules()` 自动注册 JSR-310 等模块，并关闭 `WRITE_DATES_AS_TIMESTAMPS` —— java.time 写成 ISO-8601 字符串（与 Spring Boot 默认 ObjectMapper 一致），便于直接排查 Redis/JDBC 里存的会话内容。
   - **给 `LoginSubject` 加字段在滚动发布期间会变成升级事故**：Jackson 默认 `FAIL_ON_UNKNOWN_PROPERTIES=true`，旧实例读到新实例写入的会话时反序列化失败、`readValue` 返回 null，被当成"会话不存在"而把在线用户**全打成 401**。现在 `LoginSubject` 标注 `@JsonIgnoreProperties(ignoreUnknown = true)`。
   - **约定**：`LoginSubject` **只增字段，不改名不删除**；变更字段语义时请按「新增字段 + 兼容旧字段」的方式演进。
+- **修复 `SM3Hash` 哈希失败时静默返回全 0 哈希**：原实现在 `catch (Exception)` 后把预分配的 `byte[32]` 直接当结果返回，调用方拿到一个看起来合法的常量 `00…00`，无法区分"算错了"和"算完了"。现已移除该吞异常分支，失败会正常抛出。
+  - 说明：该 `catch` 实际是死代码（`SM3Digest.update/doFinal` 不抛受检异常，且 `source = null` 也不会触发异常，因为字符串拼接容忍 `null`），因此这处改动是**消除隐患**而非修复线上故障。
 
 ### 升级检查清单
 
@@ -60,6 +71,8 @@
 - [ ] 若自定义实现了 `SessionRepository`：确认 `save` 在凭证已存在时返回 `false`，不要静默覆盖
 - [ ] 通知用户升级后需重新登录（token 格式变更）
 - [ ] 若手工注册过安全门面（`new TinySecurityFacade(repo)`）：改用双参构造并传入 `AuthorizationInfoGet`，否则无注解接口上的 `AuthUtil.hasRole/hasPermission` 仍只会读到空集（**使用 starter 自动配置的项目无需处理**）
+- [ ] 检查是否依赖 `WebRequestUtils.getToken(request, "token")` 从 `?token=xxx` 取 token —— **该行为已默认关闭**，需要时改用四参重载并传 `enableUrlToken=true`
+- [ ] 检查是否用 `SimpleHash("SM3", …)` / `SM3Hash(…, null, …)` 且 `salt` 传过 `null` —— **该路径的哈希值已改变**，存量哈希需重新生成或迁移（详见上文「行为变更」）
 
 ---
 
