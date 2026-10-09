@@ -18,8 +18,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class DefaultAuthorizationManagerTest {
 
@@ -168,6 +167,45 @@ class DefaultAuthorizationManagerTest {
     }
 
     /**
+     * 注解写在父类上、子类重写了该方法且未重新标注时，必须仍然按父类的权限要求拦截。
+     *
+     * <p>修复前这里会被判定成「无注解接口」而直接放行（fail-open）——本该拦住的请求被静默放过，
+     * 且没有任何报错。本用例守住这条回归。
+     *
+     * @throws Exception 反射获取测试方法失败时抛出
+     */
+    @Test
+    void shouldDenyOverriddenMethodWhoseAnnotationComesFromSuperclass() throws Exception {
+        DefaultAuthorizationManager authorizationManager = new DefaultAuthorizationManager(PermissionMode.ANNOTATION, emptyAuthorizationInfo());
+        SecurityContext context = new SecurityContext();
+        context.setLoginSubject(loginSubject());
+        Method method = OverridingSecuredController.class.getMethod("overriddenSecured");
+        assertNull(method.getAnnotation(RequiresPermissions.class), "前提：重写的方法自身没有标注");
+
+        AuthorizationDecision decision = authorizationManager.authorize(request("/demo"), method, context);
+
+        assertFalse(decision.isGranted(), "父类上的 @RequiresPermissions 必须继续生效，不能退化成无注解接口");
+    }
+
+    /**
+     * 注解写在接口方法上、实现类方法未标注时，同样必须按接口的权限要求拦截。
+     *
+     * @throws Exception 反射获取测试方法失败时抛出
+     */
+    @Test
+    void shouldDenyImplementedMethodWhoseAnnotationComesFromInterface() throws Exception {
+        DefaultAuthorizationManager authorizationManager = new DefaultAuthorizationManager(PermissionMode.ANNOTATION, emptyAuthorizationInfo());
+        SecurityContext context = new SecurityContext();
+        context.setLoginSubject(loginSubject());
+        Method method = PermissionedApiImpl.class.getMethod("list");
+        assertNull(method.getAnnotation(RequiresPermissions.class), "前提：实现类方法自身没有标注");
+
+        AuthorizationDecision decision = authorizationManager.authorize(request("/demo"), method, context);
+
+        assertFalse(decision.isGranted(), "接口方法上的 @RequiresPermissions 必须继续生效");
+    }
+
+    /**
      * 创建统计角色与权限查询次数的授权信息提供器。
      *
      * @param permissionQueryCount 权限集合查询计数器
@@ -242,6 +280,39 @@ class DefaultAuthorizationManagerTest {
 
         @RequiresRoles("admin")
         public void roleSecured() {
+        }
+    }
+
+    /**
+     * 权限注解标在父类上，子类重写方法时没有再标注。
+     */
+    @RequiresPermissions("member:read")
+    static class SecuredBaseController {
+
+        public void overriddenSecured() {
+        }
+    }
+
+    static class OverridingSecuredController extends SecuredBaseController {
+
+        @Override
+        public void overriddenSecured() {
+        }
+    }
+
+    /**
+     * 权限注解标在接口方法上，实现类方法没有再标注。
+     */
+    interface PermissionedApi {
+
+        @RequiresPermissions("member:read")
+        void list();
+    }
+
+    static class PermissionedApiImpl implements PermissionedApi {
+
+        @Override
+        public void list() {
         }
     }
 }

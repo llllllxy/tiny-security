@@ -72,6 +72,14 @@
 - **修复 `AuthProvider.getSecurityContext()` 反向依赖静态 `AuthUtil`**：
   - **根因**：作为 Spring Bean 的 `AuthProvider` 依赖了"另一个 Bean 在构造时顺手赋值的静态变量"，导致手工 `new AuthProvider(...)`、单元测试、非 Web 线程都拿不到上下文。
   - **修复**：`AuthProvider` 现在直接持有注入的 `SecurityContextRepository`（`getSecurityContext()` 的能力来自其内部基类 `TinySecurityFacade`），不再经由 `AuthUtil`。新增 5 参构造注入 `SecurityContextRepository` + `AuthorizationInfoGet`，原 3 参构造保留。
+- **修复权限注解写在父类/接口上时被直接放行（fail-open）**：
+  - **根因**：注解查找用的是 `method.getAnnotation(...)` + `method.getDeclaringClass().getAnnotation(...)`，只认"方法本身 + 方法声明类本身"。而方法注解**不随重写或接口实现继承**，元注解也不会被 `getAnnotation` 解析。于是下列三种写法会被判定成"无注解接口"，授权拦截器**直接放行且不报错**：
+    1. 子类**重写**了父类带注解的方法、自己没重新标注；
+    2. 注解标在**接口方法**上、实现类方法未标注；
+    3. 用**组合注解**（自定义注解上标 `@RequiresPermissions` / `@RequiresRoles` / `@Ignore`）。
+  - **修复**：`AnnotationUtils` 的三处查找统一改用 `AnnotatedElementUtils.findMergedAnnotation`，先查方法（沿父类/接口的同名方法上溯）再查声明类，并解析元注解，一次覆盖上述三种写法。
+  - **行为变更**：原先漏掉的三种写法现在会生效。副作用是对 `@Ignore` 也一并生效（父类/接口上的 `@Ignore` 在重写/实现后不再被忽略）—— 因 `@Ignore` 是用户显式书写的框架自有注解，按"尊重用户意图"处理。
+  - **说明**：`@RequiresPermissions` / `@RequiresRoles` / `@Ignore` 均**不是** `@Inherited`；但"父类标了注解、子类只继承不重写"这一场景**原本就不会漏**（反射拿到的 `Method` 其声明类即父类），不需要改动。
 
 ### 升级检查清单
 
@@ -87,6 +95,7 @@
 - [ ] 若代码调用过 `AuthUtil.setFacade(...)` / `AuthUtil.getFacade()`：两者**已删除**，直接移除即可（`AuthUtil` 其余方法无需任何改动）
 - [ ] 检查是否依赖 `WebRequestUtils.getToken(request, "token")` 从 `?token=xxx` 取 token —— **该行为已默认关闭**，需要时改用四参重载并传 `enableUrlToken=true`
 - [ ] 检查是否用 `SimpleHash("SM3", …)` / `SM3Hash(…, null, …)` 且 `salt` 传过 `null` —— **该路径的哈希值已改变**，存量哈希需重新生成或迁移（详见上文「行为变更」）
+- [ ] 检查是否有权限注解/`@Ignore` 写在**父类或接口**上、而方法在子类里被重写或实现 —— 这些注解此前**不生效**（权限注解方向是漏放行，`@Ignore` 方向是没忽略），升级后会生效
 
 ---
 
