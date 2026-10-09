@@ -7,7 +7,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）。测试 core 188 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）。测试 core 199 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 28 个 / 204 个用例（`1.5.0` 实测值） |
+| 代码规模 | 生产类 58 个；测试类 29 个 / 215 个用例（`1.5.0` 实测值） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -329,9 +329,30 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 #### P1-4 · 注解只认「方法本身 + 方法直接声明类」，父类/接口上的注解被忽略 → 静默失去保护
 
 - **证据**：[`AnnotationUtils.java:45-65`](../tiny-security-core/src/main/java/org/tinycloud/security/annotation/AnnotationUtils.java#L45-L65)（`method.getAnnotation(...)` + `method.getDeclaringClass().getAnnotation(...)`）
-- **影响**：`@RequiresPermissions` **不是** `@Inherited`，因此"基类上标了注解、子类 Controller 继承"这种写法会让授权拦截器判定"无注解"→ **直接放行**。这是安全方向的失败（fail-open）。
-- **修复方向**：改用 `AnnotatedElementUtils.findMergedAnnotation`（会沿父类/接口上溯）。
-- **状态**：`TODO`
+- **影响**：注解查不到时，[`AuthorizationInterceptor.java:86`](../tiny-security-core/src/main/java/org/tinycloud/security/interceptor/AuthorizationInterceptor.java#L86) 与 [`DefaultAuthorizationManager.java:48`](../tiny-security-core/src/main/java/org/tinycloud/security/authorization/DefaultAuthorizationManager.java#L48) 都会把接口判定成「无注解接口」→ **直接放行**。这是安全方向的失败（fail-open）：本该拦住的请求被静默放过，且没有任何报错或日志。
+- **触发条件（`1.5.0` 实施时逐条实测修正，原文描述不准）**：拦截器取的是 [`((HandlerMethod) handler).getMethod()`](../tiny-security-core/src/main/java/org/tinycloud/security/interceptor/AuthorizationInterceptor.java#L73)，因此「父类标了注解、子类只继承不重写」这一场景**不会**漏 —— 此时反射拿到的 `Method` 其 `getDeclaringClass()` 就是父类，`getAnnotation` 直接读得到（已用用例 `shouldFindAnnotationOnDeclaringClass` 钉住）。真正 fail-open 的是下面三种：
+
+  | # | 写法 | 为什么漏 |
+  |---|---|---|
+  | 1 | 子类**重写**了父类带注解的方法、自己没重新标注 | 声明类变成子类，而**方法注解不可继承**（与 `@Inherited` 无关） |
+  | 2 | 注解标在**接口方法**上、实现类方法未标注 | 方法注解同样不随实现继承 |
+  | 3 | 用**组合注解**（自定义注解上标 `@RequiresPermissions`） | `getAnnotation` **不解析元注解** |
+- **修复方案（`1.5.0` 已实施）**：三处查找（`findRequiresPermissions` / `findRequiresRoles` / `findIgnore`）统一改用 `AnnotatedElementUtils.findMergedAnnotation`，先查方法（沿父类/接口的同名方法上溯），再查方法声明类（沿其父类/接口上溯）。该方法同时解析元注解，一次覆盖上表三种写法。
+- **状态**：`DONE`（`1.5.0`，实施记录与反向验证见下方）
+
+##### P1-4 实施记录（`1.5.0`）
+
+| 项 | 内容 |
+|---|---|
+| 改动 | [`AnnotationUtils`](../tiny-security-core/src/main/java/org/tinycloud/security/annotation/AnnotationUtils.java) 三个查找方法（`findRequiresPermissions` / `findRequiresRoles` / `findIgnore`）由 `getAnnotation` 改为 `AnnotatedElementUtils.findMergedAnnotation`，查找顺序为「方法 → 方法声明类」，各自内部再沿父类/接口上溯 |
+| 破坏性变更 | 无（对外方法签名一字未变，只是查找范围变宽） |
+| 行为变更 | 原先漏掉的三种写法现在会生效；副作用是**对 `@Ignore` 也一并生效**（父类/接口上的 `@Ignore` 在重写/实现后不再被忽略）。因 `@Ignore` 是用户显式写的框架自有注解，按「尊重用户意图」处理 |
+| 验证 | JDK 17 与 21 均 `mvn -B clean verify` 成功（core 199 / starter 16） |
+
+- **先证缺陷、再动代码**：新增 [`AnnotationUtilsTest`](../tiny-security-core/src/test/java/org/tinycloud/security/annotation/AnnotationUtilsTest.java)（9 例），改动前先跑一遍 —— 恰好 5 例变红（3 种 fail-open 写法 × 权限/角色/`@Ignore`），确认缺陷真实存在而非推测；修复后 9/9 全绿。此前 `AnnotationUtils` 属 TST-2 所列的零测试类。
+- **链路级证明（关键）**：`AnnotationUtils` 只是工具类，真正要证的是**授权决策**从「放行」变「拦截」。在 [`DefaultAuthorizationManagerTest`](../tiny-security-core/src/test/java/org/tinycloud/security/authorization/DefaultAuthorizationManagerTest.java) 补 2 例，让重写父类方法 / 实现接口方法的场景真的走一遍 `authorize(...)`，断言 `decision.isGranted() == false`。
+- **反向验证**：只把 `findRequiresPermissions` 一处退回 `getAnnotation`（保留角色与 `@Ignore` 的修复），`AnnotationUtilsTest` 3 例 + `DefaultAuthorizationManagerTest` 2 例变红，其中链路级报错正是 `expected: <false> but was: <true>` —— 即授权决策退化成**放行**，fail-open 在决策层被实锤。变异点（2 处）与还原（6 处 `findMergedAnnotation`）均已核对。
+- **残留边界（已知、未修）**：若注解标在**运行时子类**上、而方法声明在父类（`UserController extends BaseCrudController`，注解写在 `UserController` 上、方法继承自基类），查找用的是 `method.getDeclaringClass()`，仍会漏。Spring 自己在 `AbstractFallbackTransactionAttributeSource` 里是用 `ClassUtils.getUserClass(targetClass)` 解决的。补齐需要把处理器类型（`HandlerMethod.getBeanType()`）穿到 `AnnotationUtils` 与 `AuthorizationManager.authorize(...)`，属对外 API 变更，留待阶段 2 做「注解继承」时一并处理。
 
 #### P1-5 · Cookie 模式的两个真实缺陷
 
@@ -487,9 +508,9 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | ENG-2 | 双分支（`master`=SB2/javax、`springboot3`=SB3/jakarta）靠**手工 cherry-pick** 同步，历史上已出现"需备份 tag""合并后要人工确认未误引入 jakarta"等高风险动作；Spring Boot 2.7 上游 OSS 支持已于 2023-11 终止 | [`.workbuddy/memory/2026-08-08.md`](../.workbuddy/memory/2026-08-08.md) | 宣布 SB2 分支 EOL（只留安全补丁），精力回收 | `TODO` |
 | ENG-3 | `AuthAutoConfiguration` 用**字段注入**（`@Autowired private AuthProperties`），可测试性差；`@ConditionalOnBean(StringRedisTemplate.class)` 未配 `@AutoConfigureAfter(RedisAutoConfiguration.class)`，存在装配顺序风险 | [`AuthAutoConfiguration.java:113-118`](../tiny-security-boot-starter/src/main/java/org/tinycloud/security/AuthAutoConfiguration.java#L113-L118) | 后续重构为构造注入 + 显式排序 | `TODO` |
 | TST-1 | **没有任何 MockMvc / 真正跑过拦截器的集成测试** —— 两个"端到端"测试都是手工构造 `SecurityContext` 再存进仓储来**模拟**拦截器。P0-1 这类"拦截器↔门面"回归在结构上根本发现不了 | `EndToEndFlowTest`、`TinySecurityAutoConfigurationTest` | 补 MockMvc 全链路测试（含路径排除、异常翻译） | `TODO` |
-| TST-2 | **零测试的生产类**：`TinySecurityHandlerExceptionResolver`、`WebRequestUtils`、`CookieUtil`、`AnnotationUtils`、`VersionUtil`、`CommonUtil`、`HexUtil`、`SpringSecurityEventPublisher`（没有任何用例断言事件真的被发布）、`AuthProperties`（仅 2 项绑定）、以及 **`AuthAutoConfiguration.addInterceptors` 的全部逻辑** | 逐类 grep 确认 | 按 §4.2 补齐 P0 相关部分 | `TODO` |
+| TST-2 | **零测试的生产类**：`TinySecurityHandlerExceptionResolver`、`CookieUtil`、`VersionUtil`、`CommonUtil`、`HexUtil`、`SpringSecurityEventPublisher`（没有任何用例断言事件真的被发布）、`AuthProperties`（仅 2 项绑定）、以及 **`AuthAutoConfiguration.addInterceptors` 的全部逻辑**（`AnnotationUtils` 已于 `1.5.0` 补齐 9 例、`WebRequestUtils` 已随 P0-6 补齐，均从本清单移除） | 逐类 grep 确认 | 按 §4.2 补齐 P0 相关部分 | `TODO` |
 | TST-3 | **空转 / 永真断言**（抽查代表）：`AuthAutoConfigurationTest.java:96-97` 的 `isInstanceOf(SessionRepository.class)` 恒真；`AuthProviderCookieTest.java:34-43` 名为"验证非 Web 线程写 Cookie 不 NPE"，但 `enableCookie` 默认 false → **根本没走到写 Cookie**（1.3.2 修的 NPE 已失去回归保护）；`CaffeineSessionRepositoryTest.java:91-102` 改的是存进去的同一个对象引用，`refresh` 改成空实现也照样绿；`DefaultExceptionTranslatorTest.java:50-57` 名为"code 缺失兜底"，实际兜底分支从未进入；`DefaultAuthenticationManagerTest.java:86-106` 号称测 `<=` 边界，实际恒小于 | 各测试文件 | 逐个修正为可证伪的断言 | `TODO` |
-| TST-4 | **静态状态污染 / 并行不安全**：`AuthUtil.facade` 是全局静态被 6 个测试类写；`AuthAutoConfigurationTest` 建 9 个上下文却**没有 `@AfterEach`**，静态门面最后指向**已关闭的上下文**；全项目无 `junit-platform.properties` / `@ResourceLock`。一旦开启并行或漏写一次 `clearContext()`，就会出现"用户串号"式污染 | 各测试文件 | 去静态化（随 P1-1/P1-2）；或至少加 `@ResourceLock` | `TODO` |
+| TST-4 | **静态状态污染 / 并行不安全**：~~`AuthUtil.facade` 是全局静态被 6 个测试类写~~ ✅ **`1.5.0` 已随 P1-1/P1-2 去静态化**；残留：`AuthAutoConfigurationTest` 建 9 个上下文却**没有 `@AfterEach`**，全项目无 `junit-platform.properties` / `@ResourceLock`，`ThreadLocalSecurityContextRepository` 的 ThreadLocal 仍可能跨用例残留。一旦开启并行就会出现"用户串号"式污染 | 各测试文件 | ~~去静态化（随 P1-1/P1-2）~~；残留部分补 `@ResourceLock` 与清理 | `DOING` |
 | TST-5 | H2 建表语句**内联复制**在测试里，从不使用随包发布的 `t_auth_storage.sql` → 已发布 SQL 与代码存在漂移风险。`1.5.0` 先补上了漏掉的 `credentials` 唯一约束（碰撞路径这才可测），**整体仍未收敛到"加载真实 SQL 脚本"** | `JdbcSessionRepositoryTest.java:35-44` | 让测试加载真实 SQL 脚本 | `DOING` |
 | TST-6 | Redis 仓储测试全 Mockito，无真实 Redis → TTL / 原子性 / 序列化全未验证 | `RedisSessionRepositoryTest` | 引入 Testcontainers 或嵌入式 Redis（至少覆盖 TTL 与序列化往返） | `TODO` |
 | TST-7 | 白盒反射测试脆弱：`SingleSessionRepositoryTest` 反射写 `LocalTimeCache.expireMap`；`SessionRepositoryLifecycleTest` 反射读 `executorService` 字段名 | 各测试文件 | 改为通过公开 API 或提供 `isShutdown()` 之类可观测点 | `TODO` |
@@ -589,11 +610,11 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 顺序 | 事项 | IDs |
 |---|---|---|
 | 1 | ~~决定 JWT 去留~~ ✅ 已决定：**移除**（见上） | — |
-| 2 | `SecurityContext` 懒加载 + 请求级缓存（治 P0-1 的类根因） | P0-1（收尾） |
+| 2 | ~~`SecurityContext` 懒加载 + 请求级缓存（治 P0-1 的类根因）~~ ✅ **`1.5.0` 已随 P0-1 完成** | P0-1（收尾） |
 | 3 | 异步上下文传播 | P1-3 |
 | 4 | 绝对过期校验下沉内核；并发上限改原子实现 | P1-6、P1-7 |
 | 5 | ~~静态门面去化（`AuthUtil` 与 `AuthProvider` 解耦）~~ ✅ **`1.5.0` 已完成** | P1-1、P1-2 |
-| 6 | 注解查找沿父类/接口上溯 | P1-4 |
+| 6 | ~~注解查找沿父类/接口上溯~~ ✅ **`1.5.0` 已完成** | P1-4 |
 | 7 | Cookie 登出与 SameSite 语义修正 | P1-5 |
 | 8 | 仓储契约收紧 + **建 TCK** | P1-9、TST-8、TST-5、TST-6 |
 | 9 | 事件机制修正 | P1-11 |
