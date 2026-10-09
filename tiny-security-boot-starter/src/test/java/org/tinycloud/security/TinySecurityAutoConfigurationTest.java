@@ -1,5 +1,6 @@
 package org.tinycloud.security;
 
+import jakarta.servlet.ServletContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
@@ -11,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.AuthProperties;
@@ -74,9 +76,6 @@ class TinySecurityAutoConfigurationTest {
     private AuthProvider authProvider;
 
     @Autowired
-    private TinySecurityFacade facade;
-
-    @Autowired
     private AuthProperties properties;
 
     @Autowired
@@ -85,15 +84,15 @@ class TinySecurityAutoConfigurationTest {
     @Autowired
     private SecurityContextRepository securityContextRepository;
 
-    @org.junit.jupiter.api.BeforeEach
-    void setUp() {
-        // 每个测试前重新注册 facade（@AfterEach 会清掉）
-        AuthUtil.setFacade(facade);
-    }
+    /**
+     * 1.5.0 起 AuthUtil 从「当前请求的 WebApplicationContext」解析 AuthProvider，
+     * 所以测试请求必须带上容器真实的 ServletContext（Spring Boot 会把容器自身挂到它的 ROOT 属性上）。
+     */
+    @Autowired
+    private ServletContext servletContext;
 
     @AfterEach
     void tearDown() {
-        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
         // ThreadLocalSecurityContextRepository 用的是静态 ThreadLocal，不清理会跨用例泄漏上下文，
         // 导致 shouldThrowWhenNoSession 之类依赖"无会话"的用例受执行顺序影响
@@ -107,7 +106,6 @@ class TinySecurityAutoConfigurationTest {
     @Test
     void shouldWireAllCoreBeans() {
         assertNotNull(authProvider);
-        assertNotNull(facade);
         assertNotNull(properties);
         assertNotNull(sessionRepository);
         assertNotNull(securityContextRepository);
@@ -124,13 +122,20 @@ class TinySecurityAutoConfigurationTest {
     }
 
     /**
-     * AuthUtil 静态外观应已注册 Facade
+     * 1.5.0（P1-1/P1-2 回归）：AuthUtil 不再持有可变静态全局变量，改为从当前请求的容器里解析
+     * AuthProvider。这里不做任何静态注册，只绑定带真实 ServletContext 的请求：
+     * <ul>
+     *     <li>解析成功 → 未登录，抛 UnAuthorizedException</li>
+     *     <li>解析失败（容器没挂到 ServletContext 上）→ 抛 IllegalStateException，本用例即失败</li>
+     * </ul>
+     * 修复前本类必须靠 {@code AuthUtil.setFacade(...)} 才能工作。
      */
     @Test
-    void shouldRegisterFacadeWithAuthUtil() {
-        // AuthUtil.getFacade() 不抛异常即说明 Facade 已注册
-        assertNotNull(AuthUtil.getFacade());
-        assertSame(facade, AuthUtil.getFacade());
+    void shouldResolveAuthProviderFromContainerWithoutAnyStaticRegistration() {
+        bindRequest();
+
+        assertNotNull(servletContext.getAttribute(WebApplicationContext.ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE));
+        assertThrows(UnAuthorizedException.class, AuthUtil::getSecurityContext);
     }
 
     /**
@@ -214,7 +219,7 @@ class TinySecurityAutoConfigurationTest {
     }
 
     private void bindRequest() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletRequest request = new MockHttpServletRequest(servletContext);
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
     }

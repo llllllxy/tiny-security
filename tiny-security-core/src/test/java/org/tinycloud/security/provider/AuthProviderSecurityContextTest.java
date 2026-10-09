@@ -5,14 +5,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.tinycloud.security.TinySecurityFacade;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.util.AuthUtil;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,7 +25,6 @@ class AuthProviderSecurityContextTest {
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextRepository.clearContext();
-        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
     }
 
@@ -38,7 +35,7 @@ class AuthProviderSecurityContextTest {
     void shouldReturnExistingSecurityContextWhenContextAlreadyExists() {
         SecurityContext existingContext = buildContext("existing-user");
         ThreadLocalSecurityContextRepository.setContext(existingContext);
-        bindRequestAndRepository();
+        bindRequest();
 
         AuthProvider authProvider = new AuthProvider(new ThrowingSessionRepository(), defaultProperties(), null);
         SecurityContext actual = authProvider.getSecurityContext();
@@ -52,15 +49,14 @@ class AuthProviderSecurityContextTest {
      */
     @Test
     void shouldThrowUnauthorizedWhenContextMissingAndSubjectNotFound() {
-        bindRequestAndRepository();
+        bindRequest();
         AuthProvider authProvider = new AuthProvider(new FixedSessionRepository(null), defaultProperties(), null);
         assertThrows(UnAuthorizedException.class, authProvider::getSecurityContext);
     }
 
-    private void bindRequestAndRepository() {
+    private void bindRequest() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        AuthUtil.setFacade(new TinySecurityFacade(new ThreadLocalSecurityContextRepository()));
     }
 
     private AuthProperties defaultProperties() {

@@ -5,9 +5,9 @@
 >
 > | 项目 | 内容 |
 > |---|---|
-> | 文档版本 | v1.6 |
+> | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决。测试 core 184 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）。测试 core 188 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 28 个 / 200 个用例（`1.5.0` 实测值） |
+| 代码规模 | 生产类 58 个；测试类 28 个 / 204 个用例（`1.5.0` 实测值） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -77,7 +77,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 **根因三：差异化未被回答。**
 语义上（`login` / `deleteByLoginId` / `max-concurrent-logins` / `getCredentialsByLoginId`）几乎处处对标 Sa-Token。因此"为什么用 tiny-security 而不是 Sa-Token / Spring Security / Shiro"目前**没有答案**。没有答案的库，功能只会越加越迷茫——因为每个需求都能加，但加完都不构成理由。
 
-### 2.2 最该先做的 6 件事（按顺序，已完成 5 / 6）
+### 2.2 最该先做的 6 件事（按顺序，`1.5.0` 已全部完成）
 
 | 顺序 | 事项 | ID | 为什么排这个位置 |
 |---|---|---|---|
@@ -122,7 +122,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   - [`DefaultAuthorizationManager.java:49-63`](../tiny-security-core/src/main/java/org/tinycloud/security/authorization/DefaultAuthorizationManager.java#L49-L63)（只在对应注解存在时才查角色/权限集合）
   - [`DefaultAuthenticationManager.java:66-68`](../tiny-security-core/src/main/java/org/tinycloud/security/authentication/DefaultAuthenticationManager.java#L66-L68)（新建的 `SecurityContext` 只塞了 `loginSubject`）
   - [`SecurityContext.java:19-20`](../tiny-security-core/src/main/java/org/tinycloud/security/context/SecurityContext.java#L19-L20)（`roleSet` / `permissionSet` 默认空集）
-  - [`TinySecurityFacade.java:128-151`](../tiny-security-core/src/main/java/org/tinycloud/security/TinySecurityFacade.java#L128-L151)（`getRoleSet()` / `hasRole()` 读的就是这个空集）
+  - [`TinySecurityFacade.java:153-160`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/TinySecurityFacade.java#L153-L160)（`getRoleSet()` / `hasRole()` 读的就是这个空集；该类 `1.5.0` 移至 `provider` 包并降为包级私有）
 - **现象**：接口上**没有**权限注解时，`AuthUtil.hasRole("admin")` / `hasPermission("x")` **永远返回 `false`**（不抛异常），即使账号确实拥有。有注解时也只加载一半：
 
   | 接口注解 | `hasRole` | `hasPermission` |
@@ -280,19 +280,44 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 #### P1-1 · 自定义 `TinySecurityFacade` Bean 会让 `AuthUtil`（及 `AuthProvider.getSecurityContext()`）整体瘫痪
 
-- **证据**：[`AuthAutoConfiguration.java:256-266`](../tiny-security-boot-starter/src/main/java/org/tinycloud/security/AuthAutoConfiguration.java#L256-L266) —— `AuthUtil.setFacade(facade)`（`:260`）是**唯一**赋值点，而该方法带 `@ConditionalOnMissingBean(TinySecurityFacade.class)`（`:257`）。
+- **证据**：[`AuthAutoConfiguration.java:256-266`](../tiny-security-boot-starter/src/main/java/org/tinycloud/security/AuthAutoConfiguration.java#L256-L266) —— `AuthUtil.setFacade(facade)`（`:260`）是**唯一**赋值点，而该方法带 `@ConditionalOnMissingBean(TinySecurityFacade.class)`（`:257`）。（行号为修复前；该 Bean 方法已随本次修复删除。）
 - **影响**：用户一旦自己声明 `TinySecurityFacade` Bean（Spring 用户的本能），框架 Bean 被跳过 → 静态门面永远为 null → `AuthUtil.getLoginId()` 抛 `IllegalStateException`，**并连带 `AuthProvider.getSecurityContext()` 一起坏掉**（见 P1-2）。
 - **旁证**：测试里专门有 `shouldNotOverrideUserDefinedAuthProvider`，却**没有** `TinySecurityFacade` 的对应用例。
 - **修复方向**：把静态门面注入改为 `SmartInitializingSingleton` / `BeanPostProcessor` 级别的兜底，或**直接去掉静态门面**（推荐，见 §5 决策 2）。
-- **状态**：`TODO`
+- **状态**：`DONE`（`1.5.0`）
+
+##### P1-1 / P1-2 实施记录（`1.5.0`）
+
+按 §5 决策 2 执行：**两套 API 面 + 零可变静态全局**。
+
+| 类 | 改造前 | 改造后 |
+|---|---|---|
+| `AuthProvider` | token/会话门面；`getSecurityContext()` 反向调 `AuthUtil` | **唯一实例门面**：`extends TinySecurityFacade`，继承上下文与授权能力（`getSecurityContext` / `getLoginId*` / `getRoleSet` / `hasRole*` / `hasPermission*`）。新增 5 参构造注入 `SecurityContextRepository` + `AuthorizationInfoGet`；**3 参构造保留**（内部退化为 `new ThreadLocalSecurityContextRepository()` + 无 SPI），手工 `new` 的旧用法不受影响 |
+| `TinySecurityFacade` | 公开类，被 `AuthUtil` 通过静态变量反向持有 | 降为 **`provider` 包内包级私有**的内部基类，仅由 `AuthProvider` 继承；不再是容器 Bean |
+| `AuthUtil` | 静态外观 + `static volatile TinySecurityFacade facade` + `setFacade`/`getFacade` | 静态外观，**零可变静态状态**：每次调用走 `当前请求 → ServletContext → WebApplicationContext → getBean(AuthProvider)` |
+| `AuthAutoConfiguration` | 在 `@ConditionalOnMissingBean(TinySecurityFacade.class)` 的 Bean 里调 `AuthUtil.setFacade(...)`，启动横幅也挂在该 Bean 上 | 删除该 Bean；`authProvider(...)` 改为注入 `SecurityContextRepository` 与 `@Autowired(required = false) AuthorizationInfoGet`，启动横幅与版本日志随之迁到这里 |
+
+- **为什么选"从当前请求的容器解析"**：容器里放的是谁就用谁，因此用户自定义 `AuthProvider` / `SecurityContextRepository` / `AuthorizationInfoGet` 全部照常生效，且 `AuthUtil` 与容器之间不再存在任何可以失同步的中间状态。
+- **方案前提已实锤**：该做法依赖「ServletContext 的 `ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE` 指向当前容器」。对 `ServletWebServerApplicationContext` 反查字节码确认它确实会 `servletContext.setAttribute(ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE, ...)`；`@SpringBootTest` 环境下同样成立（由 `TinySecurityAutoConfigurationTest` 断言）。
+- **解析方式的两处加固**：
+  1. 用 `WebApplicationContextUtils.findWebApplicationContext(...)` 而非 `getWebApplicationContext(...)`：前者在 ROOT 属性取不到容器时会**继续扫描 ServletContext 的全部属性**，从而兼容「Bean 注册在 `DispatcherServlet` 子容器里」的经典 Spring MVC 部署；在 Spring Boot（ROOT 属性即应用容器）下两者行为完全一致，无额外开销。
+  2. 单独捕获 `NoUniqueBeanDefinitionException`：它是 `NoSuchBeanDefinitionException` 的**子类**，若只捕获后者，容器里存在两个 `AuthProvider` 候选 Bean 时会被误报成「一个都没有」，把排查方向带反。已加回归用例 `shouldReportMultipleCandidatesInsteadOfMissingBean`，并做了反向验证（去掉该分支后该用例立即变红）。
+- **残留边界（已知、可接受）**：若同时存在 `ContextLoaderListener` 的根容器与 `DispatcherServlet` 子容器，且 `AuthProvider` 只注册在**子容器**，那解析到的是根容器，`getBean` 会失败。这是「仅凭 ServletContext 定位容器」的固有限制，且与框架定位（Spring Boot starter）无关 —— Boot 下只有一个应用容器。
+- **对外行为不变**：`AuthUtil` 的方法签名与语义完全不变；未登录/会话失效仍统一抛 `UnAuthorizedException`；无注解接口上的 `hasRole`/`hasPermission` 仍按需懒加载（P0-1）。
+- **已知限制（取舍）**：`AuthUtil` 只适用于持有当前请求的线程。非 Web 线程（`@Async`、MQ 消费线程）取不到请求，抛 `UnAuthorizedException` —— 与 `1.5.0` 之前一致，真正的传播能力仍待 P1-3；这类场景请直接注入 `AuthProvider`。
+- **破坏性变更**：`TinySecurityFacade` 不再公开（包级私有且移到 `provider` 包）；`AuthUtil.setFacade` / `AuthUtil.getFacade` 删除；容器里不再有 `tinySecurityFacade` Bean。
+- **反向验证**（两处，均确认用例真能抓住缺陷）：
+  1. 把 `AuthUtil` 的「每请求解析」退化成「首次解析后缓存进静态字段」（即 P1-1 的失败形态）→ `AuthUtilTest` 7 个用例中 **5 个立即变红**，头号用例报错正是症结：`expected: <second-user> but was: <first-user>`。
+  2. 把 P1-2 的旧实现（`AuthProvider.getSecurityContext()` 改走 `AuthUtil`）加回去 → `AuthProviderSecurityContextTest` 两个用例全部变红，报错为 `IllegalStateException: No WebApplicationContext found for the current request`，即"脱离容器就废"。
+- **测试同步**：`AuthUtilTest` 新增「跟随当前请求容器而非任何静态状态」「无 `WebApplicationContext`」「容器内无 `AuthProvider` Bean」三条，并接收从 `TinySecurityFacadeTest` 迁来的「经 `AuthUtil` 的懒加载完整路径」「`get*` 转发」两条；`AuthProviderSecurityContextTest` 不再需要任何静态注册；`TinySecurityFacadeTest` 随被测类移入 `provider` 包；新增测试辅助 `AuthTestSupport` 复刻真实 Web 装配（ServletContext + 容器 + `RequestContextHolder`）。
 
 #### P1-2 · `AuthProvider` 反向依赖静态 `AuthUtil`，靠测试手工注册才跑得通
 
-- **证据**：[`AuthProvider.java:392-399`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L392-L399)（`getSecurityContext()` 调 `AuthUtil.getSecurityContext()`，即一个 Spring Bean 依赖"另一个 Bean 在构造时顺手赋值的静态变量"）
-- **旁证**：[`AuthProviderSecurityContextTest`](../tiny-security-core/src/test/java/org/tinycloud/security/provider/AuthProviderSecurityContextTest.java) 必须显式 `AuthUtil.setFacade(...)` 才能让被测方法工作。
+- **证据**：[`AuthProvider.java:392-399`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L392-L399)（`getSecurityContext()` 调 `AuthUtil.getSecurityContext()`，即一个 Spring Bean 依赖"另一个 Bean 在构造时顺手赋值的静态变量"）。（行号为修复前；该重写方法已删除，能力改由 `TinySecurityFacade.getSecurityContext()` 经**注入的** `SecurityContextRepository` 提供。）
+- **旁证**：[`AuthProviderSecurityContextTest`](../tiny-security-core/src/test/java/org/tinycloud/security/provider/AuthProviderSecurityContextTest.java) 必须显式 `AuthUtil.setFacade(...)` 才能让被测方法工作。（修复后该文件已不需要任何静态注册。）
 - **影响**：手工 `new AuthProvider(...)`（README §2.5.2 风格）、单测、非 Web 线程都会拿不到上下文。
 - **修复方向**：`AuthProvider` 直接注入 `SecurityContextRepository`。
-- **状态**：`TODO`
+- **状态**：`DONE`（`1.5.0`，与 P1-1 同批；实施细节与反向验证见上方记录）
 
 #### P1-3 · 异步线程拿不到安全上下文（只修了"残留"，没修"传播"）
 
@@ -567,7 +592,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 2 | `SecurityContext` 懒加载 + 请求级缓存（治 P0-1 的类根因） | P0-1（收尾） |
 | 3 | 异步上下文传播 | P1-3 |
 | 4 | 绝对过期校验下沉内核；并发上限改原子实现 | P1-6、P1-7 |
-| 5 | 静态门面去化（`AuthUtil` 与 `AuthProvider` 解耦） | P1-1、P1-2 |
+| 5 | ~~静态门面去化（`AuthUtil` 与 `AuthProvider` 解耦）~~ ✅ **`1.5.0` 已完成** | P1-1、P1-2 |
 | 6 | 注解查找沿父类/接口上溯 | P1-4 |
 | 7 | Cookie 登出与 SameSite 语义修正 | P1-5 |
 | 8 | 仓储契约收紧 + **建 TCK** | P1-9、TST-8、TST-5、TST-6 |
@@ -604,7 +629,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | # | 决策 | 我的建议 | 理由 |
 |---|---|---|---|
 | 1 | ~~**会话是有状态还是无状态？JWT 留不留？**~~ ✅ **已拍板：有状态，移除 JWT**（`1.5.0` 已落地，见 §4.3 IR-1） | **有状态**；因此 **JWT 应被移除**（或降级为可选兼容模式，`token-style: opaque` 设为默认） | 既然每请求都查存储，JWT 只贡献成本（第二条过期线、密钥坑、`Bearer ` 强制、签名开销）。现在这种"伪无状态"是概念债的源头 |
-| 2 | **三套 API 面怎么收敛？** | 保留 `AuthProvider`（唯一实例门面）+ `AuthUtil`（静态便捷外观，但**不再依赖可变静态全局**），**删除 `TinySecurityFacade` 的公开性**（降为内部实现） | 现在三套语义重复且靠静态桥互连，是 P1-1/P1-2/TST-4 的共同根因 |
+| 2 | **三套 API 面怎么收敛？** | 保留 `AuthProvider`（唯一实例门面）+ `AuthUtil`（静态便捷外观，但**不再依赖可变静态全局**），**删除 `TinySecurityFacade` 的公开性**（降为内部实现） | 现在三套语义重复且靠静态桥互连，是 P1-1/P1-2/TST-4 的共同根因。**`1.5.0` 已按本决策落地，见 P1-1 / P1-2 实施记录** |
 | 3 | **授权做多深？** | 押注"**角色继承 + 数据范围 + 权限缓存**" | 只做"注解 + 权限码"的话，与 Sa-Token 的差异只剩体积；做深才有不可替代性 |
 | 4 | **是否继续维护 Spring Boot 2 分支？** | **终止** | 双分支手工 cherry-pick 是持续性精力消耗，而 SB2 上游早已 EOL |
 
