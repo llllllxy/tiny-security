@@ -5,16 +5,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.tinycloud.security.TinySecurityFacade;
 import org.tinycloud.security.annotation.RequiresPermissions;
 import org.tinycloud.security.annotation.RequiresRoles;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.PermissionMode;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
-import org.tinycloud.security.util.AuthUtil;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -30,7 +27,6 @@ class DefaultAuthorizationManagerTest {
     void tearDown() {
         ThreadLocalSecurityContextRepository.clearContext();
         RequestContextHolder.resetRequestAttributes();
-        AuthUtil.setFacade(null);
     }
 
     @Test
@@ -224,7 +220,6 @@ class DefaultAuthorizationManagerTest {
         request.setMethod("GET");
         request.setRequestURI(uri);
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
-        AuthUtil.setFacade(new TinySecurityFacade(new ThreadLocalSecurityContextRepository()));
         return request;
     }
 

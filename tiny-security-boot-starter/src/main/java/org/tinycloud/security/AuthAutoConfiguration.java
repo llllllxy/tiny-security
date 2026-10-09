@@ -34,7 +34,6 @@ import org.tinycloud.security.session.*;
 import org.tinycloud.security.support.DefaultExceptionTranslator;
 import org.tinycloud.security.support.ExceptionTranslator;
 import org.tinycloud.security.support.TinySecurityHandlerExceptionResolver;
-import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.VersionUtil;
 
 /**
@@ -170,17 +169,33 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
     }
 
     /**
-     * 注册默认 AuthProvider 外观实现。
+     * 注册默认 AuthProvider 实例门面（1.5.0 起它是框架唯一的实例门面）。
      *
-     * @param sessionRepository       会话仓储
-     * @param securityEventPublisher  安全事件发布器
+     * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
+     * 角色/权限（性能设计），此时 {@code AuthUtil.hasRole/hasPermission} 依赖门面按需懒加载（P0-1）。
+     *
+     * <p>启动横幅与版本日志也在这里输出：1.5.0 之前它们挂在已被删除的门面 Bean 上，
+     * 而本 Bean 是框架启动时必然创建的那一个。
+     *
+     * @param sessionRepository         会话仓储
+     * @param securityEventPublisher    安全事件发布器
+     * @param securityContextRepository 安全上下文仓储
+     * @param authorizationInfoGet      角色权限数据提供者，未提供时为 null
      * @return AuthProvider
      */
     @Bean
     @ConditionalOnMissingBean(AuthProvider.class)
     public AuthProvider authProvider(SessionRepository sessionRepository,
-                                     SecurityEventPublisher securityEventPublisher) {
-        return new AuthProvider(sessionRepository, authProperties, securityEventPublisher);
+                                     SecurityEventPublisher securityEventPublisher,
+                                     SecurityContextRepository securityContextRepository,
+                                     @Autowired(required = false) AuthorizationInfoGet authorizationInfoGet) {
+        AuthProvider authProvider = new AuthProvider(sessionRepository, authProperties, securityEventPublisher,
+                securityContextRepository, authorizationInfoGet);
+        if (authProperties.getBanner()) {
+            printBanner();
+        }
+        logger.info("Tiny-Security started successfully, version: {}.", VersionUtil.getVersion());
+        return authProvider;
     }
 
     /**
@@ -241,29 +256,6 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
     @ConditionalOnMissingBean(SecurityEventPublisher.class)
     public SecurityEventPublisher securityEventPublisher(org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         return new SpringSecurityEventPublisher(applicationEventPublisher);
-    }
-
-    /**
-     * 注册安全门面，并注入到 {@link AuthUtil} 静态外观。
-     *
-     * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
-     * 角色/权限（性能设计），此时 {@code AuthUtil.hasRole/hasPermission} 依赖门面按需懒加载（P0-1）。
-     *
-     * @param securityContextRepository 安全上下文仓储
-     * @param authorizationInfoGet      角色权限数据提供器，未提供时为 null
-     * @return 安全门面
-     */
-    @Bean
-    @ConditionalOnMissingBean(TinySecurityFacade.class)
-    public TinySecurityFacade tinySecurityFacade(SecurityContextRepository securityContextRepository,
-                                                 @Autowired(required = false) AuthorizationInfoGet authorizationInfoGet) {
-        TinySecurityFacade facade = new TinySecurityFacade(securityContextRepository, authorizationInfoGet);
-        AuthUtil.setFacade(facade);
-        if (authProperties.getBanner()) {
-            printBanner();
-        }
-        logger.info("Tiny-Security started successfully, version: {}.", VersionUtil.getVersion());
-        return facade;
     }
 
     /**

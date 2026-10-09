@@ -8,7 +8,8 @@ import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
-import org.tinycloud.security.context.SecurityContext;
+import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
@@ -16,8 +17,8 @@ import org.tinycloud.security.event.NoopSecurityEventPublisher;
 import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.util.AuthUtil;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.CookieUtil;
 import org.tinycloud.security.util.TokenSignUtil;
@@ -31,14 +32,31 @@ import java.util.UUID;
 /**
  * 操作 token 和会话的兼容外观类（Facade）
  *
+ * <p><b>1.5.0 起本类是框架唯一的实例门面</b>：既负责 token 与会话读写，也负责当前请求的
+ * 上下文与授权判定 —— 后者继承自内部基类 {@code TinySecurityFacade}，因此
+ * {@code getLoginId() / getRoleSet() / hasRole()} 等方法在本类上直接可用，
+ * 且不再需要任何静态全局变量来定位实现（P1-1 / P1-2）。
+ *
  * @author liuxingyu01
  * @since 2026-04-28
  */
-public class AuthProvider {
+public class AuthProvider extends TinySecurityFacade {
     private static final Logger log = LoggerFactory.getLogger(AuthProvider.class);
 
+    /**
+     * 会话仓储：token 只是凭证的签名信封，真正的登录主体与有效期存在这里
+     * （对应 tiny-security.store-type 的 single / caffeine / redis / jdbc 四种实现）
+     */
     private final SessionRepository sessionRepository;
+
+    /**
+     * 框架配置（tiny-security.*）：token 名、会话有效期、Cookie 策略、并发登录上限等
+     */
     private final AuthProperties properties;
+
+    /**
+     * 安全事件发布器：登录成功/失败等事件的出口；为 null 时降级为空实现，即只记日志不发布事件
+     */
     private final SecurityEventPublisher securityEventPublisher;
 
     /**
@@ -48,7 +66,10 @@ public class AuthProvider {
     private final String tokenSecret;
 
     /**
-     * 构造 AuthProvider 外观。
+     * 构造 AuthProvider 外观（不含授权数据源，使用默认的 ThreadLocal 上下文仓储）。
+     *
+     * <p>该重载保持 1.5.0 之前的行为不变，适用于手工 {@code new} 的场景；此时
+     * {@code getRoleSet() / getPermissionSet()} 只读取上下文中已有的数据，不做按需懒加载。
      *
      * @param sessionRepository       会话仓储
      * @param properties              配置属性
@@ -57,6 +78,28 @@ public class AuthProvider {
     public AuthProvider(SessionRepository sessionRepository,
                         AuthProperties properties,
                         SecurityEventPublisher securityEventPublisher) {
+        this(sessionRepository, properties, securityEventPublisher,
+                new ThreadLocalSecurityContextRepository(), null);
+    }
+
+    /**
+     * 构造 AuthProvider 外观（完整形态）。
+     *
+     * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
+     * 角色/权限（性能设计），此时 {@code hasRole/hasPermission} 依赖按需懒加载（P0-1）。
+     *
+     * @param sessionRepository         会话仓储
+     * @param properties                配置属性
+     * @param securityEventPublisher    安全事件发布器
+     * @param securityContextRepository 安全上下文仓储
+     * @param authorizationInfoGet      角色权限数据提供者，可为 null
+     */
+    public AuthProvider(SessionRepository sessionRepository,
+                        AuthProperties properties,
+                        SecurityEventPublisher securityEventPublisher,
+                        SecurityContextRepository securityContextRepository,
+                        AuthorizationInfoGet authorizationInfoGet) {
+        super(securityContextRepository, authorizationInfoGet);
         Assert.notNull(sessionRepository, "SessionRepository cannot be null!");
         Assert.notNull(properties, "The properties cannot be null!");
         this.sessionRepository = sessionRepository;
@@ -383,20 +426,6 @@ public class AuthProvider {
         } catch (NumberFormatException e) {
             throw new TinySecurityException("loginId cannot be parsed as Long: " + loginId);
         }
-    }
-
-    /**
-     * 获取当前请求安全上下文。
-     *
-     * @return 安全上下文
-     */
-    public SecurityContext getSecurityContext() {
-        // 优先复用拦截器阶段已建立的上下文，避免重复构建
-        SecurityContext context = AuthUtil.getSecurityContext();
-        if (context != null && context.getLoginSubject() != null) {
-            return context;
-        }
-        throw new UnAuthorizedException();
     }
 
     /**

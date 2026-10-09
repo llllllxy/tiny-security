@@ -6,7 +6,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.AuthProperties;
@@ -56,19 +55,18 @@ class EndToEndFlowTest {
         properties.setMaxConcurrentLogins(0);
         properties.setTokenSecret("test-secret-key-for-e2e");
 
-        authProvider = new AuthProvider(sessionRepository, properties, new NoopEventPublisher());
+        // 1.5.0：AuthProvider 是唯一的实例门面——既管 token/会话，也管上下文与授权判定，
+        // 因此这里把安全上下文仓储和角色权限数据源一并交给它
+        authProvider = new AuthProvider(sessionRepository, properties, new NoopEventPublisher(),
+                securityContextRepository, new StubAuthorizationInfoGet());
 
-        // 注册 Facade，让 AuthUtil 能工作（带上角色权限数据源，使 hasRole/hasPermission 能按需懒加载）
-        AuthUtil.setFacade(new TinySecurityFacade(securityContextRepository, new StubAuthorizationInfoGet()));
-
-        // 绑定请求上下文（模拟 HTTP 请求环境）
-        bindRequest();
+        // 绑定请求上下文（模拟 HTTP 请求环境），并把 AuthProvider 装进容器——AuthUtil 由此解析门面
+        AuthTestSupport.bindRequestWithAuthProvider(authProvider);
     }
 
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextRepository.clearContext();
-        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
         sessionRepository.clear();
     }
@@ -205,12 +203,6 @@ class EndToEndFlowTest {
     @Test
     void shouldReturnFalseForIsLoginWhenNoValidCredentials() {
         assertFalse(authProvider.isLogin());
-    }
-
-    private void bindRequest() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
     }
 
     private HttpServletRequest currentRequest() {

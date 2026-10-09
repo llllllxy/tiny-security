@@ -41,6 +41,13 @@
     - `new SM3Hash(source, null)` / `new SM3Hash(source, null, n)` / `setSalt(null)`
   - **不受影响**：`salt` 非 null（含 `""`）的调用；`new SM3Hash(source)`（单参构造，盐本就是 `""`）；`SimpleHash` 的所有 JDK 算法分支（其 `null` salt 语义本来就是"不加盐"）。
 
+- **`AuthUtil` 不再依赖静态门面，`TinySecurityFacade` 降为内部实现**：
+  - `AuthUtil` 现在每次调用都从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（框架唯一的实例门面），不再持有任何可变静态全局状态。因此用户自定义 `AuthProvider` / `SecurityContextRepository` / `AuthorizationInfoGet` 都不会再影响 `AuthUtil` —— 容器里放的是谁，它就用谁。
+  - **破坏性**：`AuthUtil.setFacade(...)` 与 `AuthUtil.getFacade()` **已删除**；`TinySecurityFacade` **不再是公开类**（移入 `org.tinycloud.security.provider` 包且为包级私有），容器里也不再注册 `tinySecurityFacade` Bean。
+  - **`AuthUtil` 的公开方法签名与语义完全不变**，`AuthUtil.getLoginId()` / `hasRole()` 等调用方**无需任何改动**。
+  - **限制**：`AuthUtil` 只适用于持有当前请求的线程。`@Async` / MQ 消费线程等非 Web 线程取不到请求、抛 `UnAuthorizedException`（与 `1.5.0` 之前一致）；这类场景请直接注入 `AuthProvider`。
+  - 若曾手工 `new TinySecurityFacade(repo)` 或自定义过它的 Bean：该类已不是公开 API，请改用 `AuthProvider`；手工 `new AuthProvider(sessionRepository, properties, publisher)` 的既有写法**仍然可用**（内部退化为默认 `ThreadLocalSecurityContextRepository` + 无 SPI，与旧行为一致）。
+
 ### 🔒 安全加固
 
 - **`CommonUtil.getRandomString` 改用 `SecureRandom`**：此前使用 `ThreadLocalRandom`（非密码学安全随机源，内部状态只有 64 位且可被观测输出反推）。该函数现在只服务于「未配置 `token-secret` 时生成临时签名密钥」，改用 `SecureRandom` 后兜底密钥的材料质量合格。
@@ -59,6 +66,12 @@
   - **约定**：`LoginSubject` **只增字段，不改名不删除**；变更字段语义时请按「新增字段 + 兼容旧字段」的方式演进。
 - **修复 `SM3Hash` 哈希失败时静默返回全 0 哈希**：原实现在 `catch (Exception)` 后把预分配的 `byte[32]` 直接当结果返回，调用方拿到一个看起来合法的常量 `00…00`，无法区分"算错了"和"算完了"。现已移除该吞异常分支，失败会正常抛出。
   - 说明：该 `catch` 实际是死代码（`SM3Digest.update/doFinal` 不抛受检异常，且 `source = null` 也不会触发异常，因为字符串拼接容忍 `null`），因此这处改动是**消除隐患**而非修复线上故障。
+- **修复自定义 `TinySecurityFacade` Bean 会让 `AuthUtil`（及 `AuthProvider.getSecurityContext()`）整体瘫痪**：
+  - **根因**：`AuthUtil` 通过一个静态变量持有门面，而**唯一**的赋值点是 `AuthAutoConfiguration` 里带 `@ConditionalOnMissingBean(TinySecurityFacade.class)` 的 Bean 方法。用户一旦自己声明该 Bean（Spring 用户的本能），框架 Bean 被跳过 → 静态变量永远为 null → `AuthUtil.getLoginId()` 抛 `IllegalStateException`。
+  - **修复**：去掉静态门面，`AuthUtil` 改为从当前请求的容器解析 `AuthProvider`。这一改动同时消除了"静态状态可以失同步"这一整类问题。
+- **修复 `AuthProvider.getSecurityContext()` 反向依赖静态 `AuthUtil`**：
+  - **根因**：作为 Spring Bean 的 `AuthProvider` 依赖了"另一个 Bean 在构造时顺手赋值的静态变量"，导致手工 `new AuthProvider(...)`、单元测试、非 Web 线程都拿不到上下文。
+  - **修复**：`AuthProvider` 现在直接持有注入的 `SecurityContextRepository`（`getSecurityContext()` 的能力来自其内部基类 `TinySecurityFacade`），不再经由 `AuthUtil`。新增 5 参构造注入 `SecurityContextRepository` + `AuthorizationInfoGet`，原 3 参构造保留。
 
 ### 升级检查清单
 
@@ -70,7 +83,8 @@
 - [ ] 若直接使用过 `JwtUtil`：该类已删除，请改用 `TokenSignUtil`
 - [ ] 若自定义实现了 `SessionRepository`：确认 `save` 在凭证已存在时返回 `false`，不要静默覆盖
 - [ ] 通知用户升级后需重新登录（token 格式变更）
-- [ ] 若手工注册过安全门面（`new TinySecurityFacade(repo)`）：改用双参构造并传入 `AuthorizationInfoGet`，否则无注解接口上的 `AuthUtil.hasRole/hasPermission` 仍只会读到空集（**使用 starter 自动配置的项目无需处理**）
+- [ ] 若手工注册过安全门面（`new TinySecurityFacade(repo)`）或自定义过 `TinySecurityFacade` Bean：该类已**不是公开 API**（包级私有且移入 `provider` 包），请改用 `AuthProvider`
+- [ ] 若代码调用过 `AuthUtil.setFacade(...)` / `AuthUtil.getFacade()`：两者**已删除**，直接移除即可（`AuthUtil` 其余方法无需任何改动）
 - [ ] 检查是否依赖 `WebRequestUtils.getToken(request, "token")` 从 `?token=xxx` 取 token —— **该行为已默认关闭**，需要时改用四参重载并传 `enableUrlToken=true`
 - [ ] 检查是否用 `SimpleHash("SM3", …)` / `SM3Hash(…, null, …)` 且 `salt` 传过 `null` —— **该路径的哈希值已改变**，存量哈希需重新生成或迁移（详见上文「行为变更」）
 
