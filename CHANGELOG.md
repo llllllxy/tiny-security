@@ -83,6 +83,11 @@
   - **修复**：保留原有性能设计（无注解接口**依然不做任何 SPI 调用**），把加载时机推迟到 `AuthUtil.has*` 真正被调用时，由 `TinySecurityFacade` 按需懒加载，并把结果缓存回本次请求的上下文（每类数据每次请求最多查一次）。
   - `SecurityContext` 现在区分「尚未加载」与「已加载但确实为空」（新增 `isRoleSetLoaded()` / `isPermissionSetLoaded()`），只有前者才触发懒加载；`getRoleSet()` / `getPermissionSet()` 的返回值语义不变（未加载时仍是空集合）。
   - **新增** `TinySecurityFacade(SecurityContextRepository, AuthorizationInfoGet)` 构造重载；原单参构造保留且行为不变（不做懒加载）。**经 starter 自动配置的用户无需任何改动** —— `AuthAutoConfiguration` 已自动注入 `AuthorizationInfoGet`。
+- **修复 `checkLogin()` 对畸形 token 抛 `IllegalArgumentException` 导致 HTTP 500 而非 401**：
+  - **触发**：token 的凭证部分是 `credentials.signature` 的分隔符左侧内容。`TokenSignUtil.sign` 用 `Assert.hasText` 拦住空凭证，但**用同一 secret 自行计算 HMAC 即可绕过**（同密钥的其他用途、或密钥泄露场景）—— `" " + "." + base64url(HMAC-SHA256(" ", secret))` 这种 token 能通过验签并原样返回凭证 `" "`。
+  - **症状**：`checkLogin()` 把 `" "` 交给会话仓储，命中内置仓储的 `Assert.hasText(credentials, ...)` 抛出 `IllegalArgumentException`。它**不是** `TinySecurityException`，异常解析器返回 null，最终交给 Spring 默认处理 → **HTTP 500**（调用方会误判为服务端故障，也会污染错误监控）。
+  - **修复**：`checkLogin()` 补 try/catch —— `UnAuthorizedException` 原样抛出，其余异常按"未登录"处理并降为 debug 日志，最终统一抛 `UnAuthorizedException`（401）。与 `isLogin()` 的既有容错写法对齐：两者只该在"抛异常还是返回 false"上不同，对异常输入的容错必须一致。
+  - **不受影响**：正常 token；以及未登录（无 token）的常见路径（本来就抛 `UnAuthorizedException`）。
 - **修复 `JsonUtil` 用裸 `ObjectMapper` 带来的两个问题**：
   - **`extraInfo` 里放 `java.time` 类型会让登录直接 500**（`InvalidDefinitionException`）。现在 `ObjectMapper` 调用 `findAndRegisterModules()` 自动注册 JSR-310 等模块，并关闭 `WRITE_DATES_AS_TIMESTAMPS` —— java.time 写成 ISO-8601 字符串（与 Spring Boot 默认 ObjectMapper 一致），便于直接排查 Redis/JDBC 里存的会话内容。
   - **给 `LoginSubject` 加字段在滚动发布期间会变成升级事故**：Jackson 默认 `FAIL_ON_UNKNOWN_PROPERTIES=true`，旧实例读到新实例写入的会话时反序列化失败、`readValue` 返回 null，被当成"会话不存在"而把在线用户**全打成 401**。现在 `LoginSubject` 标注 `@JsonIgnoreProperties(ignoreUnknown = true)`。

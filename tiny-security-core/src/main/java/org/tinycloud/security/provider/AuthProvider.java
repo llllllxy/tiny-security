@@ -449,10 +449,26 @@ public class AuthProvider extends TinySecurityFacade {
     /**
      * 校验当前请求是否已登录，未登录则抛异常。
      *
+     * <p>与 {@link #isLogin()} 的区别只在失败时「抛异常」还是「返回 false」，
+     * 两者对**异常输入**的容错必须一致：token 缺失、验签失败、以及凭证为空白字符等情况
+     * 都应归结为「未登录 → 401」，而不是把仓储参数的非法断言（{@code IllegalArgumentException}）
+     * 透出去变成 HTTP 500。后者既误导调用方（以为是服务端错误），也污染错误监控。
+     *
      * @return true-已登录
      */
     public boolean checkLogin() {
-        boolean success = this.checkByCredentials(this.getCredentials());
+        boolean success;
+        try {
+            success = this.checkByCredentials(this.getCredentials());
+        } catch (UnAuthorizedException e) {
+            // token 缺失 / 未带前缀 / 验签失败 / 凭证为空白：语义上就是「未登录」，直接抛 401
+            throw e;
+        } catch (Exception e) {
+            // 其余异常（如凭证为空导致仓储断言失败）同样按「未登录」处理，
+            // 避免把 IllegalArgumentException 透成 500（P1-12）
+            log.debug("AuthProvider checkLogin failed, Exception：", e);
+            success = false;
+        }
         if (!success) {
             throw new UnAuthorizedException();
         }
