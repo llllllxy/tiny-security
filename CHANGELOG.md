@@ -69,6 +69,13 @@
 
 - **`CommonUtil.getRandomString` 改用 `SecureRandom`**：此前使用 `ThreadLocalRandom`（非密码学安全随机源，内部状态只有 64 位且可被观测输出反推）。该函数现在只服务于「未配置 `token-secret` 时生成临时签名密钥」，改用 `SecureRandom` 后兜底密钥的材料质量合格。
 - **清除可预测随机源的所有可达路径**：随 `CredentialsGenUtil` / `NanoId` 一并移除，框架内**不再存在任何非 CSPRNG 的凭证或密钥来源**——凭证只有 UUID，签名密钥只有"配置值"或 `SecureRandom`。
+- **URL 鉴权模式补上 HTTP Method 维度**（`tiny-security.perm-check-mode: URL`）：
+  - **修复的问题**：此前 URL 模式只用 `request.getRequestURI()` 做 Ant 匹配、**完全不看 Method**，于是「拥有 `GET /user` 读权限」等价于「拥有 `DELETE /user` 权限」—— **只读账号可以调用删除接口**。
+  - **修复方式**：权限码支持 `METHOD 路径` 写法（中间一个空格，Method 大小写不敏感）—— `GET /user/**` 只匹配 GET、`POST /user/**` 只匹配 POST、`* /user/**` 匹配任意 Method。读写分离的接口写成两条权限码即可隔开。
+  - **向后兼容（非破坏性变更）**：**不写 Method 的权限码行为完全不变**，仍匹配任意 Method。存量用户配置的都是裸路径（README 原要求权限码与接口 URL 相匹配），升级后无需任何改动，只是无法享受新能力。
+  - 业务权限码（如 `system:user:add`，含冒号）会被识别为裸路径，不会被误截断成 Method。
+  - ⚠️ **context-path 提醒**：权限码匹配的是**含 context-path 的完整 URI**。修改应用的 context-path 会导致既有权限码全部失配（表现为相关用户全部 403；fail-closed 不越权，但需同步调整配置）。详见 README §2.3.3。
+  - **匹配器保持 `AntPathMatcher`（经实测决定不替换为 `PathPattern`）**：`PathPattern` 修不了编码绕过（那是输入源问题，与匹配器无关）、现有权限码词汇表在两者下结论完全一致，而路径**中间**的 `**`（如 `/user/**/edit`）在 `PathPattern` 下会直接抛 `PatternParseException`，属破坏性变更。故本项维持现状，不构成任何升级动作。
 
 ### 🐛 缺陷修复
 

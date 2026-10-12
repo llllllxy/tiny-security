@@ -7,7 +7,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 214 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 220 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 30 个 / 230 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
+| 代码规模 | 生产类 58 个；测试类 30 个 / 236 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -482,10 +482,25 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 #### P1-10 · URL 鉴权模式不看 HTTP Method
 
-- **证据**：[`AuthorizationEvaluator.java:41-50`](../tiny-security-core/src/main/java/org/tinycloud/security/authorization/AuthorizationEvaluator.java#L41-L50)（只用 `request.getRequestURI()` 做 Ant 匹配）
+- **证据**：[`AuthorizationEvaluator.checkUrlPermission()`](../tiny-security-core/src/main/java/org/tinycloud/security/authorization/AuthorizationEvaluator.java#L41-L50)（原先只用 `request.getRequestURI()` 做 Ant 匹配）
 - **影响**："拥有 `GET /user` 读权限"等价于"拥有 `DELETE /user` 权限"。另外它拿的是含 context-path 的 URI，context-path 一改全部权限码失效（fail-closed，安全但难用）。
-- **修复方向**：权限码纳入 Method；用 Spring 已解析的 `PathPattern` 替代裸 URI。
-- **状态**：`TODO`
+- **状态**：`DONE`（`1.5.0`）
+
+##### P1-10 实施记录（1.5.0）
+
+**方案（采纳"可选 Method"）**：权限码支持 `METHOD 路径` 写法（空格分隔、Method 大小写不敏感），**不写 Method 则匹配任意 Method**。这样既补上读写不分的漏洞，又让存量配置（裸路径，README 原要求）行为完全不变 —— 因此本项是**新增能力**，不是破坏性变更。
+
+| 项 | 内容 |
+|---|---|
+| 解析规则 | `methodSeparatorIndex()` 只认**第一个空格**，且要求其左侧是合法 Method 前缀：`*`，或全字母且长度 ≤ 8。否则返回 -1，整条权限码按**裸路径**处理 |
+| 为什么卡"全字母 + 长度 ≤ 8" | 避免把业务权限码误解析 —— 例如 `system:user:add` 含冒号、不是合法 Method，必须整条当路径；`DELETE`(6) / `OPTIONS`(7) 在长度内，超过 8 的必然不是 Method |
+| `*` 通配 | `* /user/**` 与 `/user/**` 等义（显式写法的价值：表达"我知道能限 Method，但这里就是要全放"） |
+| 兼容旧签名 | 保留 `matchPaths(Collection, String)` 两参重载，内部委托三参重载（`requestMethod = null`）。`null` 时只按裸路径匹配，不引入 Method 约束 |
+| **context-path（决策：不修）** | 用户修改 context-path 属其自身部署行为，框架替他兜底反而引入"到底带不带前缀"的歧义。改为在 `README` §2.3.3 明确警告：权限码匹配**含 context-path** 的完整 URI，改 context-path 会导致既有权限码全部失配（fail-closed，不越权，但需同步调整配置） |
+| **不换匹配器（决策：`WONTFIX`）** | **不把 `AntPathMatcher` 换成 `PathPattern`**。本项原本把"用 Spring 已解析的 `PathPattern` 替代裸 URI"列为修复方向，经实测**该方向是错的**：<br>① **它修不了它想修的问题**：`%2F` 之类的编码绕过与匹配器无关，根源在**输入源** —— `request.getRequestURI()` 返回的是**未解码**的原始 URI。实测两者行为完全一致：`/user/*` vs `/user/a%2Fb` 都是 `true`，`/**` vs `/user%2e%2e/admin` 都是 `true`。真要修得换输入源（改用 Spring 已解析的路径），而那是 `AuthorizationManager.authorize(...)` 的签名变更，属公开 API 变更，成本远大于换匹配器。<br>② **收益几乎为零**：逐条实测 23 组 pattern，现有词汇表（`/**`、`/user/*`、`/{id}`、`?`）两者结论**完全一致**；唯一实质好处是 PathPattern 支持正则路径变量（`{id:[0-9]+}`），框架目前没有任何地方需要。<br>③ **风险是真实的**：路径**中间**的 `**` 在 Ant 下正常匹配，在 PathPattern 下**直接抛 `PatternParseException`**（`No more pattern data allowed after {*...} or ** pattern element`）—— 存量权限码（如 `/user/**/edit`）会从"能匹配"变成"每次请求抛异常"，属**破坏性变更**。<br>④ 另有细微差异：连续双斜杠 `/user/*` vs `/user//list`（Ant=true / PP=false）。<br>**若将来确实需要**正则路径变量、或要修正编码绕过，应按「**先换输入源，再评估匹配器**」的顺序单独立项 |
+| 先证缺陷 | 新增 6 条用例，改动前**4 条变红**，其中 `checkUrlPermissionShouldEnforceHttpMethodWhenSpecified:198` 的失败形态正是漏洞本身：`DELETE /user/**` 权限码在 GET 请求上返回 `true` |
+| 反向验证 | 把 Method 比较变异为恒假（等价于"不看 Method"）→ 2 例变红，报错逐字为 `GET 请求不得被 DELETE 权限码放行 ==> expected: <false> but was: <true>` 与 `未授予 DELETE，不得放行 ==> expected: <false> but was: <true>`；还原后恢复绿 |
+| 测试同步 | `AuthorizationEvaluatorTest` 17 例 → 23 例：Method 强制、读写分离、不写 Method 匹配任意、大小写不敏感、非 Method 前缀按裸路径、`*` 通配，各一条 |
 
 #### P1-11 · 事件机制：失败路径监听器异常会顶掉原始异常；成功事件携带完整 token
 
@@ -721,7 +736,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 1 | `AuthorizationInfoGet` 从「`Set<String>` 裸集合」升级为结构化 `AuthorizationModel`（角色 + 权限码 + 数据范围 + 权限版本号），保留旧 SPI 适配器做兼容 | 这是产品级能力的地基 |
 | 2 | **权限缓存与失效**：请求级缓存（必做）+ 可选短 TTL 本地缓存 + `refreshPermission(loginId)` 主动失效钩子 | 当前 README 说"框架不做缓存，请自行处理"，等于把最麻烦的部分推给用户，也放弃了产品价值 |
 | 3 | **数据权限**：`@DataScope(deptAlias=..., userAlias=...)` + MyBatis/JPA 拦截器 | **最有可能"别人没有"的能力** |
-| 4 | URL 模式补 HTTP Method 与 `PathPattern` 匹配 | P1-10 |
+| 4 | ~~URL 模式补 HTTP Method~~ ✅ **`1.5.0` 已完成**（可选 Method，存量裸路径行为不变）。~~`PathPattern` 替换~~ ⏭️ **`WONTFIX`**：实测它修不了编码绕过（那是输入源的问题）、现有词汇表两者结论完全一致、而中间的 `**` 会让存量权限码直接抛异常（详见 P1-10 实施记录） | P1-10 |
 | 5 | 可选：登录失败次数限制/锁定（现在只发事件不消费）、CSRF token 支持 | 补齐安全闭环 |
 
 **退出标准**：能在一个真实中后台项目里，用本框架实现"菜单/按钮权限 + 数据范围过滤"，且不依赖任何额外框架。
