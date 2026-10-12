@@ -183,6 +183,92 @@ class AuthorizationEvaluatorTest {
         assertFalse(AuthorizationEvaluator.checkUrlPermission(null, Set.of("/**")));
     }
 
+    // ---------------- checkUrlPermission 的 HTTP Method 限定（P1-10） ----------------
+
+    /**
+     * 权限码带 Method 时，只有该 Method 才能通过 —— 这是 P1-10 的核心：
+     * 此前只用 URI 做 Ant 匹配，于是「拥有 <code>GET /user</code> 读权限」等价于
+     * 「拥有 <code>DELETE /user</code> 权限」。
+     */
+    @Test
+    void checkUrlPermissionShouldEnforceHttpMethodWhenSpecified() {
+        MockHttpServletRequest getRequest = new MockHttpServletRequest("GET", "/user");
+        getRequest.setRequestURI("/user");
+
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(getRequest, Set.of("GET /user/**")),
+                "GET 请求应被 GET 权限码放行");
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(getRequest, Set.of("DELETE /user/**")),
+                "GET 请求不得被 DELETE 权限码放行");
+    }
+
+    /**
+     * 对照：读写分离的两个权限码，四种 Method 各自只能命中自己的那条。
+     */
+    @Test
+    void checkUrlPermissionShouldSeparateReadAndWritePermissions() {
+        Set<String> permissions = Set.of("GET /user/**", "POST /user/**");
+
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("GET", "/user/list"), permissions));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("POST", "/user/list"), permissions));
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(mockRequest("DELETE", "/user/list"), permissions),
+                "未授予 DELETE，不得放行");
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(mockRequest("PUT", "/user/list"), permissions),
+                "未授予 PUT，不得放行");
+    }
+
+    /**
+     * 不带 Method 的权限码仍匹配**任意** Method —— 这是兼容性保证：
+     * 存量用户配置的都是裸路径（README 要求权限码与接口 URL 相匹配），行为必须完全不变。
+     */
+    @Test
+    void checkUrlPermissionShouldMatchAnyMethodWhenMethodNotSpecified() {
+        Set<String> permissions = Set.of("/user/**");
+
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("GET", "/user/list"), permissions));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("DELETE", "/user/1"), permissions));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("PATCH", "/user/1"), permissions));
+    }
+
+    /**
+     * Method 大小写不敏感：HTTP Method 本身是大小写敏感的规范大写串，但用户配置时写小写应同样生效。
+     */
+    @Test
+    void checkUrlPermissionShouldIgnoreMethodCase() {
+        MockHttpServletRequest request = mockRequest("GET", "/user/list");
+
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("get /user/**")));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("Get /user/**")));
+    }
+
+    /**
+     * 前缀不是合法 HTTP Method 时，整条权限码按**原样的裸路径**处理，不得被误解析。
+     * <p>典型场景：业务权限码本身含冒号（如 {@code system:user:add}），或路径中含空格。
+     */
+    @Test
+    void checkUrlPermissionShouldTreatNonMethodPrefixAsPlainPath() {
+        // "system:user:add" 不是合法 Method，应作为整条路径参与 Ant 匹配
+        MockHttpServletRequest request = mockRequest("GET", "system:user:add");
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("system:user:add")),
+                "非 Method 前缀的权限码必须按裸路径匹配，不能被截断成 Method");
+    }
+
+    /**
+     * 各 Method 之间的通配：`* /user/**` 匹配任意 Method（显式写法，与不写 Method 等义）。
+     */
+    @Test
+    void checkUrlPermissionShouldSupportWildcardMethod() {
+        Set<String> permissions = Set.of("* /user/**");
+
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("GET", "/user/list"), permissions));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("DELETE", "/user/1"), permissions));
+    }
+
+    private static MockHttpServletRequest mockRequest(String method, String uri) {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
+        request.setRequestURI(uri);
+        return request;
+    }
+
     // ---------------- 测试用注解控制器 ----------------
 
     @SuppressWarnings("unused")

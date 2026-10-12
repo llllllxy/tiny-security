@@ -441,6 +441,25 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 ### 2.3.3 直接通过URL控制权限（不支持角色校验）
 PermissionInfoInterfaceImpl实现类里返回的权限编码要和接口URL相匹配（需要带上context-path）
 
+**可选：限定 HTTP Method（1.5.0 新增）**
+
+权限码可以写成 `METHOD 路径`（中间一个空格，Method 大小写不敏感）：
+
+| 权限码写法 | 匹配语义 |
+|---|---|
+| `/user/**` | 匹配**任意** Method（与 1.5.0 之前一致，存量配置无需改动） |
+| `GET /user/**` | 只匹配 GET |
+| `POST /user/**` | 只匹配 POST |
+| `* /user/**` | 匹配任意 Method（与不写 Method 等义） |
+
+> ⚠️ **建议显式限定 Method**：不写 Method 时，「拥有 `GET /user` 读权限」等价于「拥有
+> `DELETE /user` 权限」。读写分离的接口请写成 `GET /user/**` 与 `POST /user/**` 两条。
+
+> ⚠️ **context-path 警告**：权限码匹配的是**含 context-path 的完整 URI**（例如应用配了
+> `/api`，实际请求 URI 是 `/api/user/list`）。**修改应用的 context-path 会导致既有权限码
+> 全部失配**，表现为原本有权限的用户全部 403（fail-closed，不会越权，但需要同步调整配置）。
+> 若确实要改 context-path，请一并更新所有权限码。
+
 ---
 
 ### 2.3.3 权限通配符的使用
