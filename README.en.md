@@ -81,6 +81,8 @@ tiny-security:
    # URL parameter is NOT read by default (enable-url-token=false) since URL-borne tokens leak into access logs.
    token-name: token
    # Session timeout (seconds), default 1800 (30 min)
+   # Positive integers only: 0 or a negative value makes the application fail at startup
+   # (never-expiring sessions are considered an anti-pattern and are not supported)
    timeout: 1800
    # Max concurrent logins per account, 0 = unlimited (default)
    max-concurrent-logins: 2

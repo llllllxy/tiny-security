@@ -76,7 +76,13 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
                 log.error("SingleSessionRepository save failed: credentials collision detected, or the timeout {} is invalid. The session was not created!", timeoutSeconds);
                 return false;
             }
-            this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
+            // 先写会话、再原子占名额，顺序不能颠倒：若先占名额，并发的清理逻辑会因为凭证还不存在
+            // 而把刚加入的凭证误判为"失效"并移除
+            if (!this.addToOnlineListIfLimitNotExceeded(subject.getLoginId(), subject.getCredentials(), maxConcurrentLogins)) {
+                // 并发竞争下没抢到名额：必须回滚刚写入的会话，否则会留下一个绕过并发上限的可用会话
+                this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials());
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
+            }
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;
@@ -246,12 +252,25 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     }
 
     /**
-     * 将凭证加入账号在线列表。
+     * 原子地判断并发上限并把凭证加入账号在线列表。
+     *
+     * <p>"判断上限"与"入列"必须在**同一把锁**内完成，否则并发登录会得到两种错误结果：
+     * 都通过上限判断后各自入列 → 实际在线数突破上限；或都入列后各自发现超额、各自摘掉自己 →
+     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷，见 P1-7）。
+     *
+     * @param loginId              账号ID
+     * @param credentials          会话凭证
+     * @param maxConcurrentLogins  最大并发登录数（&lt;=0 表示不限制）
+     * @return true 已入列；false 已达并发上限，此时**未**入列
      */
-    private void addToOnlineList(Object loginId, String credentials) {
+    private boolean addToOnlineListIfLimitNotExceeded(Object loginId, String credentials, int maxConcurrentLogins) {
         String loginIdStr = String.valueOf(loginId);
         synchronized (onlineLock) {
+            if (maxConcurrentLogins > 0 && this.countValidOnlineSessions(loginId) >= maxConcurrentLogins) {
+                return false;
+            }
             this.loginIdToCredentialsMap.computeIfAbsent(loginIdStr, k -> new CopyOnWriteArrayList<>()).add(credentials);
+            return true;
         }
     }
 

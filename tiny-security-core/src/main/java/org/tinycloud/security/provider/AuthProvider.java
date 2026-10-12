@@ -106,6 +106,9 @@ public class AuthProvider extends TinySecurityFacade {
         this.properties = properties;
         this.securityEventPublisher = securityEventPublisher;
         this.tokenSecret = resolveTokenSecret(properties.getTokenSecret());
+        Integer timeout = properties.getTimeout();
+        Assert.isTrue(timeout == null || timeout > 0,
+                "Invalid tiny-security.timeout: " + timeout + ". It must be a positive number of seconds.");
     }
 
     /**

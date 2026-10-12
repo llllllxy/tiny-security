@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
@@ -49,17 +50,21 @@ class RedisSessionRepositoryTest {
 
     /**
      * 登录时在线列表 key 必须被设置 2 倍会话超时的 TTL。
+     *
+     * <p>自 P1-7 起，"判断并发上限 + 入列 + 设置列表 TTL"三步合并为一个 Lua 脚本原子执行，
+     * 所以这里断言的是脚本收到的参数（第三个参数即列表 TTL 秒数），不再是独立的 EXPIRE 命令。
      */
     @Test
     void saveShouldSetOnlineListTtlToTwiceSessionTimeout() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(1L);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-1"), 60, 0));
 
-        verify(listOperations).rightPush(ONLINE_KEY, "cred-1");
-        verify(redisTemplate).expire(ONLINE_KEY, 120L, TimeUnit.SECONDS);
+        // ARGV[3] = 120 = 会话超时 60 秒 × 2
+        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of(ONLINE_KEY)), eq("cred-1"), eq("0"), eq("120"));
         verify(valueOperations).setIfAbsent(eq("tiny:security:credentials:cred-1"), anyString(), eq(60L), eq(TimeUnit.SECONDS));
     }
 
@@ -74,13 +79,13 @@ class RedisSessionRepositoryTest {
         when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("dead-cred"), List.of());
         when(redisTemplate.hasKey("tiny:security:credentials:dead-cred")).thenReturn(false);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(1L);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-new"), 60, 0));
 
         verify(redisTemplate).hasKey("tiny:security:credentials:dead-cred");
         verify(listOperations).remove(ONLINE_KEY, 1L, "dead-cred");
         verify(redisTemplate).delete(ONLINE_KEY);
-        verify(redisTemplate).expire(ONLINE_KEY, 120L, TimeUnit.SECONDS);
     }
 
     /**
@@ -124,8 +129,53 @@ class RedisSessionRepositoryTest {
 
         assertFalse(repository.save(buildSubject(10001L, "cred-dup"), 60, 0));
 
-        // 碰撞时不得把该凭证写进在线列表，避免污染索引
+        // 碰撞时不得把该凭证写进在线列表，避免污染索引（入列的唯一入口就是那个原子脚本）
+        verify(redisTemplate, never()).execute(any(RedisScript.class), anyList(), any(), any(), any());
         verify(listOperations, never()).rightPush(anyString(), anyString());
+    }
+
+    /**
+     * 并发上限必须由**一个原子脚本**判定并入列（P1-7）。
+     *
+     * <p>本用例锁住的是修复的**结构性前提**：上限值随脚本下传（ARGV[2]），
+     * 且代码里不再存在"先 rightPush 再用 size 事后发现超额、然后摘掉自己"的两步写法 ——
+     * 那正是真实 Redis 实测中"上限为 1 时 4 个并发登录全部被拒"的成因。
+     *
+     * <p>并发语义本身无法在 Mockito 下验证（它不模拟 Redis 的原子性），
+     * 因此另由真实 Redis 探针验证：修复前 0/4 成功，修复后恰好 1/4 成功。
+     */
+    @Test
+    void saveShouldJudgeConcurrentLimitAtomicallyInScript() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of());
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(1L);
+
+        assertTrue(repository.save(buildSubject(10001L, "cred-3"), 60, 3));
+
+        // ARGV[2] = 并发上限；上限判定发生在脚本内，而非 Java 侧的先查后写
+        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of(ONLINE_KEY)), eq("cred-3"), eq("3"), eq("120"));
+        verify(listOperations, never()).rightPush(anyString(), anyString());
+        verify(listOperations, never()).size(anyString());
+    }
+
+    /**
+     * 脚本判定"已达上限"（返回 0）时：必须**回滚刚写入的会话**并抛出超限异常。
+     * 否则会留下一个不在在线列表里、却可以正常使用的会话，等于绕过并发上限。
+     */
+    @Test
+    void saveShouldRollbackSessionWhenScriptRejectsOverLimit() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of());
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
+        when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(0L);
+
+        assertThrows(ConcurrentLoginOverLimitException.class,
+                () -> repository.save(buildSubject(10001L, "cred-4"), 60, 1));
+
+        verify(redisTemplate).delete("tiny:security:credentials:cred-4");
     }
 
     /**

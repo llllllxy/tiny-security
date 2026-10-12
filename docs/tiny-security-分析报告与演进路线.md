@@ -7,7 +7,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）。测试 core 199 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 212 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 29 个 / 215 个用例（`1.5.0` 实测值） |
+| 代码规模 | 生产类 58 个；测试类 30 个 / 228 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -304,7 +304,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   2. 单独捕获 `NoUniqueBeanDefinitionException`：它是 `NoSuchBeanDefinitionException` 的**子类**，若只捕获后者，容器里存在两个 `AuthProvider` 候选 Bean 时会被误报成「一个都没有」，把排查方向带反。已加回归用例 `shouldReportMultipleCandidatesInsteadOfMissingBean`，并做了反向验证（去掉该分支后该用例立即变红）。
 - **残留边界（已知、可接受）**：若同时存在 `ContextLoaderListener` 的根容器与 `DispatcherServlet` 子容器，且 `AuthProvider` 只注册在**子容器**，那解析到的是根容器，`getBean` 会失败。这是「仅凭 ServletContext 定位容器」的固有限制，且与框架定位（Spring Boot starter）无关 —— Boot 下只有一个应用容器。
 - **对外行为不变**：`AuthUtil` 的方法签名与语义完全不变；未登录/会话失效仍统一抛 `UnAuthorizedException`；无注解接口上的 `hasRole`/`hasPermission` 仍按需懒加载（P0-1）。
-- **已知限制（取舍）**：`AuthUtil` 只适用于持有当前请求的线程。非 Web 线程（`@Async`、MQ 消费线程）取不到请求，抛 `UnAuthorizedException` —— 与 `1.5.0` 之前一致，真正的传播能力仍待 P1-3；这类场景请直接注入 `AuthProvider`。
+- **已知限制（取舍）**：`AuthUtil` 只适用于持有当前请求的线程。非 Web 线程（`@Async`、MQ 消费线程）取不到请求，抛 `UnAuthorizedException` —— 与 `1.5.0` 之前一致；这类场景请直接注入 `AuthProvider`。该限制已判定为**使用方式问题而非框架缺陷**（见 P1-3 的定级修正），框架不做自动传播。
 - **破坏性变更**：`TinySecurityFacade` 不再公开（包级私有且移到 `provider` 包）；`AuthUtil.setFacade` / `AuthUtil.getFacade` 删除；容器里不再有 `tinySecurityFacade` Bean。
 - **反向验证**（两处，均确认用例真能抓住缺陷）：
   1. 把 `AuthUtil` 的「每请求解析」退化成「首次解析后缓存进静态字段」（即 P1-1 的失败形态）→ `AuthUtilTest` 7 个用例中 **5 个立即变红**，头号用例报错正是症结：`expected: <second-user> but was: <first-user>`。
@@ -319,12 +319,18 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 - **修复方向**：`AuthProvider` 直接注入 `SecurityContextRepository`。
 - **状态**：`DONE`（`1.5.0`，与 P1-1 同批；实施细节与反向验证见上方记录）
 
-#### P1-3 · 异步线程拿不到安全上下文（只修了"残留"，没修"传播"）
+#### P1-3 · 异步线程拿不到安全上下文 —— **定级修正：判定为使用方式问题，不修改**
 
 - **证据**：[`ThreadLocalSecurityContextRepository.java:17`](../tiny-security-core/src/main/java/org/tinycloud/security/context/ThreadLocalSecurityContextRepository.java#L17)（纯 ThreadLocal）+ [`AuthenticationInterceptor.java:50-55`](../tiny-security-core/src/main/java/org/tinycloud/security/interceptor/AuthenticationInterceptor.java#L50-L55)（1.3.3 加的**入口兜底清理**只解决了"上一请求残留"）
-- **影响**：`Callable` / `DeferredResult` / `@Async` / MQ 消费线程里调用 `AuthUtil.*` 会抛 401（或读到错误身份）。1.3.3 的注释也承认没引入全局 Filter。
-- **修复方向**：提供 `SecurityContextPropagator` / `TaskDecorator`，覆盖 `@Async`、`Callable`/`DeferredResult`、MQ 消费。
-- **状态**：`TODO`
+- **现象**：`Callable` / `DeferredResult` / `@Async` / MQ 消费线程里调用 `AuthUtil.*` 会抛 `UnAuthorizedException`（与 `1.5.0` 之前一致）。
+- **为什么不修（决策，`1.5.0`）**：线程绑定的上下文在切线程后失效，与 `RequestContextHolder` / `SecurityContextHolder` / `TransactionSynchronizationManager` 完全同构 —— **在异步线程里取请求作用域的状态本身就是误用**，应由使用者规避（改为注入 `AuthProvider`），框架不承担这个责任。
+  - **Spring 的同款先例**：`SecurityContextHolder` 同样是 ThreadLocal，Spring Security 的答案不是"自动传播"，而是提供一个**可选**的 `DelegatingSecurityContextAsyncTaskExecutor`，由使用者显式装配。
+  - **实测确认框架自身没有这个坑**：框架自有的两条后台线程都只做过期清理、不需要身份 —— [`JdbcSessionRepository.java:254`](../tiny-security-core/src/main/java/org/tinycloud/security/session/JdbcSessionRepository.java#L254) 只跑 `DELETE ... WHERE credentials_expire_time < ?`，[`LocalTimeCache.java:228`](../tiny-security-core/src/main/java/org/tinycloud/security/session/timedcache/LocalTimeCache.java#L228) 只跑 `refreshDataMap()`。即"需要身份的工作"从不被框架丢到别的线程，责任边界清晰。
+- **原"修复方向"的评估结论（不采纳，记录以备将来）**：`SecurityContextPropagator` / `TaskDecorator` 只对 `@Async` 便宜（已反查字节码确认 Boot 消费 `ObjectProvider<TaskDecorator>`：`TaskExecutorConfigurations$ThreadPoolTaskExecutorBuilderConfiguration.threadPoolTaskExecutorBuilder(...)`，故声明一个 `TaskDecorator` Bean 即自动接到 `applicationTaskExecutor`，用户零配置），`Callable`/`DeferredResult` 需另装 `AsyncTaskExecutor` 并先实测，而 **MQ 消费根本传播不了**（`TaskDecorator.decorate()` 在提交方线程执行，MQ 消费者没有提交方，只能让消息携带身份显式重建）。三者难度差一个数量级，并列为一条待办本身就不成立。
+  - 另有一处技术遗漏：只传播 `SecurityContext` **不够** —— `AuthUtil` 的第一步是读 `RequestContextHolder`（[`WebRequestUtils.java:29-35`](../tiny-security-core/src/main/java/org/tinycloud/security/web/WebRequestUtils.java#L29-L35)），必须连 `RequestAttributes` 一并传播，或改成"上下文可从 request 取得"。
+  - 若将来仍要做，应作为**可选**能力（提供装饰器 Bean、不自动生效），且需先拍板"传播 `RequestAttributes` 还是传播已解析的 `AuthProvider` 引用"（前者把 request 引用带出请求生命周期，后者需给 `AuthUtil` 开一个线程绑定的覆盖入口）。
+- **配套**：用户可见文档需补这条边界，见 §3.5 `DOC-14`。
+- **状态**：`WONTFIX`
 
 #### P1-4 · 注解只认「方法本身 + 方法直接声明类」，父类/接口上的注解被忽略 → 静默失去保护
 
@@ -370,7 +376,19 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 - **证据**：[`DefaultAuthenticationManager.java:53-65`](../tiny-security-core/src/main/java/org/tinycloud/security/authentication/DefaultAuthenticationManager.java#L53-L65)（只判断"剩余 TTL 是否 ≤ timeout×20%"，**从不判断是否已过期**）
 - **影响**：四个内置仓储确实过滤了过期，但 README 明确鼓励用户自定义仓储 —— 一旦漏了这层过滤，**过期会话会被无限续期**（走刷新分支 `setLoginExpireTime(now + timeout)` 把它复活）。安全框架不该把核心判定外包给插件。
 - **修复方向**：内核加一次 `expireTime <= now → 401`。
-- **状态**：`TODO`
+- **状态**：`DONE`（`1.5.0`）
+
+##### P1-6 实施记录（1.5.0）
+
+| 项 | 内容 |
+|---|---|
+| 改动 | [`DefaultAuthenticationManager.authenticate()`](../tiny-security-core/src/main/java/org/tinycloud/security/authentication/DefaultAuthenticationManager.java#L58-L67) 在续期判断**之前**增加绝对过期校验：`expireTime == null \|\| expireTime <= currentTime` → `UnAuthorizedException` |
+| 位置理由 | 必须放在续期分支**之前**。续期条件是 `expireTime - currentTime <= millsCritical`，对已过期会话左侧恒为负数、条件**必然成立** —— 顺序颠倒就还是复活 |
+| 顺带加固 | `long expireTime` 改为 `Long` 并先判 `null`：自定义仓储返回不完整主体时，原来是拆箱 NPE(500)，现在按"已失效"返回 401（与"未登录/会话失效"语义一致） |
+| 为什么"仓储已过滤还要再判一次" | 这是本项被质疑最多的一点，结论是**必须判**：① [`SessionRepository.getSubject`](../tiny-security-core/src/main/java/org/tinycloud/security/session/SessionRepository.java#L33-L39) 的契约只写了 `@return 登录主体`，**从未承诺**过期时返回 `null`（对比同一接口的 `getCredentialsByLoginId`，那里明确写了"有效（未过期）""不返回 null"）—— 内核消费的是 SPI，不能依赖一条没有写下来的义务；② 即便用**内置**仓储，「存储层 TTL」与 `subject.loginExpireTime` 也是两个**互相独立的量**：`save(subject, timeoutSeconds, max)` 的这两个参数由调用方分别给出，single 仓储不校验二者一致。已用内置 `SingleSessionRepository` 实测出"存储层仍有效、`loginExpireTime` 已过期 60 秒"的会话被 `getSubject` 正常返回、`checkByCredentials` 也返回 true |
+| 测试 | `DefaultAuthenticationManagerTest` 由 4 个增至 7 个用例：`shouldRejectExpiredSubjectInsteadOfRefreshingIt`（过期 → 401 且不得改写过期时间）、`shouldAcceptNeverExpiringSubjectWithoutRefresh`（永不过期护栏）、`shouldRejectStoreValidButExpiredSubjectOnBuiltInSingleRepository`（**用内置 single 仓储**复现上面第 ② 点，证明该分支在生产路径上真的够得着，而不只是"自定义仓储才可能"） |
+| 反向验证 | 把校验改成 `if (false)`：假仓储与内置仓储两条用例**同时**变红，均报 `Expected UnAuthorizedException to be thrown, but nothing was thrown`（`:134` / `:206`）—— 即**过期会话被放行**。去掉校验后的实测输出为"放行 ✗，续期后 expireTime 距现在 1800 秒"，复活行为被直接观察到 |
+| 边界 | 本项只解决"已过期不得使用"；**会话在存储侧的清理**仍由各仓储负责（缓存过期、JDBC 的 `DELETE ... < now`），内核不做存储层清理 |
 
 #### P1-7 · 并发登录上限是 check-then-act，且四个仓储强度不同
 
@@ -379,21 +397,75 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   - [`JdbcSessionRepository.java:230-237`](../tiny-security-core/src/main/java/org/tinycloud/security/session/JdbcSessionRepository.java#L230-L237)、[`SingleSessionRepository.java:230-237`](../tiny-security-core/src/main/java/org/tinycloud/security/session/SingleSessionRepository.java#L230-L237)、[`CaffeineSessionRepository.java:263-270`](../tiny-security-core/src/main/java/org/tinycloud/security/session/CaffeineSessionRepository.java#L263-L270)（**只有第一道**）
 - **影响**：并发登录突发时 JDBC/内存版可突破上限；Redis 版存在"两个并发请求各自 push 后都超额、于是都自我移除 → 明明有空位却双双失败"的边缘情形。测试全是串行的。
 - **修复方向**：Redis 用 Lua 保证原子；JDBC 用唯一约束/乐观锁；内存版加锁。四个仓储行为必须一致。
-- **状态**：`TODO`
+- **现状核实（`1.5.0`）**：全仓库**不存在任何** Lua / `RedisScript` / `EVAL` / `MULTI-WATCH`，Redis 侧只有 `setIfAbsent` / `set` / `expire` / `rightPush` / `remove` / `size` 等单命令原语 —— 即上面两道闸门**至今仍是非原子的**，本项尚未动工。两种竞态后果：① Redis 在 `max=1` 且两个并发登录同时看到 `0 < 1` 时，双方各自 `rightPush` 后都发现超额、都摘掉自己、**双双失败**，而实际还剩一个空位；② JDBC / Single / Caffeine 只有第一道闸门，两个并发请求会**直接突破上限**（静默超额）。
+- **排期调整与撤回（`1.5.0`）**：本项曾计划从 §4.3 第 4 行下移到第 8 行（与 TCK 同批），理由是"四个仓储一致"应由 TCK 判定。随后决定**就地完成**，因为真实 Redis 实测（见下）表明它的严重程度远超"一致性"范畴 —— 配了并发上限的账号在突发登录下**一个也登不进来**。TCK 的收敛判定仍然有效，但不应作为推迟一个"登录不可用"缺陷的理由。
+- **状态**：`DONE（3/4）`（`1.5.0`）—— Redis / Single / Caffeine 已做到**可证明的原子**；Jdbc 是**残余项**，见下
+
+##### P1-7 实施记录（1.5.0）
+
+**先取证（真实环境）**：修复前用同一探针压测，`maxConcurrentLogins = 1`、4 个并发登录，**3/3 轮都是 0 成功、4 个全被拒、在线列表空** —— 这不是"上限被绕过"，而是"谁都登不进来"。JDBC（H2）同样实测：`max = 3`、16 个并发线程 **16/16 全部成功**（3/3 轮），上限完全失效。
+
+| 仓储 | 修复方式 | 原子性依据 |
+|---|---|---|
+| `redis` | 新增 Lua 脚本 `ADD_TO_ONLINE_LIST_SCRIPT`：`LLEN >= max ? return 0 : RPUSH + EXPIRE` 一次执行 | Redis 单线程执行脚本，天然原子。脚本**只操作 KEYS[1] 一个键** —— Redis Cluster 要求脚本内所有键同属一个 slot，而"凭证 key"与"在线列表 key"天然不同 slot，故失效凭证清理仍留在 Java 侧 |
+| `single` | `addToOnlineListIfLimitNotExceeded()`：把 `countValidOnlineSessions()` 挪进**已有的** `onlineLock` 内，与 `add` 同锁 | `synchronized` 互斥（可重入，count 内部原也有同锁） |
+| `caffeine` | 同上，同样复用已有的 `onlineLock` | 同上 |
+
+| 项 | 内容 |
+|---|---|
+| 关键顺序 | 三处都改成**先写会话、再原子占名额**。反过来（先占名额）会踩到一个更隐蔽的竞态：并发的清理逻辑会因为"凭证 key 还没写入"而把刚入列的凭证**误判为失效并移除**，结果是会话存在却不在列表里，上限被静默绕过 |
+| 失败必须回滚 | 占名额失败（含脚本返回 0、以及占名额这一步自身抛异常）都必须**删掉刚写入的会话**再抛 `ConcurrentLoginOverLimitException`；否则留下一个不在在线列表里、却可以正常使用的会话。<br>**顺带修掉一个此前未被发现的同类缺陷**：修复前 Redis 在超限路径上是"push → 发现超额 → 摘掉自己 → 抛异常"，**始终没有删除会话 key**，于是被"拒绝"的那次登录反而留下一个可用且未被计数的会话 —— 即超限分支本身就在**绕过上限**，安全性上比"登不进来"更糟 |
+| 新增的部署前提 | Redis 路径现在依赖 **`EVAL`（Lua 脚本）**。标准 Redis / ElastiCache 均支持；但**不支持 `EVAL` 的代理或兼容服务（如 Twemproxy）会让登录直接失败**（失败是响亮的：`save` 返回 false，不静默）。已写入 CHANGELOG 升级检查清单，并给出替代方案（切 `single` / `caffeine`） |
+| 触发条件（严重性定位） | 本项是**预防性质**：`maxConcurrentLogins` 默认值就是 `0`（不限制，见 `AuthProperties.java:45`），整条判定路径默认根本不执行；即便配了上限，也需要**同一账号在几毫秒内**发生两次登录（客户端双击、超时重试、移动端多个 401 并行触发重新登录）。因此它不是"线上随时会炸"的缺陷，而是"一旦配了上限就会踩到"的缺陷 —— 这也是本次不值得为 JDBC 残余付出破坏性 DDL 的理由之一 |
+| 删除的两步写法 | Redis 原"push 后再查 size、超了自己摘掉自己"的第二道闸门**整段删除** —— 它既是"双双失败"的成因，在原子脚本下也不再需要 |
+| Redis 保留第一道闸门 | `checkMaxLoginLimit()` 仍作为快速失败路径保留（命中时连会话都不写），真正的判定移到脚本内 |
+| 返回值 `null` 的处理 | 脚本异常地返回 `null` 时按"未入列"处理（拒绝登录）—— 安全方向，绝不放过一个未被计数的会话 |
+| 并发测试 | `SingleSessionRepositoryTest` / `CaffeineSessionRepositoryTest` 各新增 `concurrentLoginsShouldNotExceedLimit`：16 线程卡同一栅栏同时登录、`max=3`，断言**恰好** 3 个成功、13 个被明确拒绝、在线数=3。这是本仓库**第一批并发用例**（此前全是串行） |
+| Redis 契约测试 | `RedisSessionRepositoryTest` 新增 2 个：`saveShouldJudgeConcurrentLimitAtomicallyInScript`（断言上限值随脚本下传，且 `rightPush` / `size` **从不**被调用）、`saveShouldRollbackSessionWhenScriptRejectsOverLimit`（脚本返回 0 时必须回滚会话） |
+| 反向验证 | 去掉内存版原子守卫（`if (false)`）后并发用例**如实变红**：Single `concurrentLoginsShouldNotExceedLimit:278 expected: <3> but was: <4>`、Caffeine `:241 expected: <3> but was: <13>` —— 即静默超额 |
+| **Jdbc 残余（未修）** | JDBC 的"先 COUNT 再 INSERT"要真正原子，必须让两步处于同一临界区，而 `JdbcSessionRepository` 只有裸 `JdbcTemplate`（每条语句自动提交），没有事务管理器。三个**不需要改表结构**的候选方案已逐个实测否决：<br>① **单条条件 INSERT**（`INSERT ... SELECT ... WHERE (SELECT COUNT(1) ...) < ?`）：实测 **16/14 行 ≠ 3**，子查询不加锁、各语句各自读快照，**不原子**；<br>② **事务 + `SELECT COUNT(1) ... FOR UPDATE`**：H2 直接报 `FOR UPDATE is not allowed in DISTINCT or grouped select`，聚合与 `FOR UPDATE` 不能共存，**跑不通**；<br>③ **事务 + `SELECT credentials ... FOR UPDATE`**（不加聚合）：只能锁住**已存在**的会话行；账号会话数为 0 时无行可锁，而 H2 / PostgreSQL 无间隙锁 → 最坏情形（空列表并发登录）依然突破上限。<br>**结论**：需要**改表结构**才能真正闭合 —— 例如按 `(login_id, slot)` 建唯一索引、或加一张"每账号一行"的锁表配合事务。两者对既有部署都是**破坏性变更**（需 DDL 迁移），且要引入事务管理，故**未擅自实施**，留待决策。当前 JDBC 仍是 best-effort：串行登录守上限，并发下会突破 |
+| **为什么"上事务"不是解法** | 曾被考虑的"引入事务管理"方向经核实应当**否决**，理由不是复杂而是**修不好**：① `JdbcSessionRepository(JdbcTemplate, String tableName)` 是**公共构造器**，starter 在 `AuthAutoConfiguration:137` 直接 `new`，加事务管理器就要改这个签名（或手写 `setAutoCommit(false)` 的 `ConnectionCallback`），属公共 API 变更；② 更关键的是上面第 ②③ 项实测 —— 加锁读在 H2 上要么语法不通、要么锁不住"账号当前 0 个会话"这个最坏情形，只有在 MySQL 的 REPEATABLE READ 下**隐式依赖间隙锁**才勉强成立，是一条不可见且不可移植的依赖；③ 还会在登录热路径上把连接池连接持有到临界区结束。补充：**这不是"要不要加依赖"的问题** —— `spring-tx:6.1.15` 早已在类路径上（见 `dependency:tree`），纯粹是 API 与语义代价。**真正可行的是不要事务的槽位唯一索引方案**（见 §4.3 第 13 行） |
+| 兜底建议 | 需要**硬性**并发上限的用户，当前零改动即可满足：把 `tiny-security.store-type` 切到 `redis` / `single` / `caffeine` —— 三者已做到可证明的原子（其中 `single` 还是默认值）。只有在必须用 `jdbc` 存储且必须硬限并发时，才值得付出槽位 DDL 的代价 |
 
 #### P1-8 · `timeout <= 0` 在四个仓储里有四种语义；`AuthProperties` 无任何校验
 
 - **证据**：[`AuthProperties.java`](../tiny-security-core/src/main/java/org/tinycloud/security/config/AuthProperties.java)（无 `@Validated` / `@Min`）
 
-  | 仓储 | `timeout = -1` 的行为 |
+  | 仓储 | `timeout = -1` 的行为（**修复前**，均为真实环境实测结论） |
   |---|---|
-  | Single | `NEVER_EXPIRE`，永不过期 |
-  | Caffeine | `nanosUntilExpire` = 0 → **立即驱逐** |
-  | Redis | `expire(key, -1)` → 异常 → `save` 返回 false → **登录失败** |
+  | Single | `NEVER_EXPIRE`，永不过期 —— **本来就对** |
+  | Caffeine | 铸造出的 `loginExpireTime` 是过去时间 → `nanosUntilExpire` 返回 0 → **立即驱逐** |
+  | Redis | **两条写路径行为不同**：`save` 的 SET NX 路径容忍 `-1` 并落成无 TTL（正常）；`refreshByCredentials` 的 SETEX 路径报 `ERR invalid expire time in setex` → 异常被 `catch` 吞掉 → **续期静默失败** |
   | Jdbc | 写入过去的 `credentials_expire_time` → **立即过期** |
-- **影响**：配置错了（`timeout: -1` 是很多同类框架表示"永不过期"的写法）不会有任何提示，行为还因仓储而异。
-- **修复方向**：统一语义 + 启动期校验（非正值直接拒绝或统一为"永不过期"）。
-- **状态**：`TODO`
+
+  > **勘误**：本条目最初把 Redis 写成"`expire(key, -1)` → 异常 → 登录失败"。经真实 Redis 实测，**该结论是错的** —— 登录写入路径（SET NX）并不报错。真正出问题的是续期路径（SETEX）。原始判断错在把"原始 `SET ... EX -1` 会被拒"直接外推到了框架实际调用的 Spring Data 重载上。
+- **影响**：配置错了（`timeout: -1` 是很多同类框架表示"永不过期"的写法）不会有任何提示，行为还因仓储而异。**真正非法的其实是 `0` / `-2`**：实测 Redis 会抛 `RedisSystemException`（`ERR invalid expire time`）导致登录失败，而 Single / Caffeine / Jdbc 会"静默地发出一个立即失效的会话"。
+- **修复方向**：统一语义 + 启动期校验。
+- **状态**：`DONE`（`1.5.0`）—— **最终方案：`timeout` 只允许正数，任何非正值装配期直接拒绝**（曾短暂实现过"`-1` = 永不过期"，已推翻，理由见实施记录）
+
+##### P1-8 实施记录（1.5.0）
+
+**语义决策（含一次自我推翻）**：`timeout` 只有一种含义 —— **正数秒数**；`null`（未配置）沿用 1800 秒默认值；**`0` 与一切负数一律在装配阶段拒绝**。
+
+> **推翻记录**：本项最初采纳的是"折中方案"——把 `-1` 定义为"永不过期"、其余非正值拒绝，并为此引入了 `NEVER_EXPIRE_TIMEOUT = -1` / `NEVER_EXPIRE_TIME = Long.MAX_VALUE` 两个常量与四个仓储的配套分支。该方案**已整体取消**，原因有三：
+> ① **收益存疑**："永不过期"对安全框架是反模式（凭证一旦泄露即永无失效），把它作为一个受支持的配置去精细实现，投入产出不划算；
+> ② **复杂度真实**：它要求保证"存储层 TTL"与 `loginExpireTime` 两套过期口径处处一致，而公开方法 `AuthProvider.refreshByCredentials(credentials, subject)` 只维护前者、不维护后者 —— 两套口径一旦分叉，内核的绝对过期校验会把会话判成 401（旧的滑动续期曾把这个缝"顺手补上"，所以问题一直被掩盖）；
+> ③ **留下了地雷**：`DefaultAuthenticationManager` 的续期会算 `currentTime + timeout * 1000L`，在 `timeout = -1` 下得到的是**过去时间**。它当时不可达，纯粹是因为"绝对过期校验"恰好排在续期判断之前——两个改动**碰巧叠对了**，而非设计保证。任何人调整那段判断的顺序，都会静默造成全量登出。
+> 取消 `-1` 后，①②③ 同时消失：仓储侧不再有任何"永不过期"分支，`-1` 也永远不会流到内核。
+
+| 项 | 内容 |
+|---|---|
+| 装配期校验 | [`AuthProvider` 构造器](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L108-L116)：`Assert.isTrue(timeout == null \|\| timeout > 0, ...)`。**不能用 `@Validated` + `@Min`**：类路径上没有任何 JSR-380 校验器（已实测 `dependency:tree`），注解会**静默空转**，是个假修复 |
+| 铸造点 | [`AuthProvider.login()`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L209-L213)：`currentTime + timeout * 1000L`，恢复为单一表达式（原先的"哨兵三元"已删除） |
+| 内核 | **不需要为 `-1` 加任何分支**。取消 `-1` 后，"续期处 `currentTime + timeout * 1000L` 在 `timeout < 0` 时会算出过去时间"这个问题只可能由"手工 `new DefaultAuthenticationManager(..., 非正数)`"触发 —— 装配期校验挡住了配置入口，而"绝对过期校验"又排在续期判断之前，使非正 timeout 下的续期分支**不可达**。因此这里**不加** `timeout > 0` 守卫：它是可被证明不可达的死代码，且写不出能判别它的测试（实测加上前后用例表现完全一致，见下条"反向验证"）。改为在代码注释里显式写下这段**隐含依赖**（"绝对过期校验必须保持在续期之前"），让将来调整判断顺序的人看到 |
+| 仓储侧 | **四个仓储都不再有任何 `timeout` 语义分支**：`RedisSessionRepository.save/refreshByCredentials` 恢复为无条件带 TTL 的重载；`CaffeineSessionRepository.nanosUntilExpire` 删除溢出特判。它们现在都只依赖"传入的 timeout 必为正数"这一前置条件，并由装配期校验保证 |
+| 与 P1-7 的交互 | Redis 的 Lua 脚本仍以 `ARGV[3] <= 0` 作为"不设置 TTL"的防御性分支（`listTimeoutSeconds`），但正常配置下恒为正值；该分支保留是为了脚本自身的健壮性，不是功能语义 |
+| 测试 | `AuthProviderTimeoutTest` 6 个用例：`0` 拒绝 / **`-1` 拒绝**（本次决策的锁定点）/ `-2` 拒绝 / 正数与 null 可装配 / null→1800 / 正数原样下传并按 60 秒铸造。四个仓储的"永不过期"用例全部删除或改写为"**缺 `loginExpireTime` 时按已失效处理**" |
+| 保留的既有用例 | `SingleSessionRepositoryTest.neverExpireSessionShouldStayValid` 是**改动前就存在**的，它锁的是缓存层 `LocalTimeCache.NEVER_EXPIRE` 的既有能力（与配置层是否允许 `-1` 无关），故保留并在注释中说明二者区别 |
+| 反向验证 | 把装配期校验改成恒真（合法变异，命中 1 处）→ **三个拒绝用例同时变红**：`shouldRejectZeroTimeout:34`、`shouldRejectNeverExpireTimeout:45`、`shouldRejectOtherNegativeTimeout:55`，均报 `Expected IllegalArgumentException to be thrown, but nothing was thrown`。<br>**一次被自己否掉的尝试**：曾为内核续期加过 `this.timeout > 0` 守卫并配了用例 `shouldNeverRefreshWhenTimeoutIsNotPositive`，但反向验证**没能让它变红**（去掉守卫后用例照样通过）—— 原因是该分支在当前代码顺序下不可达（见上行"内核"）。进一步发现那条用例本身也不稳（把过期时间设成 `now + 1ms`，机器稍慢就自己先过期了，JDK 21 上如实报 `UnAuthorizedException`）。**结论：不可达的守卫 + 无法判别的测试一起删除**，只保留代码注释里的依赖说明 —— 留着一个"看着像防护、实则永不执行"的分支，正是本报告反复批评的那种假修复 |
+| 历史实测（保留备查） | 本项在"支持 `-1`"阶段对真实 Redis（`127.0.0.1:6379`）做过实测，结论仍然有效且值得记录：`SET k v EX -1` → `ERR invalid expire time in set`；Spring Data `setIfAbsent(k,v,-1,SECONDS)`（SET NX）却**容忍** `-1` 并落成无 TTL，而 `set(k,v,-1,SECONDS)`（SETEX）报 `ERR invalid expire time in setex` —— **同一客户端库的两条写路径对 `-1` 行为不一致**。这正是"不要在框架里引入需要绕开底层怪癖的语义"的一个具体例证 |
+| 边界 | 配置层只保证"进不来非正值"；仓储作为 SPI 仍可能被直接调用并传入非正值（自定义调用方）。仓储侧不做二次校验，属**有意的信任边界**：校验放在装配期一次，避免四个仓储各写一套重复判断（这也是 P1-7 结论里"四仓储强度不同"的同类教训——**能收敛到一处的校验就不要散落到四处**） |
+| 未做 | P1-7（并发上限 check-then-act）在 `1.5.0` 已就地完成 3/4（Redis / Single / Caffeine 原子化），JDBC 残余另列 §4.3 第 13 行
 
 #### P1-9 · `LoginSubject` 在 single/caffeine 下是**共享引用**，在 redis/jdbc 下是**反序列化副本**
 
@@ -487,7 +559,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | DOC-1 | README **宣传了不存在的类** `MD5Hash` / `Sha256Hash`（12 行示例代码全部无法编译；真实类名是 `SimpleHash`） | [`README.md:613-625`](../README.md#L613-L625) | `TODO` |
 | DOC-2 | README 示例用 `I18nUtils.getMessage(...)`，该类**全项目不存在** | [`README.md:505-515`](../README.md#L505-L515) | `TODO` |
 | DOC-3 | README 用 `authProvider.deleteTokenByLoginId(...)`，真实方法名是 `deleteByLoginId` | [`README.md:334`](../README.md#L334)、[`:341`](../README.md#L341) | `TODO` |
-| DOC-4 | README 称 `AuthUtil.getLoginId()` **未登录返回 null** —— 与 1.4.0 破坏性变更（改为抛异常）和代码**完全相反** | [`README.md:284`](../README.md#L284) | `TODO` |
+| DOC-4 | README 称 `AuthUtil.getLoginId()` **未登录返回 null** —— 与 1.4.0 破坏性变更（改为抛异常）和代码**完全相反**；示例第 282 行 `securityContext == null ? null : ...` 的写法同样建立在"可能返回 null"的错误前提上 | [`README.md:277`](../README.md#L277)、[`:280`](../README.md#L280)、[`:282`](../README.md#L282) | `TODO` |
 | DOC-5 | README §2.5.1 教用户"把 token 放在 URL 参数里传"，但 `enable-url-token` 默认 **false** → 照做必然 401，且未提示需开启 | [`README.md:525-543`](../README.md#L525-L543) | `TODO` |
 | DOC-6 | README 徽章写 **JDK 8+**，pom 实际 `source/target=17`（README.en 写的是 17） | [`README.md:8-10`](../README.md#L8-L10) vs [`pom.xml:38-40`](../pom.xml#L38-L40) | `TODO` |
 | DOC-7 | 引用了**不存在的文档**：`docs/project-analysis-2026-08.md`、`docs/security-audit-and-roadmap-2026-09.md`（`docs/` 目录此前不存在） | [`CHANGELOG.md:91`](../CHANGELOG.md#L91)、[`README.en.md:263`](../README.en.md#L263) | `TODO` |
@@ -497,6 +569,9 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | DOC-11 | 未说明 `t_auth_storage.sql` 的位置与导入方式，也未说明 `login_subject` 的 5000 字符上限 | [`t_auth_storage.sql`](../tiny-security-boot-starter/src/main/resources/sql/t_auth_storage.sql) | `TODO` |
 | DOC-12 | README §2.5.3 把 `SimpleHash`（含 MD5/SHA-1）列在"密码哈希"语境下推荐 | 同 P1-13 | `TODO` |
 | DOC-13 | 缺少一份"配置项全表 + 默认值 + 生效条件"（`AuthProperties` 有 20+ 项，README 只列了一部分） | `AuthProperties` | `TODO` |
+| DOC-14 | 用户可见文档未说明 **`AuthUtil` 只能在持有当前请求的线程上使用**：`@Async` / `Callable` / `DeferredResult` / MQ 消费线程里调用会抛 `UnAuthorizedException`，应改注入 `AuthProvider`。该边界只在 CHANGELOG 与内部文档里写了，README / README.en 的 `AuthUtil` 章节一字未提（见 P1-3 的定级修正） | [`README.md:275-281`](../README.md#L275-L281)、[`README.en.md:221-226`](../README.en.md#L221-L226) | `TODO` |
+| DOC-15 | `README.en.md` 称 "`AuthUtil` is a static facade delegating to the framework context" —— P1-1/P1-2 之后它**不再是静态门面**（门面 Bean 已删除，`TinySecurityFacade` 降为包级私有），实为"每次调用从当前请求的容器解析 `AuthProvider`" | [`README.en.md:221`](../README.en.md#L221) | `TODO` |
+| DOC-16 | ~~README / README.en 未说明 `tiny-security.timeout` 的取值语义~~ ✅ **`1.5.0` 已完成**：两份 README 的配置示例都在 `timeout: 1800` 上方补了「只允许正整数，0 或负数会在启动时报错」的说明。**注**：本条原描述含"`-1` 为永不过期"，该语义已在 P1-8 推翻 | [`README.md`](../README.md)、[`README.en.md`](../README.en.md) | `DONE` |
 
 ---
 
@@ -611,14 +686,18 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 |---|---|---|
 | 1 | ~~决定 JWT 去留~~ ✅ 已决定：**移除**（见上） | — |
 | 2 | ~~`SecurityContext` 懒加载 + 请求级缓存（治 P0-1 的类根因）~~ ✅ **`1.5.0` 已随 P0-1 完成** | P0-1（收尾） |
-| 3 | 异步上下文传播 | P1-3 |
-| 4 | 绝对过期校验下沉内核；并发上限改原子实现 | P1-6、P1-7 |
+| 3 | ~~异步上下文传播~~ ❌ **判定为使用方式问题，不做**（`1.5.0` 决策） | P1-3 |
+| 4 | ~~绝对过期校验下沉内核；`timeout` 语义统一~~ ✅ **`1.5.0` 已完成**（拆出 P1-7，见下） | P1-6、P1-8 |
 | 5 | ~~静态门面去化（`AuthUtil` 与 `AuthProvider` 解耦）~~ ✅ **`1.5.0` 已完成** | P1-1、P1-2 |
 | 6 | ~~注解查找沿父类/接口上溯~~ ✅ **`1.5.0` 已完成** | P1-4 |
 | 7 | Cookie 登出与 SameSite 语义修正 | P1-5 |
-| 8 | 仓储契约收紧 + **建 TCK** | P1-9、TST-8、TST-5、TST-6 |
+| 8 | 仓储契约收紧 + **建 TCK**（P1-7 的一致性验收标准正是 TCK） | P1-9、TST-8、TST-5、TST-6 |
 | 9 | 事件机制修正 | P1-11 |
 | 10 | 补 MockMvc 全链路集成测试 | TST-1、TST-2 |
+| 11 | `checkLogin()` 对"验签通过但不含凭证的 token"返回 500 而非 401（内核错误语义，成本低） | P1-12 |
+| 12 | `SimpleHash` 从 README「密码哈希」章节降级为「摘要工具」 | P1-13 |
+| 13 | **JDBC 并发登录上限的真正闭合** —— 唯一可行且**不需要事务**的设计：给 `t_auth_storage` 加 `slot` 列 + `UNIQUE (login_id, slot)`，登录时依次尝试 `slot = 1..max`，唯一键冲突即该槽位被占、全部被占即拒绝；每条 `INSERT` 各自靠唯一索引保证原子，**无需事务**，会话删除/过期后槽位自动释放。代价是**破坏性 DDL**（含既有行回填）与登录路径上最多 `max` 次 INSERT 重试。**当前建议：暂不做** —— 默认 `store-type` 是 `single`（已原子），`jdbc` 为显式选用；且症状是"并发下偶发超限"而非"登不进来"，不值得为它引入破坏性 DDL | P1-7（残余） |
+| 14 | **`AuthProvider.refreshByCredentials(credentials, subject)` 语义收口**：该方法只延长**存储层** TTL，从不更新 `subject.loginExpireTime`，导致"存储层 TTL"与"过期时间戳"两套口径分叉；内核补上绝对过期校验后这种分叉会表现为 401（旧逻辑靠下一跳顺手续期把缝补上了，问题一直被掩盖）。建议让它同时按 `resolveTimeout()` 更新 `loginExpireTime`，或明确标记废弃并引导使用方走正常鉴权续期。**来源**：`1.5.0` 代码自审中发现，与 P1-8 推翻记录第 ② 条同源 | P1-14 |
 
 **退出标准**：4 个仓储通过同一套契约测试；MockMvc 全链路测试覆盖 认证→授权→异常翻译 三条主路径；`AuthUtil`/`AuthProvider` 在手工 `new` 与自定义 Bean 场景下都可用。
 

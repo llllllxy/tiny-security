@@ -5,19 +5,25 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.session.timedcache.LocalTimeCache;
 
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 单机内存会话仓储测试。
  *
- * <p>核心回归点：① timeout 传 -1（永不过期）时，会话在缓存中标记为 NEVER_EXPIRE，
- * 有效性校验、读取、在线统计都必须把它当作有效会话；② 未启用并发登录限制（maxConcurrentLogins&lt;=0）
+ * <p>核心回归点：① 存储层对 {@code timeout = -1} 的处理（{@code LocalTimeCache.NEVER_EXPIRE}）——
+ * 有效性校验、读取、在线统计都必须把它当作有效会话。注意这是**缓存层语义**：配置层已不允许
+ * `tiny-security.timeout` 取非正值，所以 {@code -1} 不会再从配置流到这里；保留该用例是为了锁住
+ * 缓存层的既有能力，防止将来有人顺手改掉它；② 未启用并发登录限制（maxConcurrentLogins&lt;=0）
  * 时，登录也要顺带清理失效凭证索引，否则索引随登录次数无限累积（内存泄漏）。</p>
  *
  * @author liuxingyu01
@@ -37,7 +43,8 @@ class SingleSessionRepositoryTest {
     }
 
     /**
-     * timeout=-1 的会话（永不过期）：校验、读取、统计全部有效。
+     * 存储层 timeout=-1 的会话（缓存标记为 NEVER_EXPIRE）：校验、读取、统计全部有效。
+     * <p>这是 {@code LocalTimeCache} 的既有能力，与配置层是否允许 -1 无关。
      */
     @Test
     void neverExpireSessionShouldStayValid() {
@@ -224,6 +231,52 @@ class SingleSessionRepositoryTest {
         Field field = SingleSessionRepository.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         return fieldType.cast(field.get(repository));
+    }
+
+    /**
+     * 并发登录上限必须**原子**生效（P1-7）。
+     *
+     * <p>修复前"判断上限"与"入列"是两步、各自内部才加锁，于是并发登录会出现两种错误结果：
+     * 都通过上限判断后各自入列（实际在线数突破上限），或都入列后各自发现超额、各自摘掉自己
+     * （即使还有空位也双双失败 —— 该现象已在真实 Redis 上复现：上限 1 时 4 个并发登录全部被拒）。
+     *
+     * <p>本用例把 {@code threads} 个线程卡在同一个栅栏上同时发起登录，断言**恰好**
+     * {@code maxConcurrentLogins} 个成功、其余被明确拒绝，且在线数与成功数一致。
+     */
+    @Test
+    void concurrentLoginsShouldNotExceedLimit() throws Exception {
+        int maxConcurrentLogins = 3;
+        int threads = 16;
+        CyclicBarrier barrier = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger succeeded = new AtomicInteger();
+        AtomicInteger rejected = new AtomicInteger();
+        AtomicReference<Throwable> unexpected = new AtomicReference<>();
+        CountDownLatch finished = new CountDownLatch(threads);
+        for (int i = 0; i < threads; i++) {
+            final int index = i;
+            pool.submit(() -> {
+                try {
+                    barrier.await();
+                    if (repository.save(buildSubject(10020L, "cred-concurrent-" + index), 60, maxConcurrentLogins)) {
+                        succeeded.incrementAndGet();
+                    }
+                } catch (ConcurrentLoginOverLimitException e) {
+                    rejected.incrementAndGet();
+                } catch (Throwable t) {
+                    unexpected.set(t);
+                } finally {
+                    finished.countDown();
+                }
+            });
+        }
+        assertTrue(finished.await(30, TimeUnit.SECONDS), "并发登录未在超时时间内完成");
+        pool.shutdownNow();
+
+        assertNull(unexpected.get(), "并发登录过程中出现非预期异常");
+        assertEquals(maxConcurrentLogins, succeeded.get(), "成功登录数必须恰好等于并发上限");
+        assertEquals(threads - maxConcurrentLogins, rejected.get(), "其余请求必须被明确拒绝，不能静默超额");
+        assertEquals(maxConcurrentLogins, repository.countValidOnlineSessions(10020L));
     }
 
     /**
