@@ -7,7 +7,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 212 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 214 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 30 个 / 228 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
+| 代码规模 | 生产类 58 个；测试类 30 个 / 230 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -499,10 +499,23 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 #### P1-12 · `checkLogin()` 可能抛 `IllegalArgumentException`（→ HTTP 500）而不是 401
 
-- **证据**：[`AuthProvider.java:421-427`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L421-L427)（无 try/catch）→ `checkByCredentials(this.getCredentials())` → 仓储的 `Assert.hasText(credentials, ...)` → `IllegalArgumentException`（**不是** `TinySecurityException`，因此异常解析器返回 null，交给 Spring 默认 500 处理）
-- **触发条件**：JWT 验签通过但**不含 `credentials` claim**（例如用同一个 secret 签发的其他用途 token）。
-- **对照**：[`isLogin()`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L406-L414) 已 catch `Exception` → 返回 false，是正确的。
-- **状态**：`TODO`
+- **证据**：[`AuthProvider.checkLogin()`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L459-L478)（原先无 try/catch）→ `checkByCredentials(this.getCredentials())` → 仓储的 `Assert.hasText(credentials, ...)` → `IllegalArgumentException`（**不是** `TinySecurityException`，因此异常解析器返回 null，交给 Spring 默认 500 处理）
+- **触发条件（`1.5.0` 实测修正）**：本条原写的是"**JWT 验签通过但不含 `credentials` claim**"。JWT 已在 `1.5.0` 移除，该写法不复存在；但**缺陷本身仍在**，只是触发点换了 —— token 形态是 `credentials.signature`，凭证即分隔符左侧内容。`TokenSignUtil.sign` 用 `Assert.hasText` 拦住空凭证，然而**用同一 secret 自行计算 HMAC 即可绕过该断言**（同密钥的其他用途、或密钥泄露场景）。实测：`" " + "." + base64url(HMAC-SHA256(" ", secret))` 这种 token 会被 `verifyAndExtract` 原样返回为 `" "`，随后命中仓储断言。
+
+  > **排查记录**：曾一度判断"JWT 移除后 P1-12 的前提已不成立、可以关闭"。**该判断是错的** —— 第一版探针用了假仓储（`checkByCredentials` 直接返回 `true`），恰好绕过了抛异常的那一步；换成内置 `SingleSessionRepository` 后缺陷立即复现。教训：**验证"缺陷是否仍可达"时，替身必须保真到会出问题的那一层**，否则否证是假的。
+- **对照**：[`isLogin()`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L439-L447) 早已 catch `Exception` → 返回 false，是正确写法；`checkLogin()` 与它只该在"抛异常还是返回 false"上不同，对**异常输入的容错**必须一致。
+- **修复**：`checkLogin()` 补 try/catch —— `UnAuthorizedException` 原样抛出（语义本就是未登录），其余异常按"未登录"处理并降为 debug 日志，最终统一抛 `UnAuthorizedException`（401）。
+- **状态**：`DONE`（`1.5.0`）
+
+##### P1-12 实施记录（1.5.0）
+
+| 项 | 内容 |
+|---|---|
+| 先证缺陷 | 新增 `AuthProviderCredentialsTest` 两例（用**内置** `SingleSessionRepository` + 已绑定请求上下文），改动前如实变红：`shouldRejectBlankCredentialsTokenWithUnauthorizedInsteadOf500:125` 与 `blankCredentialsShouldBeHaveConsistentlyBetweenIsLoginAndCheckLogin:140`，均报 `Unexpected exception type thrown, expected: <UnAuthorizedException> but was: <IllegalArgumentException>` |
+| 修复 | `checkLogin()` 增加两层 catch：`UnAuthorizedException` 直接 rethrow；其余 `Exception` 记 debug 日志后置 `success = false`，由原有分支抛出 401 |
+| 为什么不用 `Assert.hasText` 前置校验 | 那样只是把同一类判断散落到第二处；真正的语义是"任何导致无法确认登录态的异常都等价于未登录"，交给 catch 收口更彻底，也与 `isLogin()` 的既有写法对齐（**收敛到一处**，同 P1-8 的教训） |
+| 反向验证 | 把该处的宽泛 catch 变异为 `catch (IllegalStateException e)`（即不再吞掉 `IllegalArgumentException`）→ 上述两例**同时变红**，报错与修复前逐字一致；还原后恢复绿。变异点已按字节索引精确定位（`catch` 与 `log.debug` 之间隔有两行注释，早期的行内正则锚点匹配失败、命中数为 0 —— 命中数为 0 的"验证"是假验证，已改为先断言命中数再执行） |
+| 测试同步 | `AuthProviderCredentialsTest` 4 例 → 6 例；新增用例同时覆盖"401 而非 500"与"`isLogin`/`checkLogin` 行为一致"两个角度 |
 
 #### P1-13 · `SimpleHash` 被当作"密码哈希"宣传
 
@@ -694,7 +707,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 8 | 仓储契约收紧 + **建 TCK**（P1-7 的一致性验收标准正是 TCK） | P1-9、TST-8、TST-5、TST-6 |
 | 9 | 事件机制修正 | P1-11 |
 | 10 | 补 MockMvc 全链路集成测试 | TST-1、TST-2 |
-| 11 | `checkLogin()` 对"验签通过但不含凭证的 token"返回 500 而非 401（内核错误语义，成本低） | P1-12 |
+| 11 | ~~`checkLogin()` 对"验签通过但凭证为空白"的 token 返回 500 而非 401~~ ✅ **`1.5.0` 已完成**（触发条件按实测改写：原文的"JWT 不含 claim"随 JWT 移除已不适用） | P1-12 |
 | 12 | `SimpleHash` 从 README「密码哈希」章节降级为「摘要工具」 | P1-13 |
 | 13 | **JDBC 并发登录上限的真正闭合** —— 唯一可行且**不需要事务**的设计：给 `t_auth_storage` 加 `slot` 列 + `UNIQUE (login_id, slot)`，登录时依次尝试 `slot = 1..max`，唯一键冲突即该槽位被占、全部被占即拒绝；每条 `INSERT` 各自靠唯一索引保证原子，**无需事务**，会话删除/过期后槽位自动释放。代价是**破坏性 DDL**（含既有行回填）与登录路径上最多 `max` 次 INSERT 重试。**当前建议：暂不做** —— 默认 `store-type` 是 `single`（已原子），`jdbc` 为显式选用；且症状是"并发下偶发超限"而非"登不进来"，不值得为它引入破坏性 DDL | P1-7（残余） |
 | 14 | **`AuthProvider.refreshByCredentials(credentials, subject)` 语义收口**：该方法只延长**存储层** TTL，从不更新 `subject.loginExpireTime`，导致"存储层 TTL"与"过期时间戳"两套口径分叉；内核补上绝对过期校验后这种分叉会表现为 401（旧逻辑靠下一跳顺手续期把缝补上了，问题一直被掩盖）。建议让它同时按 `resolveTimeout()` 更新 `loginExpireTime`，或明确标记废弃并引导使用方走正常鉴权续期。**来源**：`1.5.0` 代码自审中发现，与 P1-8 推翻记录第 ② 条同源 | P1-14 |
