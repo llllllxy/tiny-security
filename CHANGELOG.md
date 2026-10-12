@@ -45,16 +45,39 @@
   - `AuthUtil` 现在每次调用都从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（框架唯一的实例门面），不再持有任何可变静态全局状态。因此用户自定义 `AuthProvider` / `SecurityContextRepository` / `AuthorizationInfoGet` 都不会再影响 `AuthUtil` —— 容器里放的是谁，它就用谁。
   - **破坏性**：`AuthUtil.setFacade(...)` 与 `AuthUtil.getFacade()` **已删除**；`TinySecurityFacade` **不再是公开类**（移入 `org.tinycloud.security.provider` 包且为包级私有），容器里也不再注册 `tinySecurityFacade` Bean。
   - **`AuthUtil` 的公开方法签名与语义完全不变**，`AuthUtil.getLoginId()` / `hasRole()` 等调用方**无需任何改动**。
-  - **限制**：`AuthUtil` 只适用于持有当前请求的线程。`@Async` / MQ 消费线程等非 Web 线程取不到请求、抛 `UnAuthorizedException`（与 `1.5.0` 之前一致）；这类场景请直接注入 `AuthProvider`。
+  - **限制**：`AuthUtil` 只适用于持有当前请求的线程。`@Async` / MQ 消费线程等非 Web 线程取不到请求、抛 `UnAuthorizedException`（与 `1.5.0` 之前一致）；这类场景请直接注入 `AuthProvider`。**这是有意取舍、非待修缺陷** —— 线程绑定的上下文（同 `RequestContextHolder`、Spring Security 的 `SecurityContextHolder`）切线程后本就失效，框架不做自动传播。
   - 若曾手工 `new TinySecurityFacade(repo)` 或自定义过它的 Bean：该类已不是公开 API，请改用 `AuthProvider`；手工 `new AuthProvider(sessionRepository, properties, publisher)` 的既有写法**仍然可用**（内部退化为默认 `ThreadLocalSecurityContextRepository` + 无 SPI，与旧行为一致）。
+- **`tiny-security.timeout` 现在只接受「正数」，未配置沿用 1800；任何非正值都会在启动时报错**：
+  - `null`（未配置）→ 1800 秒；正数 → 正常超时秒数；**`0` 与一切负数（含 `-1`）→ 启动直接失败并给出明确报错**。
+  - **为什么加校验**：此前 `timeout` 没有任何校验，同一个非正值在四个仓储下会变成**四种互不相同的静默行为** —— `single` 永不过期、`caffeine` 立即驱逐、`redis` 登录失败、`jdbc` 立即过期。配置写错不会有任何提示，只会表现为诡异症状。
+  - **破坏性**：若 `tiny-security.timeout` 配过 `0`、`-1`、`-2` 等非正值，**升级后启动会直接失败**。请改为一个正数秒数。
+  - **注意 `-1` 不再表示"永不过期"**：`1.5.0` 开发期间曾短暂支持 `timeout = -1`，**该语义已取消**。原因是"会话永不过期"对安全框架是反模式（凭证一旦泄露就永无失效），且会让"存储层 TTL"与 `loginExpireTime` 两套过期口径分叉（`AuthProvider.refreshByCredentials(credentials, subject)` 只维护前者）。若确实需要长时间会话，请配置一个足够大的正数（例如 `86400`）。
+  - **不受影响**：正数与未配置。
 
 ### 🔒 安全加固
+
+- **内核补上会话的「绝对过期」校验**：此前 `DefaultAuthenticationManager` 只判断"剩余有效期是否不足 TTL 的 20%"，**从不判断会话是否已过期**。而续期条件（`剩余 ≤ 阈值`）对已过期会话**恒成立**（剩余为负数），于是一个早已失效的会话只要被读到，就会被改写成 `now + timeout` 从而**无限复活**。
+  - 之所以不能依赖仓储来判定：`SessionRepository.getSubject` 的契约里**没有**"过期返回 null"这条承诺（只写了 `@return 登录主体`），而 README 又明确鼓励用户自定义 `SessionRepository` —— 对自定义实现而言这是**实打实的会话失效绕过**。
+  - 而且**即便用内置仓储也并非够不着**：`save(subject, timeoutSeconds, max)` 的「存储层 TTL」与 `subject.loginExpireTime` 是两个独立参数，仓储并不校验二者一致。已实测出"存储层仍有效、`loginExpireTime` 已过期 60 秒"的会话会被 `getSubject` 正常返回（`checkByCredentials` 也返回 `true`），旧逻辑会把它**放行并续期复活**。
+  - 现在内核在续期判断**之前**先做一次 `expireTime <= now → 401`：会话是否过期由内核判定，不再外包给插件。
+  - **顺带加固**：仓储返回的 `LoginSubject` 若缺 `loginExpireTime`，原先会拆箱抛 `NullPointerException`（HTTP 500），现在按"会话已失效"返回 401。
+  - **行为变更（少见但存在）**：若曾用 `AuthProvider.refreshByCredentials(credentials, subject)` 手工延长会话、且传入的 `subject.loginExpireTime` 已经过期（即两个过期口径不一致），该会话此前能继续使用（旧逻辑会顺手把它续期），**升级后会返回 401**。这是有意为之 —— 不一致的会话状态应当被拒，而不是被悄悄续命。
+  - **不受影响**：由框架正常签发与续期的会话。
+- **修复登录主体缺 `loginExpireTime` 时的两处不一致行为**：
+  - `LoginSubject.loginExpireTime` 是**装箱 `Long`**，缺字段时内核原先会直接拆箱抛 `NullPointerException`（HTTP 500），现在按"会话已失效"返回 401。
+  - `caffeine` 仓储的 `nanosUntilExpire` 同样会拆箱抛 NPE（表现为 `save` 返回 false）；现在与内核口径统一，按"已过期"处理。`jdbc` / `redis` / `single` 本来就已是 fail-closed，无需改动。
 
 - **`CommonUtil.getRandomString` 改用 `SecureRandom`**：此前使用 `ThreadLocalRandom`（非密码学安全随机源，内部状态只有 64 位且可被观测输出反推）。该函数现在只服务于「未配置 `token-secret` 时生成临时签名密钥」，改用 `SecureRandom` 后兜底密钥的材料质量合格。
 - **清除可预测随机源的所有可达路径**：随 `CredentialsGenUtil` / `NanoId` 一并移除，框架内**不再存在任何非 CSPRNG 的凭证或密钥来源**——凭证只有 UUID，签名密钥只有"配置值"或 `SecureRandom`。
 
 ### 🐛 缺陷修复
 
+- **修复并发登录上限（`maxConcurrentLogins`）非原子导致的两种错误行为**（真实环境实测复现）：
+  - **症状一：配了上限的账号在突发登录下谁都登不进来。** `redis` 仓储原先是"先 count 判断 + push 后再查一次 size，超了就摘掉自己"的两道非原子闸门。上限为 `1` 时若多个请求同时看到"当前 0 人"，它们会各自 push、再各自发现超额、各自摘掉自己 —— 实测 4 个并发登录 **0 成功、4 个全被拒**，而在线列表里一个人都没有（空位明明还在）。
+  - **症状二：上限被静默突破。** `single` / `caffeine` / `jdbc` 只有第一道闸门，并发请求都通过检查后全部写入。实测 `jdbc`（H2）在上限为 `3` 时 16 个并发登录 **16/16 全部成功**。
+  - **修复**：`redis` 新增 Lua 脚本，把"判断上限 + 入列 + 设置列表 TTL"合并为**一次原子执行**（脚本只操作一个键，保证 Redis Cluster 下不跨 slot）；`single` / `caffeine` 把上限判断挪进它们**已有的** `onlineLock` 内，与入列同锁。三处都改为**先写会话、再原子占名额**，并在占名额失败（含该步骤自身抛异常）时**回滚刚写入的会话** —— 否则会留下一个不在在线列表里、却可以正常使用的会话，等于绕过上限。
+  - **验证**：新增本仓库首批并发用例（16 线程同栅栏、`max=3`，断言恰好 3 个成功），去掉原子守卫后如实变红（`single` 4 个成功、`caffeine` 13 个成功）；`redis` 侧由真实 Redis 探针验证修复前后分别为 0/4 与 1/4 成功。
+  - **已知残余（`jdbc`）**：JDBC 的"先 COUNT 再 INSERT"要真正原子必须让两步同处一个临界区，而该仓储只有裸 `JdbcTemplate`（每条语句自动提交）、没有事务管理器。三个**不改表结构**的候选方案已逐个实测否决：① 单条条件 `INSERT ... SELECT ... WHERE (SELECT COUNT ...) < ?` 实测 16/14 行 ≠ 3（子查询不加锁）；② 事务 + `SELECT COUNT ... FOR UPDATE` 在 H2 上直接报 `FOR UPDATE is not allowed in DISTINCT or grouped select`；③ 事务 + 行锁 `SELECT ... FOR UPDATE` 只能锁住已存在的会话行，账号会话数为 0 时无行可锁，而 H2 / PostgreSQL 无间隙锁。**因此 JDBC 当前仍是 best-effort：串行登录守上限，并发下会突破。**彻底闭合需要改表结构（如按 `(login_id, slot)` 建唯一索引，或加一张"每账号一行"的锁表配合事务），对既有部署是破坏性 DDL，故未在本次实施。
 - **修复 `AuthUtil.hasRole` / `hasPermission` 在无权限注解接口上恒返回 `false` 的回归**（1.3.1 引入）：
   - **根因**：1.3.1 为"只做注解需要的 SPI 调用"做性能优化后，授权管理器仅当方法上存在 `@RequiresRoles` / `@RequiresPermissions` 时才去查对应的角色/权限集合，无注解接口更是直接放行、一次都不查。于是 `SecurityContext` 里的 `roleSet` / `permissionSet` 恒为空集，而 `AuthUtil.hasRole/hasPermission` 读的正是这个空集 —— 代码式鉴权 API 静默失效（只声明 `@RequiresPermissions` 时 `hasRole` 为 false，只声明 `@RequiresRoles` 时 `hasPermission` 为 false）。
   - **修复**：保留原有性能设计（无注解接口**依然不做任何 SPI 调用**），把加载时机推迟到 `AuthUtil.has*` 真正被调用时，由 `TinySecurityFacade` 按需懒加载，并把结果缓存回本次请求的上下文（每类数据每次请求最多查一次）。
@@ -96,6 +119,8 @@
 - [ ] 检查是否依赖 `WebRequestUtils.getToken(request, "token")` 从 `?token=xxx` 取 token —— **该行为已默认关闭**，需要时改用四参重载并传 `enableUrlToken=true`
 - [ ] 检查是否用 `SimpleHash("SM3", …)` / `SM3Hash(…, null, …)` 且 `salt` 传过 `null` —— **该路径的哈希值已改变**，存量哈希需重新生成或迁移（详见上文「行为变更」）
 - [ ] 检查是否有权限注解/`@Ignore` 写在**父类或接口**上、而方法在子类里被重写或实现 —— 这些注解此前**不生效**（权限注解方向是漏放行，`@Ignore` 方向是没忽略），升级后会生效
+- [ ] 检查 `tiny-security.timeout` 是否为正数 —— **`0` 与一切负数（含 `-1`）升级后都会启动失败**；`-1` 曾短暂表示"永不过期"，该语义已取消，需要长会话请改配一个较大的正数（如 `86400`）
+- [ ] 使用 `store-type: redis` 的项目：并发上限判定改用 **Lua 脚本（`EVAL`）** 实现原子化，请确认你的 Redis **支持脚本执行** —— 标准 Redis / ElastiCache 均支持；但**不支持 `EVAL` 的代理或兼容服务（如 Twemproxy）会让登录直接失败**。若确实无法使用脚本，请改用 `store-type: single` / `caffeine`（两者同样已原子化）
 
 ---
 

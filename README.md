@@ -82,6 +82,7 @@ tiny-security:
    # 默认不再从 URL 参数读取（enable-url-token 默认 false），因为 URL 传 token 会进入访问日志，存在泄露风险
    token-name: token
    # 会话有效期（会话存储中的subject有效时长），单位秒，默认1800秒(30分钟)
+   # 只允许正整数：配置 0 或负数会在启动时直接报错（会话永不过期是反模式，故不支持该配置方式）
    timeout: 1800
    # 最大登录并发数，默认不限制
    max-concurrent-logins: 2

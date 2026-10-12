@@ -3,6 +3,7 @@ package org.tinycloud.security.session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.util.Assert;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
@@ -22,6 +23,29 @@ import java.util.stream.Collectors;
  */
 public class RedisSessionRepository implements SessionRepository {
     private static final Logger log = LoggerFactory.getLogger(RedisSessionRepository.class);
+
+    /**
+     * 「判断并发上限 + 加入在线列表」的原子脚本（P1-7）。
+     *
+     * <p>这两步必须原子完成，否则并发登录会得到两种错误结果：
+     * <ul>
+     *     <li>都通过上限判断后各自入列 → 实际在线数突破上限（静默超额）；</li>
+     *     <li>都入列后再各自发现超额、各自摘掉自己 → 即使还有空位也双双登录失败
+     *         （已在真实 Redis 上复现：上限为 1 时 4 个并发登录全部被拒）。</li>
+     * </ul>
+     *
+     * <p>脚本只操作 KEYS[1] 一个键。Redis Cluster 要求脚本内访问的所有键同属一个 slot，
+     * 而"凭证 key"与"在线列表 key"天然不同 slot，因此失效凭证的清理仍留在 Java 侧完成。
+     *
+     * <p>参数：KEYS[1] = 在线列表 key；ARGV[1] = 凭证；ARGV[2] = 并发上限（&lt;=0 表示不限制）；
+     * ARGV[3] = 列表 TTL 秒数（&lt;=0 表示不设置 TTL）。返回 1 = 已入列，0 = 已达上限、未入列。
+     */
+    private static final RedisScript<Long> ADD_TO_ONLINE_LIST_SCRIPT = RedisScript.of(
+            "if tonumber(ARGV[2]) > 0 and redis.call('LLEN', KEYS[1]) >= tonumber(ARGV[2]) then return 0 end\n"
+                    + "redis.call('RPUSH', KEYS[1], ARGV[1])\n"
+                    + "if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) end\n"
+                    + "return 1\n",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
 
@@ -52,8 +76,9 @@ public class RedisSessionRepository implements SessionRepository {
             this.countValidOnlineSessions(subject.getLoginId());
             // 凭证是随机生成的会话唯一钥匙，理论上不会重复。一旦重复，说明随机源异常或有人在构造会话固定攻击，
             // 此时必须明确失败，绝不能静默覆盖掉另一个用户的会话
+            String sessionKey = AuthConsts.AUTH_CREDENTIALS_KEY + credentials;
             Boolean absent = this.redisTemplate.opsForValue().setIfAbsent(
-                    AuthConsts.AUTH_CREDENTIALS_KEY + credentials,
+                    sessionKey,
                     JsonUtil.writeValueAsString(subject),
                     timeoutSeconds,
                     TimeUnit.SECONDS
@@ -62,7 +87,22 @@ public class RedisSessionRepository implements SessionRepository {
                 log.error("RedisSessionRepository save failed: credentials collision detected, the generated token already exists!");
                 return false;
             }
-            this.addToOnlineList(subject.getLoginId(), credentials, maxConcurrentLogins, timeoutSeconds);
+            // 先写会话、再原子占名额，顺序不能颠倒：若先占名额，并发的清理逻辑会因为凭证 key 尚未写入
+            // 而把刚入列的凭证误判为"失效"并移除
+            boolean added;
+            try {
+                added = this.addToOnlineListIfLimitNotExceeded(subject.getLoginId(), credentials, maxConcurrentLogins, timeoutSeconds);
+            } catch (Exception e) {
+                // 占名额这一步自身失败（如 Redis 异常）：同样必须回滚会话，
+                // 否则会留下一个不在在线列表里、却可以正常使用的会话（绕过并发上限）
+                this.redisTemplate.delete(sessionKey);
+                throw e;
+            }
+            if (!added) {
+                // 并发竞争下没抢到名额：必须回滚刚写入的会话，否则会留下一个绕过并发上限的可用会话
+                this.redisTemplate.delete(sessionKey);
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
+            }
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;
@@ -108,15 +148,16 @@ public class RedisSessionRepository implements SessionRepository {
     public boolean refreshByCredentials(String credentials, LoginSubject subject, int timeoutSeconds) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
+            String sessionKey = AuthConsts.AUTH_CREDENTIALS_KEY + credentials;
             this.redisTemplate.opsForValue().set(
-                    AuthConsts.AUTH_CREDENTIALS_KEY + credentials,
+                    sessionKey,
                     JsonUtil.writeValueAsString(subject),
                     timeoutSeconds,
                     TimeUnit.SECONDS
             );
             // 会话滚动续期（常在线账号可能远超单次超时）时同步刷新在线列表 TTL，
             // 否则在线列表会先于会话过期，导致常在线账号被误判为离线、踢人/计数失效。
-            // timeout<=0（如配置永不过期）不设置 TTL，避免 expire(key, 负数) 抛异常
+            // timeout<=0 不设置 TTL（timeout 已由 AuthProvider 装配期保证为正数，此处为防御性判断）
             if (subject != null && subject.getLoginId() != null && timeoutSeconds > 0) {
                 this.redisTemplate.expire(
                         AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + subject.getLoginId(),
@@ -237,26 +278,26 @@ public class RedisSessionRepository implements SessionRepository {
     }
 
     /**
-     * 将凭证加入账号在线列表，并给列表设置独立的过期时间。
+     * 原子地判断并发上限并把凭证加入账号在线列表，同时给列表设置独立的过期时间。
      *
-     * @param timeoutSeconds    会话超时时间（秒）
+     * @param loginId              账号ID
+     * @param credentials          会话凭证
+     * @param maxConcurrentLogins  最大并发登录数（&lt;=0 表示不限制）
+     * @param timeoutSeconds       会话超时时间（秒）
+     * @return true 已入列；false 已达并发上限，此时**未**入列
      */
-    private void addToOnlineList(Object loginId, String credentials, int maxConcurrentLogins, int timeoutSeconds) {
+    private boolean addToOnlineListIfLimitNotExceeded(Object loginId, String credentials, int maxConcurrentLogins, int timeoutSeconds) {
         String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId;
-        this.redisTemplate.opsForList().rightPush(onlineKey, credentials);
         // 在线列表与凭证 key 一样必须有 TTL，否则默认配置（未开启并发限制时清理逻辑不触发）
         // 失效凭证会在列表中永久残留，随登录次数无限累积（内存泄漏）。
-        // 仅在会话超时为正数时设置 TTL；timeout<=0（如配置永不过期）不设置，避免 expire(key, 负数) 抛异常导致登录失败
-        if (timeoutSeconds > 0) {
-            this.redisTemplate.expire(onlineKey, timeoutSeconds * 2L, TimeUnit.SECONDS);
-        }
-        if (maxConcurrentLogins > 0) {
-            Long size = this.redisTemplate.opsForList().size(onlineKey);
-            if (size != null && size > maxConcurrentLogins) {
-                this.redisTemplate.opsForList().remove(onlineKey, 1, credentials);
-                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
-            }
-        }
+        // 仅在会话超时为正数时设置 TTL（timeout 已由 AuthProvider 装配期保证为正数，此处为防御性判断）
+        long listTimeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds * 2L : 0L;
+        Long added = this.redisTemplate.execute(ADD_TO_ONLINE_LIST_SCRIPT,
+                List.of(onlineKey),
+                credentials,
+                String.valueOf(maxConcurrentLogins),
+                String.valueOf(listTimeoutSeconds));
+        return added != null && added > 0;
     }
 
     /**
