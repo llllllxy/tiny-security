@@ -144,6 +144,132 @@ class AuthProviderCookieTest {
     }
 
     /**
+     * 删除 Cookie 必须带上与写入时**一致**的属性，否则浏览器会忽略删除指令（P1-5）。
+     *
+     * <p>删除 Cookie 的本质是"写回一个同名同属性的 maxAge=0 Cookie"，属性必须逐字匹配
+     * 才会被浏览器视为同一条。此前的 {@code removeCookie} 只带 path/maxAge/HttpOnly，
+     * 丢了 Secure 与 SameSite —— {@code SameSite=None} 时浏览器要求删除指令也必须带
+     * {@code SameSite=None; Secure}，否则**删除被忽略**，表现为"登出后仍是登录态"。
+     */
+    @Test
+    void shouldClearCookieWithSameSecurityAttributesAsWritten() {
+        AuthProperties properties = defaultProperties();
+        properties.setEnableCookie(true);
+        properties.setCookieSecure(true);
+        properties.setCookieSameSite(CookieSameSite.NONE);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
+
+        MockHttpServletResponse loginResponse = bindRequestContext();
+        String token = authProvider.login("user-1", null);
+        Cookie written = loginResponse.getCookie("token");
+        assertNotNull(written);
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("token", token);
+        MockHttpServletResponse logoutResponse = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, logoutResponse));
+
+        authProvider.logout();
+
+        Cookie removed = logoutResponse.getCookie("token");
+        assertNotNull(removed);
+        assertEquals(0, removed.getMaxAge(), "必须是删除指令");
+        // 关键：删除指令的属性必须与写入时一致，否则浏览器不认
+        assertEquals(written.getSecure(), removed.getSecure(),
+                "删除 Cookie 的 Secure 必须与写入时一致，否则 SameSite=None 下删除会被浏览器忽略");
+        assertEquals(written.getAttribute("SameSite"), removed.getAttribute("SameSite"),
+                "删除 Cookie 的 SameSite 必须与写入时一致");
+        assertEquals(written.getPath(), removed.getPath(), "path 必须一致");
+        assertTrue(removed.isHttpOnly(), "HttpOnly 必须一致");
+    }
+
+    /**
+     * 默认配置（SameSite=Lax、非 Secure）下同样要带齐属性（P1-5）。
+     * <p>即便 Lax 场景浏览器较宽松，属性不一致也属于隐患，必须与写入保持一致。
+     */
+    @Test
+    void shouldClearCookieWithDefaultSecurityAttributes() {
+        AuthProperties properties = defaultProperties();
+        properties.setEnableCookie(true);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
+
+        MockHttpServletResponse loginResponse = bindRequestContext();
+        String token = authProvider.login("user-1", null);
+        Cookie written = loginResponse.getCookie("token");
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("token", token);
+        MockHttpServletResponse logoutResponse = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, logoutResponse));
+
+        authProvider.logout();
+
+        Cookie removed = logoutResponse.getCookie("token");
+        assertNotNull(removed);
+        assertEquals(written.getAttribute("SameSite"), removed.getAttribute("SameSite"),
+                "默认 SameSite=Lax 也必须带到删除指令上");
+    }
+
+    /**
+     * {@code logout(request)} 在**传入的 request 与线程绑定的不是同一个**时，
+     * 宁可放弃清理，也不能把 Cookie 删到另一个请求的响应上（P1-5）。
+     *
+     * <p>Servlet API 无法从请求反查响应，响应只能来自线程绑定。此前实现无条件用
+     * {@code WebRequestUtils.getResponse()返回}，于是当两者不一致时，清理指令会落到**别的请求**
+     * 的响应里 —— 当前请求的 Cookie 没被清理（静默失效），却污染了另一个响应。
+     */
+    @Test
+    void logoutWithRequestShouldNotWriteToUnrelatedResponse() {
+        AuthProperties properties = defaultProperties();
+        properties.setEnableCookie(true);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
+
+        // 先正常登录拿到一个签名合法的 token
+        MockHttpServletResponse loginResponse = bindRequestContext();
+        String token = authProvider.login("user-1", null);
+        assertNotNull(loginResponse.getCookie("token"));
+
+        // 线程绑定一个无关请求（其 response 不应被本方法写入）
+        MockHttpServletResponse unrelatedResponse = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(
+                new ServletRequestAttributes(new MockHttpServletRequest(), unrelatedResponse));
+
+        // 调用方传入的是另一个 request（未与线程绑定）
+        MockHttpServletRequest explicitRequest = new MockHttpServletRequest();
+        explicitRequest.addHeader("token", token);
+
+        authProvider.logout(explicitRequest);
+
+        assertNull(unrelatedResponse.getCookie("token"),
+                "不得把 Cookie 清理写到与传入 request 无关的响应上");
+    }
+
+    /**
+     * 对照：传入的 request 与线程绑定的一致时（正常 Web 请求），清理照常落在该响应上。
+     */
+    @Test
+    void logoutWithRequestShouldClearCookieWhenRequestMatchesThreadBoundOne() {
+        AuthProperties properties = defaultProperties();
+        properties.setEnableCookie(true);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
+
+        MockHttpServletResponse loginResponse = bindRequestContext();
+        String token = authProvider.login("user-1", null);
+        assertNotNull(loginResponse.getCookie("token"));
+
+        MockHttpServletRequest sameRequest = new MockHttpServletRequest();
+        sameRequest.addHeader("token", token);
+        MockHttpServletResponse sameResponse = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(sameRequest, sameResponse));
+
+        authProvider.logout(sameRequest);
+
+        Cookie cookie = sameResponse.getCookie("token");
+        assertNotNull(cookie, "同一请求下必须正常清理 Cookie");
+        assertEquals(0, cookie.getMaxAge());
+    }
+
+    /**
      * enable-cookie 关闭时，登出不写任何清理 Cookie。
      */
     @Test
