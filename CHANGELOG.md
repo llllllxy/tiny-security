@@ -95,6 +95,11 @@
   - **症状**：`checkLogin()` 把 `" "` 交给会话仓储，命中内置仓储的 `Assert.hasText(credentials, ...)` 抛出 `IllegalArgumentException`。它**不是** `TinySecurityException`，异常解析器返回 null，最终交给 Spring 默认处理 → **HTTP 500**（调用方会误判为服务端故障，也会污染错误监控）。
   - **修复**：`checkLogin()` 补 try/catch —— `UnAuthorizedException` 原样抛出，其余异常按"未登录"处理并降为 debug 日志，最终统一抛 `UnAuthorizedException`（401）。与 `isLogin()` 的既有容错写法对齐：两者只该在"抛异常还是返回 false"上不同，对异常输入的容错必须一致。
   - **不受影响**：正常 token；以及未登录（无 token）的常见路径（本来就抛 `UnAuthorizedException`）。
+- **修复 Cookie 模式下"登出后仍是登录态"与"显式传 request 时 Cookie 不清理"两个缺陷**（需开启 `tiny-security.enable-cookie`）：
+  - **缺陷一（登出静默失效）**：删除 Cookie 时只带了 `path`/`maxAge=0`/`HttpOnly`，**丢了 `Secure` 与 `SameSite`**。删除 Cookie 的本质是"写回一个同名、`maxAge=0` 的 Cookie"，浏览器只有在 `path`/`domain` 与**安全属性**都匹配时才认这条删除指令；`SameSite=None` 的 Cookie 规范要求必须伴随 `Secure`，**删除指令缺失这两个属性会被浏览器直接忽略** —— 表现就是用户点了登出，Cookie 仍在、下次请求依旧登录态。现在删除指令与写入使用**同源属性**（`cookie-secure` / `cookie-same-site` 的配置值）。
+  - **缺陷二（清理写错对象）**：`logout(HttpServletRequest request)` 内部用的是线程绑定的 response，而不是由传入的 `request` 推导。当二者不是同一请求时，清理指令会写到**另一个请求**的响应上。Servlet API 无法从请求反查响应，因此修复方式为**校验同一性**：新增 `WebRequestUtils.getResponse(HttpServletRequest)`，若线程绑定的请求不是传入的那一个则返回 `null`（宁可不清理，也不写错对象）。正常 Web 请求下二者本就是同一实例，行为不变。
+  - **API 兼容**：`CookieUtil.removeCookie` 的两参/三参重载保留（委托新五参重载，属性取默认值），既有调用方无需改动。
+  - **不受影响**：未开启 `enable-cookie` 的项目（纯 token 模式根本不会写/删 Cookie）。
 - **修复 `JsonUtil` 用裸 `ObjectMapper` 带来的两个问题**：
   - **`extraInfo` 里放 `java.time` 类型会让登录直接 500**（`InvalidDefinitionException`）。现在 `ObjectMapper` 调用 `findAndRegisterModules()` 自动注册 JSR-310 等模块，并关闭 `WRITE_DATES_AS_TIMESTAMPS` —— java.time 写成 ISO-8601 字符串（与 Spring Boot 默认 ObjectMapper 一致），便于直接排查 Redis/JDBC 里存的会话内容。
   - **给 `LoginSubject` 加字段在滚动发布期间会变成升级事故**：Jackson 默认 `FAIL_ON_UNKNOWN_PROPERTIES=true`，旧实例读到新实例写入的会话时反序列化失败、`readValue` 返回 null，被当成"会话不存在"而把在线用户**全打成 401**。现在 `LoginSubject` 标注 `@JsonIgnoreProperties(ignoreUnknown = true)`。

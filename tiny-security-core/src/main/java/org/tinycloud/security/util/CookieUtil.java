@@ -1,12 +1,12 @@
 package org.tinycloud.security.util;
 
-import org.springframework.util.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.util.StringUtils;
+
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -115,7 +115,7 @@ public class CookieUtil {
      * @param name     名称
      */
     public static void removeCookie(HttpServletResponse response, String name) {
-        removeCookie(response, name, "/");
+        removeCookie(response, name, "/", false, null);
     }
 
     /**
@@ -126,6 +126,28 @@ public class CookieUtil {
      * @param path     上下文路径
      */
     public static void removeCookie(HttpServletResponse response, String name, String path) {
+        removeCookie(response, name, path, false, null);
+    }
+
+    /**
+     * 删除指定名称的 Cookie，并带上与写入时一致的安全属性。
+     *
+     * <p><b>为什么必须带属性</b>：删除 Cookie 的本质是"写回一个同名 Cookie 并令其 maxAge=0"，
+     * 浏览器只有在该 Cookie 的 {@code path}/{@code domain} 与**安全属性**都与原 Cookie 匹配时才认这条删除指令。
+     * 尤其是 {@code SameSite=None} 的 Cookie，规范要求它必须同时带 {@code Secure}，
+     * 删除指令若不带这两个属性会被浏览器**直接忽略** —— 表现为"点了登出，但仍是登录态"。
+     *
+     * <p>因此这里的 {@code secure} 与 {@code sameSite} 必须与
+     * {@link #setCookie(HttpServletResponse, String, String, String, int, boolean, String)} 写入时传入的一致。
+     *
+     * @param response 响应对象（为 null 时说明当前线程未绑定 Web 请求，直接跳过删除）
+     * @param name     名称
+     * @param path     上下文路径
+     * @param secure   是否仅通过 HTTPS 传输（必须与写入时一致）
+     * @param sameSite SameSite 属性（必须与写入时一致；为 null 时不设置）
+     */
+    public static void removeCookie(HttpServletResponse response, String name, String path,
+                                    boolean secure, String sameSite) {
         if (response == null || !StringUtils.hasText(name)) {
             return;
         }
@@ -133,6 +155,15 @@ public class CookieUtil {
         cookie.setPath(path);
         cookie.setMaxAge(0);
         cookie.setHttpOnly(true);
+        cookie.setSecure(secure);
+        if (StringUtils.hasText(sameSite)) {
+            try {
+                cookie.setAttribute("SameSite", sameSite);
+            } catch (Exception e) {
+                // 容器不支持 Servlet 6 的 Cookie.setAttribute 时降级为不设置该属性
+                logger.debug("CookieUtil removeCookie setAttribute(SameSite={}) failed!", sameSite, e);
+            }
+        }
         response.addCookie(cookie);
     }
 

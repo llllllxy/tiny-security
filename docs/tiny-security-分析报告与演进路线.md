@@ -7,7 +7,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 220 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 224 / starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 30 个 / 236 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
+| 代码规模 | 生产类 58 个；测试类 30 个 / 240 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -363,13 +363,26 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 #### P1-5 · Cookie 模式的两个真实缺陷
 
 - **证据**：
-  - [`CookieUtil.java:128-137`](../tiny-security-core/src/main/java/org/tinycloud/security/util/CookieUtil.java#L128-L137)（删除 Cookie 只带 `path`/`maxAge=0`/`HttpOnly`，**不带 `SameSite` 也不带 `Secure`**）
-  - [`AuthProvider.java:321-326`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L321-L326)（`logout(HttpServletRequest request)` 内部用的是 `WebRequestUtils.getResponse()`，**不是**由传入的 `request` 推导）
+  - [`CookieUtil.removeCookie()`](../tiny-security-core/src/main/java/org/tinycloud/security/util/CookieUtil.java)（原先删除 Cookie 只带 `path`/`maxAge=0`/`HttpOnly`，**不带 `SameSite` 也不带 `Secure`**）
+  - [`AuthProvider.logout(HttpServletRequest)`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java)（原先内部用的是 `WebRequestUtils.getResponse()`，**不是**由传入的 `request` 推导）
 - **影响**：
   1. `SameSite=None` 时浏览器要求删除指令同样带 `SameSite=None; Secure`，否则**删除被忽略** → "登出后仍是登录态"；
   2. 非 Web 线程 / 显式传 `request` 的场景下 Cookie **不会被清理**（静默）。
-- **旁证**：[`AuthProviderCookieTest`](../tiny-security-core/src/test/java/org/tinycloud/security/provider/AuthProviderCookieTest.java) 只断言了 `maxAge == 0`，未断言属性。
-- **状态**：`TODO`
+- **旁证**：`AuthProviderCookieTest` 只断言了 `maxAge == 0`，未断言属性 —— 这正是缺陷能存活至今的原因。
+- **状态**：`DONE`（`1.5.0`）
+
+##### P1-5 实施记录（1.5.0）
+
+| 项 | 内容 |
+|---|---|
+| 缺陷 A 修复 | `removeCookie` 新增五参重载（`path`/`secure`/`sameSite`），补齐 `setSecure(secure)` 与 `SameSite` 属性；`AuthProvider` 登出时传入 `resolveCookieSecure()`/`resolveCookieSameSite()`，与写入时**同源取值**。原两参/三参重载保留（委托新重载，属性取默认值），公开 API 未破坏 |
+| 为什么属性必须逐字一致 | 删除 Cookie 的本质是"写回同名 Cookie 并令 `maxAge=0`"，浏览器仅在 `path`/`domain` 与**安全属性**均匹配时才视为同一条并执行删除。`SameSite=None` 的 Cookie 规范要求必须伴随 `Secure`，删除指令缺失这两个属性会被**直接忽略** —— 用户点了登出、Cookie 还在 |
+| 缺陷 B 修复 | 新增 [`WebRequestUtils.getResponse(HttpServletRequest)`](../tiny-security-core/src/main/java/org/tinycloud/security/web/WebRequestUtils.java)：先核对线程绑定的请求是否**就是**传入的那一个，是则返回其响应，否则返回 `null`。`logout(request)` 改用它 |
+| 为什么不是"直接由 request 推导 response" | **Servlet API 无法从请求反查响应** —— 响应只能来自线程绑定（`RequestContextHolder`），请求对象上没有指向响应的入口。因此能做到的正确语义是：**校验同一性，不一致时宁可不清理，也不写错对象**。这样既消除了"把清理写到别的请求响应上"（静默污染另一个响应），又保留了正常 Web 请求下的既有行为（二者本就是同一实例） |
+| 先证缺陷 | 新增 4 条用例。缺陷 A 两条在改动前变红：`shouldClearCookieWithSameSecurityAttributesAsWritten:178`（`Secure` 不一致：`expected: <true> but was: <false>`）与 `shouldClearCookieWithDefaultSecurityAttributes:209`（`SameSite` 丢失：`expected: <Lax> but was: <null>`） |
+| 反向验证 | ① 把 `removeCookie` 的 `setSecure(secure)` 变异为 `setSecure(false)` → `shouldClearCookieWithSameSecurityAttributesAsWritten:178` 变红；② 把 `getResponse(request)` 的同一性校验变异为恒假 → `logoutWithRequestShouldNotWriteToUnrelatedResponse:243` 变红，报错为 `expected: <null> but was: <Cookie@...>`（清理写到了无关响应上）。两处变异均先断言锚点命中数再执行 |
+| 排查记录 | 缺陷 B 的第一版用例**设计有误**：它把传入的 request 也绑进了线程上下文，于是 `getResponse()` 恰好拿到同一个 response，用例在修复前就通过 —— **测不出缺陷**。改为"线程绑定无关 request"后才真实复现。教训同 P1-12：**用例的替身/环境必须保真到会出问题的那一层** |
+| 测试同步 | `AuthProviderCookieTest` 9 例 → 14 例：删除指令的 `Secure`/`SameSite`/`path`/`HttpOnly` 一致性、默认 `Lax` 场景、`logout(request)` 不得写到无关响应、同请求下正常清理 |
 
 #### P1-6 · 内核不做绝对过期校验，把"会话是否过期"外包给仓储实现
 
@@ -718,7 +731,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 4 | ~~绝对过期校验下沉内核；`timeout` 语义统一~~ ✅ **`1.5.0` 已完成**（拆出 P1-7，见下） | P1-6、P1-8 |
 | 5 | ~~静态门面去化（`AuthUtil` 与 `AuthProvider` 解耦）~~ ✅ **`1.5.0` 已完成** | P1-1、P1-2 |
 | 6 | ~~注解查找沿父类/接口上溯~~ ✅ **`1.5.0` 已完成** | P1-4 |
-| 7 | Cookie 登出与 SameSite 语义修正 | P1-5 |
+| 7 | ~~Cookie 登出与 SameSite 语义修正~~ ✅ **`1.5.0` 已完成**（删除指令补齐 `Secure`/`SameSite`；`logout(request)` 增加同一性校验） | P1-5 |
 | 8 | 仓储契约收紧 + **建 TCK**（P1-7 的一致性验收标准正是 TCK） | P1-9、TST-8、TST-5、TST-6 |
 | 9 | 事件机制修正 | P1-11 |
 | 10 | 补 MockMvc 全链路集成测试 | TST-1、TST-2 |

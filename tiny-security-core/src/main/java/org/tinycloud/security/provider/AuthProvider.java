@@ -355,7 +355,10 @@ public class AuthProvider extends TinySecurityFacade {
      */
     public void logout() {
         if (resolveEnableCookie()) {
-            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName());
+            // 删除指令必须带上与写入时一致的安全属性：SameSite=None 的 Cookie 若删除时不带
+            // SameSite+Secure，浏览器会忽略该删除指令，表现为"登出后仍是登录态"（P1-5）
+            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName(),
+                    "/", this.resolveCookieSecure(), this.resolveCookieSameSite());
         }
         this.deleteByCredentials(this.getCredentials());
     }
@@ -367,7 +370,8 @@ public class AuthProvider extends TinySecurityFacade {
      */
     public void logout(HttpServletRequest request) {
         if (resolveEnableCookie()) {
-            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName());
+            CookieUtil.removeCookie(WebRequestUtils.getResponse(request), this.properties.getTokenName(),
+                    "/", this.resolveCookieSecure(), this.resolveCookieSameSite());
         }
         this.deleteByCredentials(this.getCredentials(request));
     }
