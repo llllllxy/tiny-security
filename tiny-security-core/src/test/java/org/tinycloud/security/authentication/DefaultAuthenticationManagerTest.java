@@ -136,24 +136,50 @@ class DefaultAuthenticationManagerTest {
     }
 
     /**
-     * 使用**内置** single 仓储时，内核的绝对过期校验同样必须生效（P1-6）。
+     * 内核的绝对过期校验必须**独立于仓储**生效（P1-6）。
      *
-     * <p>本用例回答一个合理的质疑："仓储既然已经过滤了过期，内核再判一次还有意义吗？"
-     * 答案是肯定的，原因有两点：
-     * <ol>
-     *   <li>{@code SessionRepository.getSubject} 的契约只承诺"返回登录主体"，**从未承诺**过期时返回 null
-     *       （对比同一接口的 {@code getCredentialsByLoginId}，那里明确写了"有效（未过期）"）；
-     *       内核消费的是 SPI，不能依赖一条没有写下来的义务；</li>
-     *   <li>即便用内置仓储，「存储层的 TTL」与「{@code subject.loginExpireTime}」也是**两个互相独立的量**：
-     *       {@code save(subject, timeoutSeconds, max)} 的这两个参数由调用方分别给出，single 仓储并不校验二者一致。
-     *       本用例就构造了这种"存储层仍有效、loginExpireTime 已过期"的会话。</li>
-     * </ol>
+     * <p><b>本用例的前置条件在 TCK 落地后发生了变化，这里说明清楚</b>：本用例原本用**内置**
+     * {@code SingleSessionRepository} 构造"存储层有效、但 loginExpireTime 已过期"的会话，
+     * 断言"仓储会把它原样返回（因此内核必须自己判）"。但 TCK 落地时发现 single / redis 两个
+     * 仓储**只按存储层 TTL 判有效性、不看 loginExpireTime**（同一缺陷藏在两个实现里），
+     * 已一并修复 —— 所以现在仓储自己就会返回 {@code null}，原前置条件不再成立。
      *
-     * <p>没有这道校验时，实测结果是：过期会话被**放行并被续期复活**（改写成 now + timeout），
-     * 而续期分支的条件"剩余 ≤ 阈值"对已过期会话恒成立，所以它永远不会自己纠正回来。
+     * <p>这恰好说明内核这道校验的价值：它守的是 **SPI 边界**，而不是某个具体实现的当前行为。
+     * 因此用例改写为用**一个不做过期过滤的仓储**（模拟用户自定义实现）来验证内核仍然拦得住 ——
+     * 若内核校验被移除，本用例立刻变红。
      */
     @Test
-    void shouldRejectStoreValidButExpiredSubjectOnBuiltInSingleRepository() {
+    void shouldRejectExpiredSubjectWhenRepositoryDoesNotFilterIt() {
+        long now = System.currentTimeMillis();
+        LoginSubject stale = new LoginSubject();
+        stale.setLoginId(10001L);
+        stale.setCredentials("stale-cred");
+        stale.setLoginTime(now - 3600_000L);
+        stale.setLoginExpireTime(now - 60_000L); // 已过期 60 秒
+
+        // 模拟"不做过期过滤"的自定义仓储：getSubject 原样返回、checkByCredentials 恒 true
+        FakeSessionRepository sessionRepository = new FakeSessionRepository();
+        sessionRepository.putSubject(stale);
+        AuthProvider authProvider = new SimpleAuthProvider(sessionRepository);
+        DefaultAuthenticationManager authenticationManager = new DefaultAuthenticationManager(
+                authProvider, sessionRepository, 1800);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("token", "stale-cred");
+
+        // 内核必须在续期分支之前拦下它，否则会被改写成 now + timeout 而复活
+        assertThrows(UnAuthorizedException.class, () -> authenticationManager.authenticate(request));
+        assertFalse(sessionRepository.wasRefreshed(), "过期会话不得触发续期");
+        assertEquals(now - 60_000L, stale.getLoginExpireTime(), "过期时间不应被改写");
+    }
+
+    /**
+     * 内置仓储在 TCK 落地后也会自行过滤过期会话（与其它仓储口径一致）。
+     *
+     * <p>这是 P1-9 / TCK 的产物：single 与 redis 原先把"存储层 TTL"当作唯一有效性依据，
+     * 与 caffeine / jdbc 不一致。本用例把这个一致性固定下来。
+     */
+    @Test
+    void builtInRepositoryShouldAlsoFilterExpiredSubject() {
         long now = System.currentTimeMillis();
         SingleSessionRepository sessionRepository = new SingleSessionRepository();
         try {
@@ -165,16 +191,10 @@ class DefaultAuthenticationManagerTest {
             // 存储层 TTL 给 60 秒，与上面已过期的 loginExpireTime 刻意不一致
             assertTrue(sessionRepository.save(stale, 60, 0));
 
-            // 前置条件：仓储确实把这条"已过期"的会话原样返回了（这正是不能依赖仓储过滤的原因）
-            assertNotNull(sessionRepository.getSubject("stale-cred"));
-            assertTrue(sessionRepository.checkByCredentials("stale-cred"));
-
-            DefaultAuthenticationManager authenticationManager = new DefaultAuthenticationManager(
-                    new SimpleAuthProvider(sessionRepository), sessionRepository, 1800);
-            MockHttpServletRequest request = new MockHttpServletRequest();
-            request.addHeader("token", "stale-cred");
-
-            assertThrows(UnAuthorizedException.class, () -> authenticationManager.authenticate(request));
+            assertNull(sessionRepository.getSubject("stale-cred"),
+                    "内置仓储也必须按 loginExpireTime 过滤过期会话，不能只看存储层 TTL");
+            assertFalse(sessionRepository.checkByCredentials("stale-cred"));
+            assertEquals(0, sessionRepository.countValidOnlineSessions(10001L));
         } finally {
             sessionRepository.destroy();
         }

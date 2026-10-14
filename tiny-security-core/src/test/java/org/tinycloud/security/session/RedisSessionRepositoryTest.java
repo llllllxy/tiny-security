@@ -11,6 +11,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
+import org.tinycloud.security.util.JsonUtil;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -71,19 +72,24 @@ class RedisSessionRepositoryTest {
     /**
      * 未启用并发限制（maxConcurrentLogins=0）时，登录也要清理在线列表中的失效凭证：
      * 此前清理入口只在限制开启时才被触发，默认配置下失效凭证永久残留（内存泄漏）。
+     *
+     * <p>自 TCK 落地后，失效判定不再只看 key 是否存在（{@code hasKey}），而是与
+     * {@code checkByCredentials} 同口径：读主体并按 {@code loginExpireTime} 判过期。
+     * 因此这里用 {@code opsForValue().get()} 返回 {@code null}（key 不存在）来模拟失效凭证。
      */
     @Test
     void saveShouldCleanupDeadOnlineEntriesEvenWithoutLimit() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("dead-cred"), List.of());
-        when(redisTemplate.hasKey("tiny:security:credentials:dead-cred")).thenReturn(false);
+        // dead-cred 已不存在（get 返回 null）→ 判为失效，应从在线列表移除
+        when(valueOperations.get("tiny:security:credentials:dead-cred")).thenReturn(null);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(1L);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-new"), 60, 0));
 
-        verify(redisTemplate).hasKey("tiny:security:credentials:dead-cred");
+        verify(valueOperations).get("tiny:security:credentials:dead-cred");
         verify(listOperations).remove(ONLINE_KEY, 1L, "dead-cred");
         verify(redisTemplate).delete(ONLINE_KEY);
     }
@@ -104,12 +110,18 @@ class RedisSessionRepositoryTest {
 
     /**
      * 启用并发限制时，超限登录被拒绝且不写入新会话（原有能力不回归）。
+     *
+     * <p>自 TCK 落地后，"在线列表里的凭证是否有效"不再只看 {@code hasKey}，而是读主体并按
+     * {@code loginExpireTime} 判过期，因此这里用 {@code opsForValue().get()} 返回一个尚未过期的
+     * 主体 JSON 来模拟"已有一个有效在线会话"。
      */
     @Test
     void saveShouldRejectWhenConcurrentLimitReached() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("other-cred"));
-        when(redisTemplate.hasKey("tiny:security:credentials:other-cred")).thenReturn(true);
+        when(valueOperations.get("tiny:security:credentials:other-cred"))
+                .thenReturn(JsonUtil.writeValueAsString(buildSubject(10001L, "other-cred")));
 
         assertThrows(ConcurrentLoginOverLimitException.class,
                 () -> repository.save(buildSubject(10001L, "cred-2"), 60, 1));
@@ -211,15 +223,20 @@ class RedisSessionRepositoryTest {
 
     /**
      * getCredentialsByLoginId：复用失效清理逻辑，只返回仍有效的凭证。
+     *
+     * <p>自 TCK 落地后，失效判定改为"读主体 + 按 {@code loginExpireTime} 判过期"，不再只看
+     * {@code hasKey}：因此这里让有效凭证返回一个未过期的 JSON，失效凭证返回 {@code null}。
      */
     @Test
     void getCredentialsByLoginIdShouldReturnOnlyValidCredentials() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         // 第一次读取在线列表（含失效项），清理后第二次读取只剩有效项
         when(listOperations.range(ONLINE_KEY, 0L, -1L))
                 .thenReturn(List.of("cred-alive", "cred-dead"), List.of("cred-alive"));
-        when(redisTemplate.hasKey("tiny:security:credentials:cred-alive")).thenReturn(true);
-        when(redisTemplate.hasKey("tiny:security:credentials:cred-dead")).thenReturn(false);
+        when(valueOperations.get("tiny:security:credentials:cred-alive"))
+                .thenReturn(JsonUtil.writeValueAsString(buildSubject(10001L, "cred-alive")));
+        when(valueOperations.get("tiny:security:credentials:cred-dead")).thenReturn(null);
 
         List<String> credentials = repository.getCredentialsByLoginId(10001L);
 

@@ -108,6 +108,10 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
 
     /**
      * 根据凭证读取登录主体。
+     *
+     * <p>返回**副本**：本仓储把对象引用存在内存里，若直接返回缓存实例，调用方修改它（如
+     * {@code setLoginExpireTime(...)}）会污染缓存并在后续请求中生效，而 redis/jdbc 仓储每次
+     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致（P1-9）。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
@@ -118,7 +122,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
                 return null;
             }
             Object content = this.timedCache.getObject(cacheKey);
-            return content == null ? null : (LoginSubject) content;
+            return content == null ? null : ((LoginSubject) content).copy();
         } catch (Exception e) {
             log.error("SingleSessionRepository getSubject failed, Exception：", e);
             return null;
@@ -231,12 +235,33 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     }
 
     /**
-     * 判断指定缓存中的凭证是否有效（存在且未过期）。
-     * 永不过期（剩余存活时间为 NEVER_EXPIRE）的凭证视为有效。
+     * 判断指定缓存中的凭证是否有效（存在、未过期、且主体自身的 {@code loginExpireTime} 未过期）。
+     *
+     * <p><b>为什么两个有效期都要看（P1-9 / TCK 发现）</b>：本仓储的记录存活由缓存 TTL 决定，
+     * 但会话是否过期还应以 `LoginSubject.loginExpireTime` 为准 —— 这也是 redis / jdbc / caffeine
+     * 三个仓储的口径。此前这里只看缓存 TTL，于是"缓存 TTL 仍有效、但 loginExpireTime 已过期"的
+     * 会话会被判定为**有效**，与其它三个仓储行为不一致（TCK 的
+     * {@code expiredSessionShouldBeTreatedAsAbsent} 等用例直接抓到了这一点）。
+     *
+     * <p>两个条件必须同时满足：缓存 TTL 判断"记录是否还在"，{@code loginExpireTime} 判断
+     * "会话是否已过期"。任一不满足即为无效。
+     *
+     * @param cacheKey 缓存 key
+     * @return true-有效
      */
     private boolean isCredentialValid(String cacheKey) {
         long timeout = this.timedCache.getObjectTimeout(cacheKey);
-        return timeout > 0 || timeout == LocalTimeCache.NEVER_EXPIRE;
+        if (timeout <= 0 && timeout != LocalTimeCache.NEVER_EXPIRE) {
+            return false;
+        }
+        Object content = this.timedCache.getObject(cacheKey);
+        if (!(content instanceof LoginSubject subject)) {
+            return false;
+        }
+        Long loginExpireTime = subject.getLoginExpireTime();
+        // 缺 loginExpireTime 的主体按"已失效"处理，与内核（DefaultAuthenticationManager）及
+        // caffeine 仓储的口径一致；NEVER_EXPIRE_TIME 已随 P1-8 取消，这里不再有永不过期特例
+        return loginExpireTime != null && loginExpireTime > System.currentTimeMillis();
     }
 
     /**
