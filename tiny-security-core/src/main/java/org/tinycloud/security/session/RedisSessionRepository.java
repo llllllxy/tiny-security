@@ -114,12 +114,20 @@ public class RedisSessionRepository implements SessionRepository {
 
     /**
      * 检查指定凭证是否有效。
+     *
+     * <p><b>为什么不能只看 key 是否存在（TCK 发现）</b>：key 是否存在由 Redis TTL 决定，
+     * 但会话是否过期应以 {@code LoginSubject.loginExpireTime} 为准 —— 这是 caffeine / jdbc
+     * 两个仓储的口径。此前这里只做 {@code hasKey}，于是"key 尚未到期、但 loginExpireTime
+     * 已过期"的会话会被判定为**有效**，与其它仓储不一致（TCK 的
+     * {@code expiredSessionShouldBeTreatedAsAbsent} 等用例直接抓到了）。
+     *
+     * <p>与 {@code single} 仓储同源：两处都曾漏掉 {@code loginExpireTime} 判定。
      */
     @Override
     public boolean checkByCredentials(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return this.hasValidSubject(credentials);
         } catch (Exception e) {
             log.error("RedisSessionRepository checkByCredentials failed, Exception：", e);
             return false;
@@ -128,11 +136,17 @@ public class RedisSessionRepository implements SessionRepository {
 
     /**
      * 根据凭证读取登录主体。
+     *
+     * <p>与 {@link #checkByCredentials(String)} 口径一致：{@code loginExpireTime} 已过期的主体
+     * 视为读不到（返回 {@code null}），而不是把过期主体交给上层。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
+            if (!this.hasValidSubject(credentials)) {
+                return null;
+            }
             String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
             return content == null ? null : JsonUtil.readValue(content, LoginSubject.class);
         } catch (Exception e) {
@@ -241,6 +255,11 @@ public class RedisSessionRepository implements SessionRepository {
 
     /**
      * 清理在线列表中的失效凭证并返回有效凭证。
+     *
+     * <p>失效判定与 {@link #checkByCredentials(String)} 口径一致：不仅要看 key 是否存在
+     * （存储 TTL），还要看主体的 {@code loginExpireTime} 是否已过期 —— 否则"key 尚未到期、
+     * 但会话已过期"的凭证会被当成有效，导致在线数虚高（TCK 的
+     * {@code countValidOnlineSessionsShouldCountOnlyValidOnes} 抓到过这一点）。
      */
     private List<String> clearInvalidCredentials(Object loginId) {
         String onlineKey = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX + loginId;
@@ -250,7 +269,7 @@ public class RedisSessionRepository implements SessionRepository {
             return new ArrayList<>();
         }
         List<String> invalidCredentials = credentialsList.stream()
-                .filter(cred -> !this.redisTemplate.hasKey(AuthConsts.AUTH_CREDENTIALS_KEY + cred))
+                .filter(cred -> !this.hasValidSubject(cred))
                 .collect(Collectors.toList());
         if (!invalidCredentials.isEmpty()) {
             for (String invalidCred : invalidCredentials) {
@@ -263,6 +282,26 @@ public class RedisSessionRepository implements SessionRepository {
             return new ArrayList<>();
         }
         return credentialsList;
+    }
+
+    /**
+     * 凭证是否对应一个"存储层存在且会话未过期"的主体。
+     *
+     * <p>抽出来是为了让 {@link #checkByCredentials(String)}、{@link #getSubject(String)} 与
+     * 在线列表清理三处共用同一判定口径，避免再次出现"某处只看 key、某处看 loginExpireTime"
+     * 的不一致。
+     *
+     * @param credentials 会话凭证
+     * @return true-有效
+     */
+    private boolean hasValidSubject(String credentials) {
+        String content = this.redisTemplate.opsForValue().get(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+        if (content == null) {
+            return false;
+        }
+        LoginSubject subject = JsonUtil.readValue(content, LoginSubject.class);
+        Long loginExpireTime = subject == null ? null : subject.getLoginExpireTime();
+        return loginExpireTime != null && loginExpireTime > System.currentTimeMillis();
     }
 
     /**

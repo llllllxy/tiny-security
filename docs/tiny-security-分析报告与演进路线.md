@@ -7,7 +7,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 224 / starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 305（含 20 个按需跳过的 Redis 契约用例）/ starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -55,7 +55,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 30 个 / 240 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
+| 代码规模 | 生产类 58 个；测试类 36 个 / 305 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -491,7 +491,26 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
   2. `loginId` 是 `Object`、`extraInfo` 是 `Map<String,Object>`，JSON 往返后**类型漂移**（`Long 10001L` → `Integer`），`(Long) AuthUtil.getLoginId()` 会 `ClassCastException`；
   3. **全项目没有任何测试做过一次 JSON 往返的 `getSubject`**。
 - **修复方向**：统一为"返回防御性副本"；`loginId` 类型契约明确化；补 JSON 往返测试。
-- **状态**：`TODO`
+- **状态**：`DONE`（`1.5.0`）
+
+##### P1-9 实施记录（1.5.0）
+
+**先取证（实测）** —— 三条指控全部证实：
+
+| 指控 | 实测结果 |
+|---|---|
+| 类型漂移 | `Long 10001L` 经 JSON 往返变成 **`Integer`**；`(Long)` 强转抛 `ClassCastException`（`class java.lang.Integer cannot be cast to class java.lang.Long`） |
+| 共享引用 | single / caffeine 的 `getSubject` 两次返回**同一实例**，且**篡改后回读受影响**（污染缓存） |
+| 无往返测试 | 确认项目中不存在任何一次 `getSubject` 的 JSON 往返用例 |
+
+| 项 | 内容 |
+|---|---|
+| loginId 类型契约 | 在 [`LoginSubject.setLoginId`](../tiny-security-core/src/main/java/org/tinycloud/security/context/LoginSubject.java) 上做**反序列化归一化**：整型（`Integer`/`Short`/`Byte`）一律归一为 `Long`；`Long` 原样；`String`/`Double` 不变（不做"看起来像数字就转"的猜测，避免有损转换与语义漂移）。因 Jackson 反序列化同样走 setter，**直接构造与 JSON 往返得到同一类型** |
+| 防御性副本 | 新增 `LoginSubject.copy()`（浅拷贝）；single / caffeine 的 `getSubject` 改为返回副本 |
+| 为什么 `copy()` 只做浅拷贝 | `extraInfo` 的引用语义在四种仓储下本就不同（内存版共享、Redis/JDBC 每次反序列化重建），深拷贝无法消除这一事实，反而增加开销；框架内部不修改 `extraInfo`，约定已写在方法注释里 |
+| **顺带修掉的同源缺陷** | **TCK 直接抓到**：single 与 redis 的**有效性判定只看存储层 TTL、不看 `loginExpireTime`**，于是"存储层仍有效、但会话已过期"的凭证被判为**有效**（与 caffeine / jdbc 口径不一致）。redis 的 `clearInvalidCredentials`（在线列表清理）有同一问题，导致在线数虚高。两处均已改为与 `checkByCredentials` 同口径，并把判定抽成 redis 的 `hasValidSubject()` 供三处共用，避免再次分叉 |
+| 反向验证 | ① 去掉 single 的 `loginExpireTime` 判定 → TCK **3 条变红**（`expiredSessionShouldBeTreatedAsAbsent`、`countValidOnlineSessionsShouldCountOnlyValidOnes`、`sessionWithoutExpireTimeShouldNotBeValid`）；② 去掉 caffeine 的副本 → TCK **2 条变红**（`getSubjectShouldReturnDefensiveCopy`、`getSubjectShouldNotReturnSharedInstance`） |
+| **用例前提变更（重要）** | `DefaultAuthenticationManagerTest.shouldRejectStoreValidButExpiredSubjectOnBuiltInSingleRepository` 的**前置条件被本项修复消除**：它原先断言"内置仓储会把过期会话原样返回"，而修复后仓储自己就返回 `null`。已改写为两条 —— `shouldRejectExpiredSubjectWhenRepositoryDoesNotFilterIt`（用**不做过滤的假仓储**验证内核 P1-6 校验仍生效）与 `builtInRepositoryShouldAlsoFilterExpiredSubject`（固定"内置仓储也过滤"这一新事实）。**这不是迁就测试，而是修复改变了事实**：内核那道校验的价值本就在于守住 SPI 边界，而非依赖某个实现的当前行为 |
 
 #### P1-10 · URL 鉴权模式不看 HTTP Method
 
@@ -627,10 +646,10 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | TST-2 | **零测试的生产类**：`TinySecurityHandlerExceptionResolver`、`CookieUtil`、`VersionUtil`、`CommonUtil`、`HexUtil`、`SpringSecurityEventPublisher`（没有任何用例断言事件真的被发布）、`AuthProperties`（仅 2 项绑定）、以及 **`AuthAutoConfiguration.addInterceptors` 的全部逻辑**（`AnnotationUtils` 已于 `1.5.0` 补齐 9 例、`WebRequestUtils` 已随 P0-6 补齐，均从本清单移除） | 逐类 grep 确认 | 按 §4.2 补齐 P0 相关部分 | `TODO` |
 | TST-3 | **空转 / 永真断言**（抽查代表）：`AuthAutoConfigurationTest.java:96-97` 的 `isInstanceOf(SessionRepository.class)` 恒真；`AuthProviderCookieTest.java:34-43` 名为"验证非 Web 线程写 Cookie 不 NPE"，但 `enableCookie` 默认 false → **根本没走到写 Cookie**（1.3.2 修的 NPE 已失去回归保护）；`CaffeineSessionRepositoryTest.java:91-102` 改的是存进去的同一个对象引用，`refresh` 改成空实现也照样绿；`DefaultExceptionTranslatorTest.java:50-57` 名为"code 缺失兜底"，实际兜底分支从未进入；`DefaultAuthenticationManagerTest.java:86-106` 号称测 `<=` 边界，实际恒小于 | 各测试文件 | 逐个修正为可证伪的断言 | `TODO` |
 | TST-4 | **静态状态污染 / 并行不安全**：~~`AuthUtil.facade` 是全局静态被 6 个测试类写~~ ✅ **`1.5.0` 已随 P1-1/P1-2 去静态化**；残留：`AuthAutoConfigurationTest` 建 9 个上下文却**没有 `@AfterEach`**，全项目无 `junit-platform.properties` / `@ResourceLock`，`ThreadLocalSecurityContextRepository` 的 ThreadLocal 仍可能跨用例残留。一旦开启并行就会出现"用户串号"式污染 | 各测试文件 | ~~去静态化（随 P1-1/P1-2）~~；残留部分补 `@ResourceLock` 与清理 | `DOING` |
-| TST-5 | H2 建表语句**内联复制**在测试里，从不使用随包发布的 `t_auth_storage.sql` → 已发布 SQL 与代码存在漂移风险。`1.5.0` 先补上了漏掉的 `credentials` 唯一约束（碰撞路径这才可测），**整体仍未收敛到"加载真实 SQL 脚本"** | `JdbcSessionRepositoryTest.java:35-44` | 让测试加载真实 SQL 脚本 | `DOING` |
-| TST-6 | Redis 仓储测试全 Mockito，无真实 Redis → TTL / 原子性 / 序列化全未验证 | `RedisSessionRepositoryTest` | 引入 Testcontainers 或嵌入式 Redis（至少覆盖 TTL 与序列化往返） | `TODO` |
+| TST-5 | ~~H2 建表语句**内联复制**在测试里，从不使用随包发布的 `t_auth_storage.sql`~~ ✅ **`1.5.0` 已完成**：新增 `AuthStorageDdl`，从**随包发布的** `sql/t_auth_storage.sql` 解析建表语句（括号配对扫描，非正则）并做 MySQL→H2 方言归一化；转换后若缺少 `credentials` 唯一约束则**直接抛异常**（不让"转换失败"伪装成"测试通过"）。TCK 的 Jdbc 子类已改用它 | `JdbcSessionRepositoryContractTest` | ~~让测试加载真实 SQL 脚本~~ | `DONE` |
+| TST-6 | Redis 仓储测试全 Mockito，无真实 Redis → TTL / 原子性 / 序列化全未验证。**`1.5.0` 部分收敛**：已建 `RedisSessionRepositoryContractTest`，可在本地对真实 Redis 跑完整 TCK（20 例，默认按开关跳过）；**仍未引入 Testcontainers**，CI 中依旧不跑真实 Redis | `RedisSessionRepositoryTest` | 引入 Testcontainers 或嵌入式 Redis（至少覆盖 TTL 与序列化往返） | `DOING` |
 | TST-7 | 白盒反射测试脆弱：`SingleSessionRepositoryTest` 反射写 `LocalTimeCache.expireMap`；`SessionRepositoryLifecycleTest` 反射读 `executorService` 字段名 | 各测试文件 | 改为通过公开 API 或提供 `isShutdown()` 之类可观测点 | `TODO` |
-| TST-8 | **没有仓储契约 TCK**（同一套用例跑 4 个实现）—— 这是防止四仓储再次行为分叉的唯一有效手段 | — | 建 `SessionRepositoryContractTest` 抽象基类 | `TODO` |
+| TST-8 | ~~**没有仓储契约 TCK**（同一套用例跑 4 个实现）~~ ✅ **`1.5.0` 已完成**：新增 `SessionRepositoryContractTest` 抽象基类（20 个契约用例，覆盖读写往返、凭证碰撞、loginId 类型、副本语义、过期判定、续期、删除、在线统计、并发上限），四个实现各一个子类；**建立过程中直接抓出 single 与 redis 的两个同源缺陷**（详见 P1-9 实施记录） | — | ~~建 `SessionRepositoryContractTest` 抽象基类~~ | `DONE` |
 | TST-9 | `AuthProvider` 大量公开方法无测试：`getToken(request)`、`getToken()` 前缀校验、`getCredentials()`、`getCredentials(request)`、`deleteByToken`、`logout(request)`、`getLoginSubject`/`getLoginId`/`getLoginIdAsString`/`AsInt`/`AsLong`（**5 个全无**）、`checkLogin()`、`getSecurityContext()` 的 `loginSubject == null` 分支、兜底密钥分支 | `AuthProvider` | 随 P0/P1 修复补齐 | `TODO` |
 
 ---
@@ -732,7 +751,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 5 | ~~静态门面去化（`AuthUtil` 与 `AuthProvider` 解耦）~~ ✅ **`1.5.0` 已完成** | P1-1、P1-2 |
 | 6 | ~~注解查找沿父类/接口上溯~~ ✅ **`1.5.0` 已完成** | P1-4 |
 | 7 | ~~Cookie 登出与 SameSite 语义修正~~ ✅ **`1.5.0` 已完成**（删除指令补齐 `Secure`/`SameSite`；`logout(request)` 增加同一性校验） | P1-5 |
-| 8 | 仓储契约收紧 + **建 TCK**（P1-7 的一致性验收标准正是 TCK） | P1-9、TST-8、TST-5、TST-6 |
+| 8 | ~~仓储契约收紧 + **建 TCK**~~ ✅ **`1.5.0` 已完成**：TCK 已建成并跑通四个实现（20 例 × 4）；过程中抓出 single / redis 的同源缺陷与 JDBC 的已知残余（并发上限）。**JDBC 并发上限的闭合拆到第 13 行**（需破坏性 DDL） | ~~P1-9~~、~~TST-8~~、~~TST-5~~、TST-6（部分） |
 | 9 | 事件机制修正 | P1-11 |
 | 10 | 补 MockMvc 全链路集成测试 | TST-1、TST-2 |
 | 11 | ~~`checkLogin()` 对"验签通过但凭证为空白"的 token 返回 500 而非 401~~ ✅ **`1.5.0` 已完成**（触发条件按实测改写：原文的"JWT 不含 claim"随 JWT 移除已不适用） | P1-12 |

@@ -161,12 +161,17 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
 
     /**
      * 根据凭证读取登录主体。
+     *
+     * <p>返回**副本**：本仓储把对象引用存在缓存里，若直接返回缓存实例，调用方修改它（如
+     * {@code setLoginExpireTime(...)}）会污染缓存并在后续请求中生效，而 redis/jdbc 仓储每次
+     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致（P1-9）。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.cache.getIfPresent(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            LoginSubject cached = this.cache.getIfPresent(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return cached == null ? null : cached.copy();
         } catch (Exception e) {
             log.error("CaffeineSessionRepository getSubject failed, Exception：", e);
             return null;

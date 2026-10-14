@@ -100,6 +100,15 @@
   - **缺陷二（清理写错对象）**：`logout(HttpServletRequest request)` 内部用的是线程绑定的 response，而不是由传入的 `request` 推导。当二者不是同一请求时，清理指令会写到**另一个请求**的响应上。Servlet API 无法从请求反查响应，因此修复方式为**校验同一性**：新增 `WebRequestUtils.getResponse(HttpServletRequest)`，若线程绑定的请求不是传入的那一个则返回 `null`（宁可不清理，也不写错对象）。正常 Web 请求下二者本就是同一实例，行为不变。
   - **API 兼容**：`CookieUtil.removeCookie` 的两参/三参重载保留（委托新五参重载，属性取默认值），既有调用方无需改动。
   - **不受影响**：未开启 `enable-cookie` 的项目（纯 token 模式根本不会写/删 Cookie）。
+- **新增仓储契约测试（TCK）：同一套 20 个用例跑四个仓储实现**（`single` / `caffeine` / `redis` / `jdbc`）：
+  - **为什么要有它**：框架内置四种仓储且鼓励用户自定义实现，而"四个仓储行为一致"此前只靠人工比对。1.5.0 期间已反复出现同一语义在不同仓储下表现不同（过期会话复活、并发上限强度不一、`timeout` 四种语义、共享引用与类型漂移）。现在把契约写成**可执行断言**，新增实现只需继承基类即可获得全部校验。
+  - **建立过程中直接抓出两个真实缺陷**：`single` 与 `redis` 的有效性判定**只看存储层 TTL、不看 `loginExpireTime`**，于是"存储层仍有效、但会话已过期"的凭证被判为有效（与 `caffeine` / `jdbc` 口径不一致）；`redis` 的在线列表清理有同一问题，导致在线数虚高。两处均已修复。
+  - **如何对真实 Redis 跑**（默认跳过，CI 无 Redis）：设置 `TINY_SECURITY_TCK_REDIS=1`（可选 `_HOST` / `_PORT` / `_PASSWORD` / `_DATABASE`，默认 `127.0.0.1:6379`、db `15`）；测试只清理 `tiny:security:*` 前缀，**不执行 FLUSHDB**。
+  - **Jdbc 的一处已知豁免**：并发登录上限的原子性在 Jdbc 上不成立（无法在不改表结构的前提下原子化），TCK 中以**显式声明的豁免**记录，而非让测试静默放过 —— 详见文档 §4.3 第 13 行。
+- **修复 `getSubject` 返回共享实例与 `loginId` JSON 往返类型漂移**：
+  - `single` / `caffeine` 仓储把对象**引用**存在内存里，`getSubject` 直接返回缓存实例 —— 调用方修改读到的对象（如 `setLoginExpireTime(...)`）会**污染缓存并在后续请求生效**，而 `redis` / `jdbc` 每次反序列化出新对象、不受影响。现在统一返回 `LoginSubject.copy()` 副本，四种仓储语义一致。
+  - `loginId` 声明为 `Object`，但 `Long 10001` 经 JSON 往返会被反序列化成 `Integer`（`redis` / `jdbc` 走 JSON），于是 `(Long) subject.getLoginId()` 抛 `ClassCastException`。现在在 `setLoginId` 做反序列化归一化：整型一律归一为 `Long`，字符串与小数类型保持不变。
+  - **行为变更**：若此前依赖"修改 `getSubject` 的返回值能持久生效"（仅内存版仓储可能发生），升级后不再生效 —— 这属于修正，不是能力削减。
 - **修复 `JsonUtil` 用裸 `ObjectMapper` 带来的两个问题**：
   - **`extraInfo` 里放 `java.time` 类型会让登录直接 500**（`InvalidDefinitionException`）。现在 `ObjectMapper` 调用 `findAndRegisterModules()` 自动注册 JSR-310 等模块，并关闭 `WRITE_DATES_AS_TIMESTAMPS` —— java.time 写成 ISO-8601 字符串（与 Spring Boot 默认 ObjectMapper 一致），便于直接排查 Redis/JDBC 里存的会话内容。
   - **给 `LoginSubject` 加字段在滚动发布期间会变成升级事故**：Jackson 默认 `FAIL_ON_UNKNOWN_PROPERTIES=true`，旧实例读到新实例写入的会话时反序列化失败、`readValue` 返回 null，被当成"会话不存在"而把在线用户**全打成 401**。现在 `LoginSubject` 标注 `@JsonIgnoreProperties(ignoreUnknown = true)`。
