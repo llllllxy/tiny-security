@@ -74,6 +74,8 @@ mvn -B test -pl tiny-security-core -am -Dtest=RedisSessionRepositoryContractTest
 | `f51fe44` | P1-10 URL 鉴权补 HTTP Method | 此前 `GET /user` 权限等价于 `DELETE /user` 权限 |
 | `d0c1a54` | P1-5 Cookie 登出 | `SameSite=None` 时删除指令被浏览器忽略 → "登出后仍是登录态" |
 | `038b258` | **TCK + P1-9 + TST-5** | 见 §2.3 |
+| `4c80aa3` | P1-11（1/3）+ P1-13 + DOC-1/DOC-12 | 失败路径事件隔离；README 摘要/密码哈希降级（顺带修掉示例里的**不存在类** `MD5Hash`/`Sha256Hash`） |
+| （本次） | **P1-14** `refreshByCredentials` 口径收口 | 只延长存储层 TTL、不推进 `loginExpireTime`；内核补绝对过期校验后表现为续期"没生效"，`single` 下 `getSubject` 直接返回 `null` |
 
 ### 2.2 `35f5f74`（P1-6 / P1-7 / P1-8）—— 破坏性变更，务必知道
 
@@ -91,8 +93,8 @@ mvn -B test -pl tiny-security-core -am -Dtest=RedisSessionRepositoryContractTest
 ### 2.4 当前基线
 
 ```
-core 305 例（含 20 个按需跳过的 Redis 契约用例）+ starter 16 例
-生产类 58 个；测试源码 37 个（其中 31 个含 @Test，另 6 个是辅助类 / 契约子类）
+core 309 例（含 20 个按需跳过的 Redis 契约用例）+ starter 16 例
+生产类 58 个；测试源码 38 个（其中 32 个含 @Test，另 6 个是辅助类 / 契约子类）
 JDK 17 与 21 均 BUILD SUCCESS，JaCoCo 门槛（LINE 50%）通过
 ```
 

@@ -100,6 +100,12 @@
   - **修复**：失败路径的事件发布补上独立的 `try/catch` + WARN 日志，与**成功路径既有的隔离写法对齐**（成功路径本就已隔离，无需改动）。发布失败只记录日志，原始异常照常抛出。
   - **不受影响**：正常登录失败（监听器不抛异常时行为完全不变）。
   - **本次未做的部分**：`LoginSuccessEvent` 仍携带完整 token、发布策略仍为同步 —— 这两条属**公开 API 变更 / 新特性**（`getToken()` 是已发布 API，改成不可逆标识会让存量监听器拿不到 token），留待后续版本与事件机制一并重做。
+- **修复 `AuthProvider.refreshByCredentials(credentials, subject)` 续期"不生效"**：
+  - **症状**：该方法只延长**存储层 TTL**，**从不更新 `subject.loginExpireTime`**。而内核的「绝对过期校验」判定的正是这个时间戳 —— 两套过期口径分叉后，存储里的会话明明还有 TTL，用户却已经 401，**表现为续期没生效**。旧逻辑靠"下一跳顺手续期"把这条缝盖住了，所以一直没暴露。
+  - **实测比预期更严重**：在 `store-type: single`（默认值）下，`SingleSessionRepository` 的有效性判定同样读 `loginExpireTime`，时间戳停在过去时 `getSubject` **直接返回 `null`** —— 会话根本读不回来（`checkByCredentials` 也返回 false），而不仅仅是"读到了但被判过期"。
+  - **修复**：刷新时同步把 `loginExpireTime` 推进到 `now + timeout`，让「存储层 TTL」与「绝对过期时间戳」两套口径合一。这与内核自身的滑动续期路径（`DefaultAuthenticationManager` 先 set 再 refresh）本就是同一口径，本次只是让公开 API 与内核对齐。
+  - **行为变更**：本方法会**改写传入的 subject**（写入新的过期时间戳）。若调用方此前自行设置了**更长**的过期时间，现在会被收敛为 `timeout` —— 这是"口径合一"的目的所在，属修正而非能力削减。`subject` 传 `null` 时不抛异常，退化为纯 TTL 延长。
+  - **不受影响**：正常请求链路（内核自己的续期逻辑本就正确，未作改动）。
 - **修复 Cookie 模式下"登出后仍是登录态"与"显式传 request 时 Cookie 不清理"两个缺陷**（需开启 `tiny-security.enable-cookie`）：
   - **缺陷一（登出静默失效）**：删除 Cookie 时只带了 `path`/`maxAge=0`/`HttpOnly`，**丢了 `Secure` 与 `SameSite`**。删除 Cookie 的本质是"写回一个同名、`maxAge=0` 的 Cookie"，浏览器只有在 `path`/`domain` 与**安全属性**都匹配时才认这条删除指令；`SameSite=None` 的 Cookie 规范要求必须伴随 `Secure`，**删除指令缺失这两个属性会被浏览器直接忽略** —— 表现就是用户点了登出，Cookie 仍在、下次请求依旧登录态。现在删除指令与写入使用**同源属性**（`cookie-secure` / `cookie-same-site` 的配置值）。
   - **缺陷二（清理写错对象）**：`logout(HttpServletRequest request)` 内部用的是线程绑定的 response，而不是由传入的 `request` 推导。当二者不是同一请求时，清理指令会写到**另一个请求**的响应上。Servlet API 无法从请求反查响应，因此修复方式为**校验同一性**：新增 `WebRequestUtils.getResponse(HttpServletRequest)`，若线程绑定的请求不是传入的那一个则返回 `null`（宁可不清理，也不写错对象）。正常 Web 请求下二者本就是同一实例，行为不变。
