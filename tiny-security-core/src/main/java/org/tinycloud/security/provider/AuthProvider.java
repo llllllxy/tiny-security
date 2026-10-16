@@ -332,12 +332,19 @@ public class AuthProvider extends TinySecurityFacade {
                         "/", this.resolveTimeout(), this.resolveCookieSecure(), this.resolveCookieSameSite());
             }
         } catch (RuntimeException ex) {
-            this.resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
-                    loginId,
-                    extraInfo,
-                    ex.getMessage(),
-                    System.currentTimeMillis()
-            ));
+            // 失败事件的发布必须与原始异常隔离：监听器自身抛异常时，
+            // 若放任其传播会顶掉这里的原始异常，调用方与异常翻译器
+            // 将看不到真实的登录失败原因（与下方成功路径的处理保持一致）。
+            try {
+                this.resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
+                        loginId,
+                        extraInfo,
+                        ex.getMessage(),
+                        System.currentTimeMillis()
+                ));
+            } catch (Exception publishEx) {
+                log.warn("AuthProvider publishLoginFailure failed, Exception：", publishEx);
+            }
             throw ex;
         }
         // 成功事件发布移出 try 块：会话已创建成功，监听器抛异常不应被误判为登录失败，

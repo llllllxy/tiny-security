@@ -70,6 +70,29 @@ class AuthProviderEventTest {
     }
 
     /**
+     * P1-11：失败路径的监听器抛异常时，不得顶掉原始异常。
+     *
+     * <p>修复前 {@code publishLoginFailure} 直接写在 catch 块里、没有单独保护，
+     * 监听器抛出的异常会替换掉登录失败的原始异常，调用方（与异常翻译器）
+     * 看到的是监听器的异常而非真实失败原因。
+     */
+    @Test
+    void shouldKeepOriginalExceptionWhenFailureListenerThrows() {
+        CapturingSecurityEventPublisher publisher = new CapturingSecurityEventPublisher();
+        publisher.throwOnFailure = true;
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(true), defaultProperties(), publisher);
+        bindRequestContext();
+
+        TinySecurityException thrown = assertThrows(TinySecurityException.class,
+                () -> authProvider.login("user-1", null));
+
+        assertEquals("create auth failed", thrown.getMessage(),
+                "监听器异常顶掉了原始异常，调用方看不到真实失败原因");
+        assertEquals(1, publisher.loginFailureCount.get(), "失败事件仍应被发出");
+        assertEquals(0, publisher.loginSuccessCount.get());
+    }
+
+    /**
      * 凭证格式回归：credentials 固定为「UUID 去横线」（32 位小写十六进制，内部走 SecureRandom），
      * 不再有 credentials-style 配置项可切换——避免用户选到弱随机源。
      *
@@ -112,6 +135,7 @@ class AuthProviderEventTest {
         private final AtomicInteger loginSuccessCount = new AtomicInteger(0);
         private final AtomicInteger loginFailureCount = new AtomicInteger(0);
         private volatile boolean throwOnSuccess;
+        private volatile boolean throwOnFailure;
 
         @Override
         public void publishLoginSuccess(LoginSuccessEvent event) {
@@ -124,6 +148,9 @@ class AuthProviderEventTest {
         @Override
         public void publishLoginFailure(LoginFailureEvent event) {
             loginFailureCount.incrementAndGet();
+            if (throwOnFailure) {
+                throw new RuntimeException("failure listener exploded");
+            }
         }
 
         @Override

@@ -119,8 +119,8 @@ JDK 17 与 21 均 BUILD SUCCESS，JaCoCo 门槛（LINE 50%）通过
 | 项 | 内容 | 状态 | 备注 |
 |---|---|---|---|
 | **JDBC 并发上限** | 唯一可行且**无需事务**的方案：加 `slot` 列 + `UNIQUE (login_id, slot)`，登录时试 `slot = 1..max`，唯一键冲突即占位失败 | **WONTFIX（暂缓）** | 三个免改表结构方案已实测否决（见文档 §4.3 第 13 行）；因需**破坏性 DDL** 而暂缓。当前 TCK 中以 `supportsAtomicConcurrentLimit()` **显式豁免**，非静默放过 |
-| **P1-11 事件机制** | 失败路径监听器异常会顶掉原始异常；`LoginSuccessEvent` 携带完整 token | `TODO` | 改事件类字段属公开 API 变更，可只做"失败路径隔离"这一半 |
-| **P1-13 `SimpleHash`** | 被 README 当作"密码哈希"宣传，实为摘要工具 | `TODO` | 文档级改动，成本低 |
+| **P1-11 事件机制** | 失败路径监听器异常会顶掉原始异常；`LoginSuccessEvent` 携带完整 token | **DONE（1/3）** | 失败路径隔离已完成（含反向验证）；另两条属公开 API 变更/新特性，留待阶段 2 |
+| **P1-13 `SimpleHash`** | 被 README 当作"密码哈希"宣传，实为摘要工具 | **DONE** | 纯文档降级 + 警告块；顺带修掉 DOC-1（示例用的 `MD5Hash`/`Sha256Hash` 是**不存在的类**） |
 | **TST-6** | 引入 Testcontainers，让 CI 也能跑真实 Redis | `DOING` | 已能本地跑（见 §1）；CI 仍不跑 |
 | **`AntPathMatcher` → `PathPattern`** | — | ⏭️ **WONTFIX** | 实测：修不了编码绕过（那是输入源问题）、现有词汇表两者结论一致、中间 `**` 会让存量权限码**直接抛异常**。**不要照着旧条目的"修复方向"去改** |
 | 阶段 2 | 授权做深（角色继承 + 数据范围 + 权限缓存） | 未开始 | 见文档 §4.4/§5 |
