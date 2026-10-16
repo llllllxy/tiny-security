@@ -10,7 +10,7 @@
 > |---|---|
 > | 文档版本 | v1.7 |
 > | 分析对象 | 工作区快照：`springboot3` 分支 / 版本号 `1.4.0`（未做 git 校验，见附录 A） |
-> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行。测试 core 305（含 20 个按需跳过的 Redis 契约用例）/ starter 16 全绿（JDK 17 与 21 均通过） |
+> | 增量更新 | `1.5.0`：**移除 JWT**，改为 HMAC-SHA256 签名 token；**删除 `credentials-style`，凭证固定为 UUID**；P0-3 修复；四个仓储加凭证碰撞检测（均见 §4.3 IR-1）；**P0-1 / P0-2 修复**——`AuthUtil.has*` 在无注解接口上改为按需懒加载；**P0-4 修复**——`JsonUtil` 注册 JSR-310 模块、`LoginSubject` 容忍未知字段；**P0-5 定级修正**——`BCrypt` 实为原样引入、零引用的第三方工具类，降级合入 P2-13 并判定 `WONTFIX`（原条目中"72 字节截断""work factor 取自存储值"两条为算法规格误报）；**P0-6 修复**——`WebRequestUtils` 便捷重载默认不再从 URL 读 token；**P0-7 修复**——`SM3Hash` 的 `salt=null` 归一化为空串（消除真碰撞）、失败不再静默返回全 0；**ENG-1 完成**——建立 GitHub Actions CI（JDK 17/21 矩阵 + JaCoCo 覆盖率门槛），建立过程中发现并修复了 `mvn verify` 无法在 CI 运行（GPG 插件绑定 verify）与 JDK 21 下 `byte-buddy` 依赖冲突两个问题，后者通过 `import` `spring-boot-dependencies` BOM 结构性解决；**P1-1 / P1-2 修复**——`AuthProvider` 收敛为**唯一实例门面**（继承降为包级私有内部实现的 `TinySecurityFacade`），`AuthUtil` 去掉 `setFacade`/`getFacade` 与可变静态全局，改为从**当前请求的 `WebApplicationContext`** 解析 `AuthProvider`（用 `findWebApplicationContext` 并区分「多个候选 Bean」的报错）；**P1-4 修复**——`AnnotationUtils` 的三处注解查找改用 `AnnotatedElementUtils.findMergedAnnotation`，修掉「注解写在父类/接口上、方法在子类被重写或实现时被判定为无注解接口而**直接放行**」的 fail-open（原条目对触发条件的描述已实测修正）；**P1-3 定级修正**——「异步线程拿不到安全上下文」判定为**使用方式问题而非框架缺陷**，不做自动传播（线程绑定上下文切线程即失效，与 `SecurityContextHolder` 同构；Spring Security 亦只提供可选的 `DelegatingSecurityContextAsyncTaskExecutor`），原「修复方向」中 MQ 传播不可行、且只传播 `SecurityContext` 并不足以让 `AuthUtil` 工作；**P1-6 / P1-8 修复**——内核补上绝对过期校验（此前已过期会话因「剩余 TTL ≤ 阈值」恒成立而被**无限复活**），`timeout` 非正值在四仓储语义各异的问题按「`-1` 统一为永不过期、其余装配期拒绝」收敛（顺带修掉 Caffeine 的 `Long.MAX_VALUE * 1e6` 溢出，以及 Redis 续期路径 `SETEX` 拒绝 `-1` 导致的续期静默失败 —— 后者系**真实 Redis 实测**才发现，本条最初的判断曾把 Redis 登录路径误判为"登录失败"，已在 P1-8 条目内勘误；因类路径无 JSR-380 校验器，校验用显式代码而非 `@Validated` 以免静默空转；**`timeout` 取值语义最终收敛为「只允许正数」**——开发期间曾实现过 `-1` = 永不过期，因收益存疑、两套过期口径会分叉、且在续期处留下"写成过去时间"的地雷而整体推翻，四个仓储的永不过期分支随之删除）；**P1-7 修复（3/4）**——并发登录上限改为原子实现：Redis 用 Lua 脚本把"判上限 + 入列 + 设 TTL"合并为一次原子执行，Single / Caffeine 把 count 挪进已有的 `onlineLock`，并补上本仓库**首批并发测试**；实测修复前"上限 1 时 4 个并发登录全部被拒"、JDBC"上限 3 时 16 个并发全部成功"，修复后三个仓储恰好放行上限个；JDBC 残余（需改表结构才能真正闭合，三个免改表候选方案已实测否决）另列 §4.3 第 13 行；**P1-11 修复（1/3）**——登录**失败路径**的事件发布补上独立 try/catch + WARN，此前监听器抛出的异常会**顶掉登录失败的真实异常**（成功路径本就已隔离），另两条（成功事件改带不可逆标识、发布策略可配异步）判定为公开 API 变更/新特性、留待阶段 2；**P1-13 修复**——README §2.5.3 把 `SimpleHash` 从「密码哈希」降级为「摘要工具」并加显式警告 + 指引到 `BCrypt`，顺带修掉 DOC-1（该节示例用的 `MD5Hash`/`Sha256Hash` 是**不存在的类**，12 行示例全部无法编译，已换成真实 API 并逐行编译验证通过）、DOC-12。测试 core 306（含 20 个按需跳过的 Redis 契约用例）/ starter 16 全绿（JDK 17 与 21 均通过） |
 > | 模块 | `tiny-security-core`（`tiny-security-core3`）、`tiny-security-boot-starter`（`tiny-security-boot3-starter`） |
 > | 分析方式 | **纯静态阅读**（未编译、未运行、未执行任何测试，原因见附录 A） |
 > | 覆盖范围 | 60 个生产类、30 个测试类 / 194 个 `@Test`、2 个 pom、README.md / README.en.md / CHANGELOG.md / 资源配置 |
@@ -58,7 +58,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | 认证模型 | **有状态会话**（每次请求查 Redis / JDBC / 内存）+ `credentials.HMAC-SHA256(credentials)` 签名 token 仅用于携带 `credentials` |
 | 授权模型 | 注解（`@RequiresPermissions` / `@RequiresRoles`）或 URL 模式，SPI 为 `AuthorizationInfoGet` 返回 `Set<String>` |
 | 会话仓储 | 4 个：`single` / `caffeine` / `redis` / `jdbc` |
-| 代码规模 | 生产类 58 个；测试类 36 个 / 305 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
+| 代码规模 | 生产类 58 个；测试类 36 个 / 306 个用例（`1.5.0` 实测值，含本仓库首批并发用例） |
 | 文档 | README.md（708 行）、README.en.md（263 行）、CHANGELOG.md（444 行） |
 | CI | ✅ GitHub Actions（`.github/workflows/ci.yml`）：JDK 17/21 矩阵，`mvn -B verify -Dgpg.skip=true` + JaCoCo 覆盖率门槛（`1.5.0` 由 ENG-1 建立） |
 | 分支策略 | `master`（SB2 / javax）与 `springboot3`（SB3 / jakarta），靠**手工 cherry-pick** 同步 |
@@ -540,12 +540,23 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 #### P1-11 · 事件机制：失败路径监听器异常会顶掉原始异常；成功事件携带完整 token
 
 - **证据**：
-  - [`AuthProvider.java:287-295`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L287-L295)（`publishLoginFailure` 在 catch 块内，**未被单独 try/catch 保护** → 监听器抛异常会替换原异常）
-  - [`AuthProvider.java:298-302`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L298-L302)（**成功路径已正确隔离**：单独 try/catch + WARN —— 此处无需改）
-  - [`AuthProvider.java:299`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L299)（`LoginSuccessEvent` 携带**完整 token**，内含 credentials）
+  - [`AuthProvider.java:334-342`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L334-L342)（`publishLoginFailure` 在 catch 块内，**未被单独 try/catch 保护** → 监听器抛异常会替换原异常）
+  - [`AuthProvider.java:343-349`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L343-L349)（**成功路径已正确隔离**：单独 try/catch + WARN —— 此处无需改）
+  - [`AuthProvider.java:346`](../tiny-security-core/src/main/java/org/tinycloud/security/provider/AuthProvider.java#L346)（`LoginSuccessEvent` 携带**完整 token**，内含 credentials）
   - [`SpringSecurityEventPublisher`](../tiny-security-boot-starter/src/main/java/org/tinycloud/security/event/SpringSecurityEventPublisher.java)（同步 `publishEvent`，慢监听器阻塞请求线程）
 - **修复方向**：失败路径同样隔离；`LoginSuccessEvent` 改为携带不可逆标识而非完整 token；发布策略可配置同步/异步。
-- **状态**：`TODO`
+- **状态**：`DONE（1/3）`（`1.5.0`）—— **失败路径隔离已完成**；「成功事件携带完整 token」与「发布策略可配同步/异步」两项**未做**（理由见下）
+
+##### P1-11 实施记录（1.5.0）
+
+| 项 | 内容 |
+|---|---|
+| 本条只做 1/3 的理由 | 原文的修复方向有三条，但只有第一条是**缺陷**：后两条（改 `LoginSuccessEvent` 字段、发布策略可配）属**公开 API 变更 / 新特性**。`LoginSuccessEvent.getToken()` 是已发布 API，改成返回不可逆标识会让存量监听器（审计、绑定设备等）拿不到 token；而"事件里带 token"本身是**设计取舍**而非缺陷 —— 监听器与框架同进程、同信任域，能读到 token 的代码本来就能读到 `credentials`。故本版本按文档既定建议**只做失败路径隔离**这一半，另两条留待阶段 2 与事件机制一起重做 |
+| 先证缺陷 | `AuthProviderEventTest` 新增 `shouldKeepOriginalExceptionWhenFailureListenerThrows`：让测试用发布器在 `publishLoginFailure` 里抛 `RuntimeException`，断言登录仍抛**原始**的 `TinySecurityException`（消息 `create auth failed`）。改动前如实变红：`Unexpected exception type thrown, expected: <TinySecurityException> but was: <RuntimeException>` —— 监听器异常**确实**顶掉了原始异常 |
+| 修复 | catch 块内的 `publishLoginFailure` 加一层 `try/catch (Exception)` + `log.warn`，与下方成功路径的写法完全对齐；`throw ex` 移到内层 try 之外，保证原始异常必达 |
+| 反向验证 | 把新增的 `catch (Exception publishEx)` 变异为 `catch (IllegalStateException publishEx)`（即不再吞掉 `RuntimeException`）→ 该例**变红**，报错与修复前逐字一致；还原后恢复绿。变异前先断言锚点命中数 = 1（本仓库曾两次因锚点命中 0 得到假验证） |
+| 未做的两项 | 见上表第一行；已明确**不是**遗漏 |
+
 
 #### P1-12 · `checkLogin()` 可能抛 `IllegalArgumentException`（→ HTTP 500）而不是 401
 
@@ -572,7 +583,20 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 - **证据**：[`SimpleHash.java:10-24`](../tiny-security-core/src/main/java/org/tinycloud/security/util/secure/SimpleHash.java#L10-L24)、README §2.5.3
 - **问题**：支持 MD5/SHA-1 为一等算法名；"迭代"只是裸摘要链（**不是** PBKDF2/scrypt/Argon2/bcrypt），无内存硬度、无每用户随机盐（存在免盐构造器）、**没有任何校验 API**（调用方只能自己 `String.equals`，重新引入时序侧信道）。
 - **修复方向**：README 中移出"密码哈希"章节，降级为"摘要工具"；密码哈希只保留 BCrypt，并考虑提供 `PasswordEncoder` SPI。
-- **状态**：`TODO`
+- **状态**：`DONE`（`1.5.0`）—— README 侧降级完成；**代码未改**（`SimpleHash` 本身保留，仅纠正定位与文档措辞）
+
+##### P1-13 实施记录（1.5.0）
+
+| 项 | 内容 |
+|---|---|
+| 改动范围 | **纯文档**（`README.md` §2.5.3），零代码改动。节标题由「密码哈希与摘要算法」改为「**摘要算法与密码哈希**」，并把摘要算法排在前、密码哈希排在后 |
+| 摘要工具加警告块 | 在 `SimpleHash` 示例上方加了显式警告：**是摘要工具、不是密码哈希、勿用于存口令**，并逐条写明理由（MD5/SHA-1 已不适用、`iterations` 非 KDF 无内存硬度、允许不加盐、无校验 API 会引入时序侧信道），并把用户**指引到 `BCrypt`** |
+| 密码哈希章节收口 | BCrypt 段补一句正面理由（自带随机盐、work factor 可调、`checkpw` 恒定时间比较），让"该用哪个"有明确答案 |
+| **顺带修掉 DOC-1** | 原示例用的是**根本不存在的类** `MD5Hash` / `Sha256Hash`（12 行示例全部无法编译，真实类名是 `SimpleHash`）；本次改写把这些示例**全部换成真实 API**，并补齐 `SM3Hash(...)` → `SimpleHash("SM3", ...)` 的统一写法。DOC-1 与 DOC-12 一并置 `DONE` |
+| 验证（可编译） | 把 README 改写后的**全部示例逐行照抄**进一个临时类，用 JDK 17 对 `tiny-security-core/target/classes` 直接 `java` 单文件编译运行 → `README examples compiled & ran OK; checkpw=true`，随后删除临时文件。满足阶段 0 退出标准中「README 中的每条 API 示例都能实际编译通过」 |
+| 验证（无残留） | `grep -n "MD5Hash\|Sha256Hash" README.md` → 无命中 |
+| 未做的部分 | 原文"密码哈希只保留 BCrypt，并考虑提供 `PasswordEncoder` SPI"—— 提供 SPI 属**新功能**，不在本次（阶段 1 收尾）范围；`BCrypt` 的既有问题已定级 `WONTFIX`（见 P0-5 / P2-13） |
+
 
 ---
 
@@ -619,7 +643,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 
 | ID | 问题 | 证据 | 状态 |
 |---|---|---|---|
-| DOC-1 | README **宣传了不存在的类** `MD5Hash` / `Sha256Hash`（12 行示例代码全部无法编译；真实类名是 `SimpleHash`） | [`README.md:613-625`](../README.md#L613-L625) | `TODO` |
+| DOC-1 | ~~README **宣传了不存在的类** `MD5Hash` / `Sha256Hash`（12 行示例代码全部无法编译；真实类名是 `SimpleHash`）~~ ✅ **`1.5.0` 已完成**（随 P1-13 一并改写为真实 API，并逐行编译验证通过） | [`README.md:620`](../README.md#L620) | `DONE` |
 | DOC-2 | README 示例用 `I18nUtils.getMessage(...)`，该类**全项目不存在** | [`README.md:505-515`](../README.md#L505-L515) | `TODO` |
 | DOC-3 | README 用 `authProvider.deleteTokenByLoginId(...)`，真实方法名是 `deleteByLoginId` | [`README.md:334`](../README.md#L334)、[`:341`](../README.md#L341) | `TODO` |
 | DOC-4 | README 称 `AuthUtil.getLoginId()` **未登录返回 null** —— 与 1.4.0 破坏性变更（改为抛异常）和代码**完全相反**；示例第 282 行 `securityContext == null ? null : ...` 的写法同样建立在"可能返回 null"的错误前提上 | [`README.md:277`](../README.md#L277)、[`:280`](../README.md#L280)、[`:282`](../README.md#L282) | `TODO` |
@@ -630,7 +654,7 @@ grep -n "P0-1" docs/tiny-security-分析报告与演进路线.md
 | DOC-9 | CHANGELOG 声称已清理 `BCrypt`/`SimpleHash`/`SM3Hash`/`SM3ConvertUtil` 的 `main()`/`System.out`，实际 `BCrypt.main` 还在 | [`CHANGELOG.md:85`](../CHANGELOG.md#L85) vs P3-1 | `TODO` |
 | DOC-10 | `README.en.md` 是"精简镜像"但缺少 `@Ignore`、`enable-url-token`、异常处理等章节，且同样引用不存在的 docs | 两份 README 对比 | `TODO` |
 | DOC-11 | 未说明 `t_auth_storage.sql` 的位置与导入方式，也未说明 `login_subject` 的 5000 字符上限 | [`t_auth_storage.sql`](../tiny-security-boot-starter/src/main/resources/sql/t_auth_storage.sql) | `TODO` |
-| DOC-12 | README §2.5.3 把 `SimpleHash`（含 MD5/SHA-1）列在"密码哈希"语境下推荐 | 同 P1-13 | `TODO` |
+| DOC-12 | ~~README §2.5.3 把 `SimpleHash`（含 MD5/SHA-1）列在"密码哈希"语境下推荐~~ ✅ **`1.5.0` 已完成**（同 P1-13：加警告块、降级为摘要工具、指引到 `BCrypt`） | 同 P1-13 | `DONE` |
 | DOC-13 | 缺少一份"配置项全表 + 默认值 + 生效条件"（`AuthProperties` 有 20+ 项，README 只列了一部分） | `AuthProperties` | `TODO` |
 | DOC-14 | 用户可见文档未说明 **`AuthUtil` 只能在持有当前请求的线程上使用**：`@Async` / `Callable` / `DeferredResult` / MQ 消费线程里调用会抛 `UnAuthorizedException`，应改注入 `AuthProvider`。该边界只在 CHANGELOG 与内部文档里写了，README / README.en 的 `AuthUtil` 章节一字未提（见 P1-3 的定级修正） | [`README.md:275-281`](../README.md#L275-L281)、[`README.en.md:221-226`](../README.en.md#L221-L226) | `TODO` |
 | DOC-15 | `README.en.md` 称 "`AuthUtil` is a static facade delegating to the framework context" —— P1-1/P1-2 之后它**不再是静态门面**（门面 Bean 已删除，`TinySecurityFacade` 降为包级私有），实为"每次调用从当前请求的容器解析 `AuthProvider`" | [`README.en.md:221`](../README.en.md#L221) | `TODO` |
@@ -755,10 +779,10 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 | 6 | ~~注解查找沿父类/接口上溯~~ ✅ **`1.5.0` 已完成** | P1-4 |
 | 7 | ~~Cookie 登出与 SameSite 语义修正~~ ✅ **`1.5.0` 已完成**（删除指令补齐 `Secure`/`SameSite`；`logout(request)` 增加同一性校验） | P1-5 |
 | 8 | ~~仓储契约收紧 + **建 TCK**~~ ✅ **`1.5.0` 已完成**：TCK 已建成并跑通四个实现（20 例 × 4）；过程中抓出 single / redis 的同源缺陷与 JDBC 的已知残余（并发上限）。**JDBC 并发上限的闭合拆到第 13 行**（需破坏性 DDL） | ~~P1-9~~、~~TST-8~~、~~TST-5~~、TST-6（部分） |
-| 9 | 事件机制修正 | P1-11 |
-| 10 | 补 MockMvc 全链路集成测试 | TST-1、TST-2 |
+| 9 | ~~事件机制修正~~ ✅ **`1.5.0` 已完成（1/3）**：**失败路径隔离**已做（监听器异常不再顶掉原始异常，含反向验证）。另两条（`LoginSuccessEvent` 改带不可逆标识、发布策略可配同步/异步）判定为**公开 API 变更 / 新特性**，留待阶段 2 与事件机制一并重做 —— 理由见 P1-11 实施记录 | ~~P1-11~~ |
+| 10 | ~~补 MockMvc 全链路集成测试~~ | TST-1、TST-2 |
 | 11 | ~~`checkLogin()` 对"验签通过但凭证为空白"的 token 返回 500 而非 401~~ ✅ **`1.5.0` 已完成**（触发条件按实测改写：原文的"JWT 不含 claim"随 JWT 移除已不适用） | P1-12 |
-| 12 | `SimpleHash` 从 README「密码哈希」章节降级为「摘要工具」 | P1-13 |
+| 12 | ~~`SimpleHash` 从 README「密码哈希」章节降级为「摘要工具」~~ ✅ **`1.5.0` 已完成**（另顺带修掉 DOC-1：原示例的 `MD5Hash`/`Sha256Hash` 是**不存在的类**，已全部换成真实 API 并逐行编译验证） | ~~P1-13~~、~~DOC-1~~、~~DOC-12~~ |
 | 13 | **JDBC 并发登录上限的真正闭合** —— 唯一可行且**不需要事务**的设计：给 `t_auth_storage` 加 `slot` 列 + `UNIQUE (login_id, slot)`，登录时依次尝试 `slot = 1..max`，唯一键冲突即该槽位被占、全部被占即拒绝；每条 `INSERT` 各自靠唯一索引保证原子，**无需事务**，会话删除/过期后槽位自动释放。代价是**破坏性 DDL**（含既有行回填）与登录路径上最多 `max` 次 INSERT 重试。**当前建议：暂不做** —— 默认 `store-type` 是 `single`（已原子），`jdbc` 为显式选用；且症状是"并发下偶发超限"而非"登不进来"，不值得为它引入破坏性 DDL | P1-7（残余） |
 | 14 | **`AuthProvider.refreshByCredentials(credentials, subject)` 语义收口**：该方法只延长**存储层** TTL，从不更新 `subject.loginExpireTime`，导致"存储层 TTL"与"过期时间戳"两套口径分叉；内核补上绝对过期校验后这种分叉会表现为 401（旧逻辑靠下一跳顺手续期把缝补上了，问题一直被掩盖）。建议让它同时按 `resolveTimeout()` 更新 `loginExpireTime`，或明确标记废弃并引导使用方走正常鉴权续期。**来源**：`1.5.0` 代码自审中发现，与 P1-8 推翻记录第 ② 条同源 | P1-14 |
 

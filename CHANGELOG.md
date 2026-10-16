@@ -95,6 +95,11 @@
   - **症状**：`checkLogin()` 把 `" "` 交给会话仓储，命中内置仓储的 `Assert.hasText(credentials, ...)` 抛出 `IllegalArgumentException`。它**不是** `TinySecurityException`，异常解析器返回 null，最终交给 Spring 默认处理 → **HTTP 500**（调用方会误判为服务端故障，也会污染错误监控）。
   - **修复**：`checkLogin()` 补 try/catch —— `UnAuthorizedException` 原样抛出，其余异常按"未登录"处理并降为 debug 日志，最终统一抛 `UnAuthorizedException`（401）。与 `isLogin()` 的既有容错写法对齐：两者只该在"抛异常还是返回 false"上不同，对异常输入的容错必须一致。
   - **不受影响**：正常 token；以及未登录（无 token）的常见路径（本来就抛 `UnAuthorizedException`）。
+- **修复登录失败时，事件监听器抛出的异常会顶掉真实失败原因**：
+  - **症状**：`login()` 在 catch 块里直接调用 `publishLoginFailure(...)`，**没有单独保护**。若监听器（审计落库、风控告警等）自身抛异常，该异常会替换掉登录失败的原始异常 —— 调用方与异常翻译器看到的是监听器的报错，**看不到真实失败原因**，排障时会被彻底带偏（例如真实原因是"已超过并发登录上限"，前端却收到监听器抛出的 NPE）。
+  - **修复**：失败路径的事件发布补上独立的 `try/catch` + WARN 日志，与**成功路径既有的隔离写法对齐**（成功路径本就已隔离，无需改动）。发布失败只记录日志，原始异常照常抛出。
+  - **不受影响**：正常登录失败（监听器不抛异常时行为完全不变）。
+  - **本次未做的部分**：`LoginSuccessEvent` 仍携带完整 token、发布策略仍为同步 —— 这两条属**公开 API 变更 / 新特性**（`getToken()` 是已发布 API，改成不可逆标识会让存量监听器拿不到 token），留待后续版本与事件机制一并重做。
 - **修复 Cookie 模式下"登出后仍是登录态"与"显式传 request 时 Cookie 不清理"两个缺陷**（需开启 `tiny-security.enable-cookie`）：
   - **缺陷一（登出静默失效）**：删除 Cookie 时只带了 `path`/`maxAge=0`/`HttpOnly`，**丢了 `Secure` 与 `SameSite`**。删除 Cookie 的本质是"写回一个同名、`maxAge=0` 的 Cookie"，浏览器只有在 `path`/`domain` 与**安全属性**都匹配时才认这条删除指令；`SameSite=None` 的 Cookie 规范要求必须伴随 `Secure`，**删除指令缺失这两个属性会被浏览器直接忽略** —— 表现就是用户点了登出，Cookie 仍在、下次请求依旧登录态。现在删除指令与写入使用**同源属性**（`cookie-secure` / `cookie-same-site` 的配置值）。
   - **缺陷二（清理写错对象）**：`logout(HttpServletRequest request)` 内部用的是线程绑定的 response，而不是由传入的 `request` 推导。当二者不是同一请求时，清理指令会写到**另一个请求**的响应上。Servlet API 无法从请求反查响应，因此修复方式为**校验同一性**：新增 `WebRequestUtils.getResponse(HttpServletRequest)`，若线程绑定的请求不是传入的那一个则返回 `null`（宁可不清理，也不写错对象）。正常 Web 请求下二者本就是同一实例，行为不变。
@@ -129,6 +134,14 @@
   - **修复**：`AnnotationUtils` 的三处查找统一改用 `AnnotatedElementUtils.findMergedAnnotation`，先查方法（沿父类/接口的同名方法上溯）再查声明类，并解析元注解，一次覆盖上述三种写法。
   - **行为变更**：原先漏掉的三种写法现在会生效。副作用是对 `@Ignore` 也一并生效（父类/接口上的 `@Ignore` 在重写/实现后不再被忽略）—— 因 `@Ignore` 是用户显式书写的框架自有注解，按"尊重用户意图"处理。
   - **说明**：`@RequiresPermissions` / `@RequiresRoles` / `@Ignore` 均**不是** `@Inherited`；但"父类标了注解、子类只继承不重写"这一场景**原本就不会漏**（反射拿到的 `Method` 其声明类即父类），不需要改动。
+
+### 📖 文档修正
+
+- **README §2.5.3 把 `SimpleHash` 从「密码哈希」降级为「摘要工具」**（原章节把 MD5/SHA-1 与 BCrypt 并列在"密码哈希"语境下推荐）：
+  - 章节标题改为「**摘要算法与密码哈希**」，摘要工具在前、密码哈希在后，并在 `SimpleHash` 示例上方加了显式警告：**它是摘要工具、不是密码哈希算法、请勿用于存储用户口令**，理由逐条写明 —— MD5/SHA-1 已不适合任何安全用途；`iterations` 只是**裸摘要的重复计算链**，不是 PBKDF2/scrypt/Argon2 这类有内存硬度、抗 GPU 暴破的密钥派生函数；构造器允许不传盐（无每用户随机盐）；**没有任何校验 API**，调用方只能自己写 `String.equals`，会重新引入时序侧信道。同时把用户**指引到 `BCrypt`**，并在 BCrypt 段补上正面理由（自带随机盐、work factor 可调、`checkpw` 恒定时间比较）。
+  - **顺带修复示例代码无法编译的错误**：该节此前的示例用的是 `new MD5Hash(...)` / `new Sha256Hash(...)` —— 这两个类**在项目中根本不存在**（真实类名是 `SimpleHash`），12 行示例全部无法编译。现已全部换成真实 API，并把 `new SM3Hash(...)` 的示例统一为 `new SimpleHash("SM3", ...)` 写法。
+  - 改写后的所有示例已**逐行照抄进临时类、用 JDK 17 实际编译运行通过**后删除，确保文档示例可用。
+  - **无代码改动**：`SimpleHash` 与 `SM3Hash` 本身均保留，本次只纠正定位与措辞。
 
 ### 升级检查清单
 
