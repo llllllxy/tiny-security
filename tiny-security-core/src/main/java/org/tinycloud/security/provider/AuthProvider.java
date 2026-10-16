@@ -221,12 +221,27 @@ public class AuthProvider extends TinySecurityFacade {
     /**
      * 刷新指定凭证对应会话。
      *
+     * <p><b>过期口径必须与存储层 TTL 一致</b>：本方法在延长存储层 TTL 的同时，会把
+     * {@code subject.loginExpireTime} 一并推进到 {@code now + timeout}。
+     * 内核的「绝对过期校验」判定的正是这个时间戳，若只延长 TTL 而不推进它，
+     * 就会出现「存储里还有会话、用户却已经 401」的分叉（P1-14）——
+     * 表现为续期看起来没生效。此处与 {@code DefaultAuthenticationManager}
+     * 自己的滑动续期路径（先 set 再 refresh）保持同一口径。
+     *
+     * <p>注意本方法会**改写传入的 subject**（写入新的过期时间戳）。
+     *
      * @param credentials 会话凭证
-     * @param subject     登录主体
+     * @param subject     登录主体（可为 null，此时退化为纯 TTL 延长）
      * @return 是否刷新成功
      */
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
-        return this.sessionRepository.refreshByCredentials(credentials, subject, resolveTimeout());
+        int timeout = resolveTimeout();
+        // 先推进时间戳再落库：四种仓储都会把 subject 存下（内存版存引用、redis/jdbc 序列化），
+        // 因此这一步同时修正「存储层 TTL」与「绝对过期时间戳」两套口径。
+        if (subject != null) {
+            subject.setLoginExpireTime(System.currentTimeMillis() + timeout * 1000L);
+        }
+        return this.sessionRepository.refreshByCredentials(credentials, subject, timeout);
     }
 
     /**
