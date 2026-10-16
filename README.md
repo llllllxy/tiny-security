@@ -617,36 +617,45 @@ tiny-security:
 ```
 
 
-### 2.5.3 密码哈希与摘要算法
-框架封装了一些常见的密码哈希与摘要算法，可供使用（如需对称/非对称加密，推荐直接使用 JDK JCA 或 Hutool、BouncyCastle 等专用密码学库）
+### 2.5.3 摘要算法与密码哈希
 
-1. 摘要算法：
-   支持MD5、SHA256和国密SM3算法
+如需对称/非对称加密，推荐直接使用 JDK JCA 或 Hutool、BouncyCastle 等专用密码学库。
+
+#### 1. 摘要算法（`SimpleHash`）
+
+> ⚠️ **`SimpleHash` 是摘要工具，不是密码哈希算法，请勿用于存储用户口令。**
+>
+> 它把 MD5 / SHA-1 当作一等算法名，而这两者早已不适合任何安全用途；其 `iterations`
+> 参数只是**裸摘要的重复计算链**，**不是** PBKDF2 / scrypt / Argon2 这类具备内存硬度、
+> 抗 GPU 暴破的密钥派生函数；构造器允许不传盐（即无每用户随机盐）；并且**不提供任何校验 API**
+> —— 调用方只能自己写 `String.equals` 比对，会重新引入时序侧信道。
+>
+> **需要密码哈希请用下方的 `BCrypt`**；完整性校验、缓存键、去重指纹等非安全场景再用本工具。
+
+支持 JDK 内置算法（MD5、SHA-1、SHA-256 等）与国密 SM3，可输出 HEX 或 Base64：
+
 ```java
-    new MD5Hash("123456", "323@#@$1234da", 1).toHex();
-    new MD5Hash("123456", "323@#@$1234da").toHex();
-    new MD5Hash("123456").toHex();
-    new MD5Hash("123456", "323@#@$1234da", 2).toHex();
-    new MD5Hash("123456", "323@#@$1234da", 3).toHex();
-    new MD5Hash("123456", "323@#@$1234da", 3).toBase64();
-    
-    new Sha256Hash("123456", "323@#@$1234da", 10).toBase64();
-    new Sha256Hash("123456", "323@#@$1234da").toHex();
-    new Sha256Hash("123456").toHex();
-    new Sha256Hash("123456", "323@#@$1234da", 2).toHex();
-    new Sha256Hash("123456", "323@#@$1234da", 3).toHex();
-    new Sha256Hash("123456", "323@#@$1234da", 3).toBase64();
+    // 三参：算法 + 明文 + 盐（迭代 1 次）
+    new SimpleHash("MD5", "123456", "323@#@$1234da").toHex();
+    // 四参：末位为迭代次数，最少 1 次
+    new SimpleHash("MD5", "123456", "323@#@$1234da", 2).toHex();
+    new SimpleHash("MD5", "123456", "323@#@$1234da", 3).toBase64();
+    // 两参：不加盐
+    new SimpleHash("MD5", "123456").toHex();
 
-    new SM3Hash("123456", "323@#@$1234da", 1).toHex();
-    new SM3Hash("123456", "323@#@$1234da").toHex();
-    new SM3Hash("123456").toHex();
-    new SM3Hash("123456", "323@#@$1234da", 2).toHex();
-    new SM3Hash("123456", "323@#@$1234da", 4).toHex();
-    new SM3Hash("123456", "323@#@$1234da").toBase64();
+    new SimpleHash("SHA-256", "123456", "323@#@$1234da", 10).toBase64();
+    new SimpleHash("SHA-256", "123456", "323@#@$1234da").toHex();
+    new SimpleHash("SHA-256", "123456").toHex();
+
+    new SimpleHash("SM3", "123456", "323@#@$1234da").toHex();
+    new SimpleHash("SM3", "123456", "323@#@$1234da", 4).toBase64();
+    new SimpleHash("SM3", "123456").toHex();
 ```
 
-2. 密码哈希算法
-   支持BCrypt算法
+#### 2. 密码哈希（`BCrypt`）
+
+**存储用户口令请使用 `BCrypt`**：自带随机盐、work factor 可调，且 `checkpw` 是恒定时间比较。
+
 ```java
     // 密码哈希
     String hashedPassword = BCrypt.hashpw("123456", BCrypt.gensalt());
