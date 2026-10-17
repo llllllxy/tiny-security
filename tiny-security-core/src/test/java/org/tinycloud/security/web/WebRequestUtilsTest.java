@@ -1,6 +1,6 @@
 package org.tinycloud.security.web;
 
-import jakarta.servlet.http.Cookie;
+import javax.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 

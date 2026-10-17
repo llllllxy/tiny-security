@@ -1,6 +1,6 @@
 package org.tinycloud.security.util;
 
-import jakarta.servlet.http.Cookie;
+import javax.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -18,6 +18,25 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class CookieUtilTest {
 
+
+    /**
+     * 从 Set-Cookie 响应头中取出 SameSite 属性值。
+     *
+     * <p>Servlet 3.1（javax）的 Cookie 没有 getAttribute，SameSite 通过 Set-Cookie 头下发，
+     * 因此这里直接解析响应头。
+     */
+    private static String sameSiteOf(MockHttpServletResponse response, String cookieName) {
+        for (String header : response.getHeaders("Set-Cookie")) {
+            if (header.startsWith(cookieName + "=")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile(";\\s*SameSite=([^;]+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(header);
+                return m.find() ? m.group(1) : null;
+            }
+        }
+        return null;
+    }
+
     /**
      * 写入时带齐的属性必须能被读回来（HttpOnly / Secure / SameSite / Path / MaxAge）。
      */
@@ -34,7 +53,7 @@ class CookieUtilTest {
         assertEquals(1800, cookie.getMaxAge());
         assertTrue(cookie.isHttpOnly(), "必须 HttpOnly");
         assertTrue(cookie.getSecure(), "Secure 应透传");
-        assertEquals("None", cookie.getAttribute("SameSite"), "SameSite 应透传");
+        assertEquals("None", sameSiteOf(response, "token"), "SameSite 应通过 Set-Cookie 头下发");
     }
 
     /**
@@ -58,7 +77,7 @@ class CookieUtilTest {
         assertEquals(0, removed.getMaxAge(), "删除指令 maxAge 必须为 0");
         assertEquals(written.getPath(), removed.getPath(), "删除的 path 必须与写入一致");
         assertEquals(written.getSecure(), removed.getSecure(), "删除的 Secure 必须与写入一致");
-        assertEquals(written.getAttribute("SameSite"), removed.getAttribute("SameSite"),
+        assertEquals(sameSiteOf(write, "token"), sameSiteOf(remove, "token"),
                 "删除的 SameSite 必须与写入一致，否则浏览器会忽略该删除指令");
     }
 
@@ -72,8 +91,7 @@ class CookieUtilTest {
 
         Cookie cookie = response.getCookie("token");
         assertNotNull(cookie);
-        // Mock Servlet 对未设置过的属性返回 null
-        assertNull(cookie.getAttribute("SameSite"), "未指定 SameSite 时不应写入该属性");
+        assertNull(sameSiteOf(response, "token"), "未指定 SameSite 时不应写入该属性");
         assertFalse(cookie.getSecure());
     }
 

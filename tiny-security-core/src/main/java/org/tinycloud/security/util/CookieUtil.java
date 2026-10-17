@@ -1,8 +1,8 @@
 package org.tinycloud.security.util;
 
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
@@ -97,21 +97,51 @@ public class CookieUtil {
             cookie.setMaxAge(maxAge);
             cookie.setHttpOnly(true);
             cookie.setSecure(secure);
-            if (StringUtils.hasText(sameSite)) {
-                try {
-                    cookie.setAttribute("SameSite", sameSite);
-                } catch (Exception e) {
-                    // 容器不支持 Servlet 6 的 Cookie.setAttribute 时降级为不设置该属性
-                    logger.debug("CookieUtil setCookie setAttribute(SameSite={}) failed!", sameSite, e);
-                }
-            }
             try {
                 cookie.setValue(URLEncoder.encode(value, "utf-8"));
             } catch (UnsupportedEncodingException e) {
                 logger.error("CookieUtil setCookie url encode failed!", e);
             }
-            response.addCookie(cookie);
+            if (StringUtils.hasText(sameSite)) {
+                // Servlet 3.1 的 Cookie 没有 setAttribute，SameSite 通过 Set-Cookie 头下发
+                addCookieWithSameSite(response, cookie, sameSite);
+            } else {
+                response.addCookie(cookie);
+            }
         }
+    }
+
+    /**
+     * 写出一个带 SameSite 属性的 Cookie。
+     *
+     * <p>Servlet 3.1（javax）的 {@code Cookie} 没有 {@code setAttribute}，无法直接设置 SameSite；
+     * 而 SameSite 若缺失，Chrome/Edge 会默认按 Lax 处理，导致跨站场景下 Cookie 不被发送。
+     * 因此这里手工拼装 {@code Set-Cookie} 头。
+     *
+     * @param response 响应对象
+     * @param cookie   已配置好属性（path/maxAge/httpOnly/secure/value）的 Cookie
+     * @param sameSite SameSite 取值（Strict / Lax / None）
+     */
+    private static void addCookieWithSameSite(HttpServletResponse response, Cookie cookie, String sameSite) {
+        StringBuilder header = new StringBuilder();
+        header.append(cookie.getName()).append('=');
+        if (cookie.getValue() != null) {
+            header.append(cookie.getValue());
+        }
+        if (cookie.getPath() != null) {
+            header.append("; Path=").append(cookie.getPath());
+        }
+        if (cookie.getMaxAge() >= 0) {
+            header.append("; Max-Age=").append(cookie.getMaxAge());
+        }
+        if (cookie.isHttpOnly()) {
+            header.append("; HttpOnly");
+        }
+        if (cookie.getSecure()) {
+            header.append("; Secure");
+        }
+        header.append("; SameSite=").append(sameSite);
+        response.addHeader("Set-Cookie", header.toString());
     }
 
     /**
@@ -163,14 +193,11 @@ public class CookieUtil {
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
         if (StringUtils.hasText(sameSite)) {
-            try {
-                cookie.setAttribute("SameSite", sameSite);
-            } catch (Exception e) {
-                // 容器不支持 Servlet 6 的 Cookie.setAttribute 时降级为不设置该属性
-                logger.debug("CookieUtil removeCookie setAttribute(SameSite={}) failed!", sameSite, e);
-            }
+            // 与写入时使用同一套属性拼装，确保浏览器认可这条删除指令
+            addCookieWithSameSite(response, cookie, sameSite);
+        } else {
+            response.addCookie(cookie);
         }
-        response.addCookie(cookie);
     }
 
     /**

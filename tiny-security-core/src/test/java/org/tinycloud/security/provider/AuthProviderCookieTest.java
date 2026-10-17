@@ -1,6 +1,6 @@
 package org.tinycloud.security.provider;
 
-import jakarta.servlet.http.Cookie;
+import javax.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -106,7 +106,7 @@ class AuthProviderCookieTest {
         assertEquals(1800, cookie.getMaxAge());
         assertTrue(cookie.isHttpOnly());
         assertFalse(cookie.getSecure());
-        assertEquals("Lax", cookie.getAttribute("SameSite"));
+        assertEquals("Lax", sameSiteOf(response, "token"), "SameSite 应通过 Set-Cookie 头下发");
     }
 
     @Test
@@ -123,7 +123,7 @@ class AuthProviderCookieTest {
         Cookie cookie = response.getCookie("token");
         assertNotNull(cookie);
         assertTrue(cookie.getSecure());
-        assertEquals("None", cookie.getAttribute("SameSite"));
+        assertEquals("None", sameSiteOf(response, "token"), "SameSite 应通过 Set-Cookie 头下发");
     }
 
     /**
@@ -185,7 +185,7 @@ class AuthProviderCookieTest {
         // 关键：删除指令的属性必须与写入时一致，否则浏览器不认
         assertEquals(written.getSecure(), removed.getSecure(),
                 "删除 Cookie 的 Secure 必须与写入时一致，否则 SameSite=None 下删除会被浏览器忽略");
-        assertEquals(written.getAttribute("SameSite"), removed.getAttribute("SameSite"),
+        assertEquals(sameSiteOf(loginResponse, "token"), sameSiteOf(logoutResponse, "token"),
                 "删除 Cookie 的 SameSite 必须与写入时一致");
         assertEquals(written.getPath(), removed.getPath(), "path 必须一致");
         assertTrue(removed.isHttpOnly(), "HttpOnly 必须一致");
@@ -214,7 +214,7 @@ class AuthProviderCookieTest {
 
         Cookie removed = logoutResponse.getCookie("token");
         assertNotNull(removed);
-        assertEquals(written.getAttribute("SameSite"), removed.getAttribute("SameSite"),
+        assertEquals(sameSiteOf(loginResponse, "token"), sameSiteOf(logoutResponse, "token"),
                 "默认 SameSite=Lax 也必须带到删除指令上");
     }
 
@@ -335,6 +335,25 @@ class AuthProviderCookieTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
         return response;
+    }
+
+
+    /**
+     * 从 Set-Cookie 响应头中取出 SameSite 属性值。
+     *
+     * <p>Servlet 3.1（javax）的 Cookie 没有 getAttribute，SameSite 是通过 Set-Cookie 头下发的，
+     * 因此这里直接解析响应头。
+     */
+    private static String sameSiteOf(MockHttpServletResponse response, String cookieName) {
+        for (String header : response.getHeaders("Set-Cookie")) {
+            if (header.startsWith(cookieName + "=")) {
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile(";\\s*SameSite=([^;]+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(header);
+                return m.find() ? m.group(1) : null;
+            }
+        }
+        return null;
     }
 
     private AuthProperties defaultProperties() {
