@@ -3,10 +3,10 @@ package org.tinycloud.security.authentication;
 import javax.servlet.http.HttpServletRequest;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
+import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.session.SessionRepository;
 
 import java.util.Objects;
@@ -55,8 +55,12 @@ public class DefaultAuthenticationManager implements AuthenticationManager {
             throw new UnAuthorizedException();
         }
 
-        long expireTime = subject.getLoginExpireTime();
+        Long expireTime = subject.getLoginExpireTime();
         long currentTime = System.currentTimeMillis();
+        // 内核必须自己判定「会话是否已过期」，不能把这件事外包给仓储实现。
+        if (expireTime == null || expireTime <= currentTime) {
+            throw new UnAuthorizedException();
+        }
         // 滑动续期阈值：剩余存活时间不足 TTL 的 20% 时才刷新会话（避免每个请求都触发存储写，造成写放大）
         long millsCritical = (long) (this.timeout * 1000L * 0.2);
         if (expireTime - currentTime <= millsCritical) {

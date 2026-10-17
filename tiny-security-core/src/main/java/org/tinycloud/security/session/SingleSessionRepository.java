@@ -66,8 +66,23 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             }
             // 无论是否启用并发限制，登录时都清理该账号在线索引中的失效凭证，否则索引随登录次数无限累积（内存泄漏）
             this.countValidOnlineSessions(subject.getLoginId());
-            this.timedCache.setObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
-            this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
+            // 凭证是随机生成的会话唯一钥匙，理论上不会重复。一旦重复，说明随机源异常或有人在构造会话固定攻击，
+            // 此时必须明确失败，绝不能静默覆盖掉另一个用户的会话。
+            // （timeout 非法时 setObjectIfAbsent 同样不写入并返回 false；此时登录失败也是正确行为——
+            //   宁可不发 token，也不能发出一个后端查不到的 token）
+            boolean saved = this.timedCache.setObjectIfAbsent(
+                    AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject, timeoutSeconds);
+            if (!saved) {
+                log.error("SingleSessionRepository save failed: credentials collision detected, or the timeout {} is invalid. The session was not created!", timeoutSeconds);
+                return false;
+            }
+            // 先写会话、再原子占名额，顺序不能颠倒：若先占名额，并发的清理逻辑会因为凭证还不存在
+            // 而把刚加入的凭证误判为"失效"并移除
+            if (!this.addToOnlineListIfLimitNotExceeded(subject.getLoginId(), subject.getCredentials(), maxConcurrentLogins)) {
+                // 并发竞争下没抢到名额：必须回滚刚写入的会话，否则会留下一个绕过并发上限的可用会话
+                this.timedCache.deleteObject(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials());
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
+            }
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;
@@ -93,6 +108,10 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
 
     /**
      * 根据凭证读取登录主体。
+     *
+     * <p>返回**副本**：本仓储把对象引用存在内存里，若直接返回缓存实例，调用方修改它（如
+     * {@code setLoginExpireTime(...)}）会污染缓存并在后续请求中生效，而 redis/jdbc 仓储每次
+     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
@@ -103,7 +122,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
                 return null;
             }
             Object content = this.timedCache.getObject(cacheKey);
-            return content == null ? null : (LoginSubject) content;
+            return content == null ? null : ((LoginSubject) content).copy();
         } catch (Exception e) {
             log.error("SingleSessionRepository getSubject failed, Exception：", e);
             return null;
@@ -216,12 +235,33 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     }
 
     /**
-     * 判断指定缓存中的凭证是否有效（存在且未过期）。
-     * 永不过期（剩余存活时间为 NEVER_EXPIRE）的凭证视为有效。
+     * 判断指定缓存中的凭证是否有效（存在、未过期、且主体自身的 {@code loginExpireTime} 未过期）。
+     *
+     * <p><b>为什么两个有效期都要看（TCK 发现）</b>：本仓储的记录存活由缓存 TTL 决定，
+     * 但会话是否过期还应以 `LoginSubject.loginExpireTime` 为准 —— 这也是 redis / jdbc / caffeine
+     * 三个仓储的口径。此前这里只看缓存 TTL，于是"缓存 TTL 仍有效、但 loginExpireTime 已过期"的
+     * 会话会被判定为**有效**，与其它三个仓储行为不一致（TCK 的
+     * {@code expiredSessionShouldBeTreatedAsAbsent} 等用例直接抓到了这一点）。
+     *
+     * <p>两个条件必须同时满足：缓存 TTL 判断"记录是否还在"，{@code loginExpireTime} 判断
+     * "会话是否已过期"。任一不满足即为无效。
+     *
+     * @param cacheKey 缓存 key
+     * @return true-有效
      */
     private boolean isCredentialValid(String cacheKey) {
         long timeout = this.timedCache.getObjectTimeout(cacheKey);
-        return timeout > 0 || timeout == LocalTimeCache.NEVER_EXPIRE;
+        if (timeout <= 0 && timeout != LocalTimeCache.NEVER_EXPIRE) {
+            return false;
+        }
+        Object content = this.timedCache.getObject(cacheKey);
+        if (!(content instanceof LoginSubject subject)) {
+            return false;
+        }
+        Long loginExpireTime = subject.getLoginExpireTime();
+        // 缺 loginExpireTime 的主体按"已失效"处理，与内核（DefaultAuthenticationManager）及
+        // caffeine 仓储的口径一致；NEVER_EXPIRE_TIME 已取消，这里不再有永不过期特例
+        return loginExpireTime != null && loginExpireTime > System.currentTimeMillis();
     }
 
     /**
@@ -237,12 +277,25 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     }
 
     /**
-     * 将凭证加入账号在线列表。
+     * 原子地判断并发上限并把凭证加入账号在线列表。
+     *
+     * <p>"判断上限"与"入列"必须在**同一把锁**内完成，否则并发登录会得到两种错误结果：
+     * 都通过上限判断后各自入列 → 实际在线数突破上限；或都入列后各自发现超额、各自摘掉自己 →
+     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷）。
+     *
+     * @param loginId              账号ID
+     * @param credentials          会话凭证
+     * @param maxConcurrentLogins  最大并发登录数（&lt;=0 表示不限制）
+     * @return true 已入列；false 已达并发上限，此时**未**入列
      */
-    private void addToOnlineList(Object loginId, String credentials) {
+    private boolean addToOnlineListIfLimitNotExceeded(Object loginId, String credentials, int maxConcurrentLogins) {
         String loginIdStr = String.valueOf(loginId);
         synchronized (onlineLock) {
+            if (maxConcurrentLogins > 0 && this.countValidOnlineSessions(loginId) >= maxConcurrentLogins) {
+                return false;
+            }
             this.loginIdToCredentialsMap.computeIfAbsent(loginIdStr, k -> new CopyOnWriteArrayList<>()).add(credentials);
+            return true;
         }
     }
 

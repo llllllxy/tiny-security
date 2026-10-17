@@ -40,7 +40,7 @@ public class AuthConsts {
     public static final int CODE_OTHER_ERROR = 500;
 
     /**
-     * JWT 令牌前缀
+     * 令牌前缀：token 在请求中与登录返回值里都以此前缀开头
      */
-    public static final String JWT_TOKEN_PREFIX = "Bearer ";
+    public static final String TOKEN_PREFIX = "Bearer ";
 }

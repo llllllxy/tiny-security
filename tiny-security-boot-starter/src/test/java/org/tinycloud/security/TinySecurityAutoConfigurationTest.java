@@ -1,7 +1,8 @@
 package org.tinycloud.security;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,18 +12,22 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,13 +52,28 @@ class TinySecurityAutoConfigurationTest {
         SessionRepository sessionRepository() {
             return new InMemorySessionRepository();
         }
+
+        /**
+         * 需要容器里存在 AuthorizationInfoGet，Facade 才能按需懒加载角色/权限。
+         */
+        @Bean
+        AuthorizationInfoGet authorizationInfoGet() {
+            return new AuthorizationInfoGet() {
+                @Override
+                public Set<String> getPermissionSet(LoginSubject subject) {
+                    return Set.of("user:read");
+                }
+
+                @Override
+                public Set<String> getRoleSet(LoginSubject subject) {
+                    return Set.of("admin");
+                }
+            };
+        }
     }
 
     @Autowired
     private AuthProvider authProvider;
-
-    @Autowired
-    private TinySecurityFacade facade;
 
     @Autowired
     private AuthProperties properties;
@@ -64,16 +84,19 @@ class TinySecurityAutoConfigurationTest {
     @Autowired
     private SecurityContextRepository securityContextRepository;
 
-    @org.junit.jupiter.api.BeforeEach
-    void setUp() {
-        // 每个测试前重新注册 facade（@AfterEach 会清掉）
-        AuthUtil.setFacade(facade);
-    }
+    /**
+     * 1.5.0 起 AuthUtil 从「当前请求的 WebApplicationContext」解析 AuthProvider，
+     * 所以测试请求必须带上容器真实的 ServletContext（Spring Boot 会把容器自身挂到它的 ROOT 属性上）。
+     */
+    @Autowired
+    private ServletContext servletContext;
 
     @AfterEach
     void tearDown() {
-        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
+        // ThreadLocalSecurityContextRepository 用的是静态 ThreadLocal，不清理会跨用例泄漏上下文，
+        // 导致 shouldThrowWhenNoSession 之类依赖"无会话"的用例受执行顺序影响
+        ThreadLocalSecurityContextRepository.clearContext();
         ((InMemorySessionRepository) sessionRepository).clear();
     }
 
@@ -83,7 +106,6 @@ class TinySecurityAutoConfigurationTest {
     @Test
     void shouldWireAllCoreBeans() {
         assertNotNull(authProvider);
-        assertNotNull(facade);
         assertNotNull(properties);
         assertNotNull(sessionRepository);
         assertNotNull(securityContextRepository);
@@ -96,18 +118,24 @@ class TinySecurityAutoConfigurationTest {
     void shouldHaveDefaultProperties() {
         assertEquals("token", properties.getTokenName());
         assertEquals(1800, properties.getTimeout());
-        assertEquals("uuid", properties.getCredentialsStyle());
         assertEquals(0, properties.getMaxConcurrentLogins());
     }
 
     /**
-     * AuthUtil 静态外观应已注册 Facade
+     * 1.5.0（回归）：AuthUtil 不再持有可变静态全局变量，改为从当前请求的容器里解析
+     * AuthProvider。这里不做任何静态注册，只绑定带真实 ServletContext 的请求：
+     * <ul>
+     *     <li>解析成功 → 未登录，抛 UnAuthorizedException</li>
+     *     <li>解析失败（容器没挂到 ServletContext 上）→ 抛 IllegalStateException，本用例即失败</li>
+     * </ul>
+     * 修复前本类必须靠 {@code AuthUtil.setFacade(...)} 才能工作。
      */
     @Test
-    void shouldRegisterFacadeWithAuthUtil() {
-        // AuthUtil.getFacade() 不抛异常即说明 Facade 已注册
-        assertNotNull(AuthUtil.getFacade());
-        assertSame(facade, AuthUtil.getFacade());
+    void shouldResolveAuthProviderFromContainerWithoutAnyStaticRegistration() {
+        bindRequest();
+
+        assertNotNull(servletContext.getAttribute(WebApplicationContext.ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE));
+        assertThrows(UnAuthorizedException.class, AuthUtil::getSecurityContext);
     }
 
     /**
@@ -146,13 +174,38 @@ class TinySecurityAutoConfigurationTest {
         String credentials = authProvider.getCredentialsByToken(token);
         assertTrue(sessionRepository.checkByCredentials(credentials));
 
-        // 将 token 放入请求头，logout() 才能从请求中取到
+        // 将 token 放入请求头，logout 才能从请求中取到
         MockHttpServletRequest req = (MockHttpServletRequest) currentRequest();
         req.addHeader("token", token);
 
         authProvider.logout();
 
         assertFalse(sessionRepository.checkByCredentials(credentials));
+    }
+
+    /**
+     * 端到端（自动装配层）：容器里的 AuthorizationInfoGet 必须被注入到 Facade，
+     * 这样在接口上没有权限注解、上下文里也没加载过角色/权限时，AuthUtil.hasRole/hasPermission 依然正确。
+     * 修复前这里会返回 false —— 因为它读到的是永不被填充的空集。
+     */
+    @Test
+    void shouldLazilyLoadRoleAndPermissionThroughAutoConfiguredFacade() {
+        bindRequest();
+
+        String token = authProvider.login("authz-user");
+        String credentials = authProvider.getCredentialsByToken(token);
+        LoginSubject subject = sessionRepository.getSubject(credentials);
+        assertNotNull(subject);
+
+        // 只放 loginSubject，不手工塞角色/权限集合——与无权限注解接口上的真实状态一致
+        SecurityContext context = new SecurityContext();
+        context.setLoginSubject(subject);
+        securityContextRepository.saveContext(context, currentRequest(), currentResponse());
+
+        assertTrue(AuthUtil.hasRole("admin"));
+        assertTrue(AuthUtil.hasPermission("user:read"));
+        assertFalse(AuthUtil.hasRole("guest"));
+        assertFalse(AuthUtil.hasPermission("user:delete"));
     }
 
     /**
@@ -166,7 +219,7 @@ class TinySecurityAutoConfigurationTest {
     }
 
     private void bindRequest() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletRequest request = new MockHttpServletRequest(servletContext);
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
     }

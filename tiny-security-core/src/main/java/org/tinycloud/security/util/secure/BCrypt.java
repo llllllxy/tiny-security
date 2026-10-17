@@ -11,7 +11,7 @@ import java.security.SecureRandom;
  * 使用方法如下：
  * <p>
  * {@code
- * String pw_hash = BCrypt.hashpw(plain_password, BCrypt.gensalt());
+ * String pw_hash = BCrypt.hashpw(plain_password, BCrypt.gensalt);
  * }
  * <p>
  * 使用checkpw方法检查被加密的字符串是否与原始字符串匹配：
@@ -675,7 +675,7 @@ public class BCrypt {
     }
 
     /**
-     * Generate a salt for use with the BCrypt.hashpw() method
+     * Generate a salt for use with the BCrypt.hashpw method
      *
      * @param log_rounds the log2 of the number of rounds of
      *                   hashing to apply - the work factor therefore increases as
@@ -703,7 +703,7 @@ public class BCrypt {
     }
 
     /**
-     * Generate a salt for use with the BCrypt.hashpw() method
+     * Generate a salt for use with the BCrypt.hashpw method
      *
      * @param log_rounds the log2 of the number of rounds of
      *                   hashing to apply - the work factor therefore increases as
@@ -715,7 +715,7 @@ public class BCrypt {
     }
 
     /**
-     * Generate a salt for use with the BCrypt.hashpw() method,
+     * Generate a salt for use with the BCrypt.hashpw method,
      * selecting a reasonable default for the number of hashing
      * rounds to apply
      *
@@ -745,26 +745,5 @@ public class BCrypt {
         for (int i = 0; i < try_bytes.length; i++)
             ret |= hashed_bytes[i] ^ try_bytes[i];
         return ret == 0;
-    }
-
-
-    public static void main(String[] args) {
-        long start = System.currentTimeMillis();
-
-        // 原始密码
-        String rawPassword = "password123" + "f_%7l3&qu6p$;b5W5_{QoIO6l8)0";
-
-        // 对密码进行编码
-        String encodedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
-
-        System.out.println("原始密码: " + rawPassword);
-        System.out.println("编码后的密码: " + encodedPassword);
-
-        // 验证密码
-        boolean isMatch = BCrypt.checkpw(rawPassword, encodedPassword);
-        System.out.println("密码验证结果: " + isMatch);
-
-
-        System.out.println("耗时: " + (System.currentTimeMillis() - start) + "毫秒");
     }
 }

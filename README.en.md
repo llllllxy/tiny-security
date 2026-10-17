@@ -35,6 +35,26 @@ tiny-security is a lightweight Java Web authentication & authorization framework
 
 > The English README is a concise mirror of [README.md](README.md). For the most up-to-date content, refer to the Chinese version.
 
+## Scope (please read first)
+
+This framework handles **authentication + authorization decisions only**: identity authentication, session
+lifecycle, annotation/URL-based authorization, exception translation, secure defaults and config validation.
+
+**Explicitly out of scope** (implement these in your business project):
+
+- **Data-level permissions / row-level filtering** (e.g. "own records only", "own department and below")
+- **Role inheritance**, permission trees, menu/button-permission data models
+- Admin UI for permission management
+
+Rationale: rules like "own / own department / custom" depend on *your* business schema
+(e.g. `sys_user` / `sys_dept` / `sys_role_dept`); a framework cannot get them right without assuming a data
+model it does not own. For reference, **Spring Security** stops at `AuthorizationManager` / `GrantedAuthority`
+and **Shiro** at `Realm` + `WildcardPermission` — **neither provides data-level permissions**. Such features
+are typically implemented inside business scaffolds (e.g. RuoYi).
+
+> To decide whether a capability belongs here, ask: "Does Spring Security do this?"
+
+
 ---
 
 # 2. Quick Start
@@ -81,12 +101,11 @@ tiny-security:
    # URL parameter is NOT read by default (enable-url-token=false) since URL-borne tokens leak into access logs.
    token-name: token
    # Session timeout (seconds), default 1800 (30 min)
+   # Positive integers only: 0 or a negative value makes the application fail at startup
+   # (never-expiring sessions are considered an anti-pattern and are not supported)
    timeout: 1800
    # Max concurrent logins per account, 0 = unlimited (default)
    max-concurrent-logins: 2
-   # Credential style. Only uuid / random128 / nanoid are cryptographically random and safe for production.
-   # Any other value falls back to uuid (snowflake/objectid/ulid were removed as predictable).
-   credentials-style: uuid
    # Table name for JDBC storage, default t_auth_storage
    table-name: t_auth_storage
    # Enable permission/role checks, default false. When true, implement AuthorizationInfoGet.
@@ -97,13 +116,10 @@ tiny-security:
    force-http-status-200: false
    # Permission check mode: ANNOTATION (@RequiresPermissions/@RequiresRoles) | URL (ant-style path match)
    perm-check-mode: ANNOTATION
-   # JWT secret. Strongly recommended to set a fixed high-entropy random value.
-   # If unset, a temporary random secret is generated and all sessions invalidate on restart.
-   jwt-secret: your-secret-key-please-replace-me
-   # JWT subject, uses default if unset
-   jwt-subject: tiny-security
-   # JWT self expiry (seconds), default 2592000 (30 days). Effective value is max(jwt-timeout, timeout).
-   jwt-timeout: 2592000
+    # Token signing secret. Strongly recommended to set a fixed high-entropy random value.
+    # If unset, a temporary random secret is generated: all sessions invalidate on restart, and in a
+    # multi-instance deployment the instances will not accept each other's tokens.
+    token-secret: your-secret-key-please-replace-me
    # Cookie mode (login writes cookie, logout clears cookie, token read from cookie). Default false (pure token).
    enable-cookie: false
    # Allow reading token from URL parameter, default false (URL tokens leak into access logs/Referer)
@@ -224,7 +240,10 @@ public Result<Void> delete() { ... }
 ### 2.2.4 Read current user
 
 ```java
-// AuthUtil is a static facade delegating to the framework context.
+// AuthUtil resolves AuthProvider from the current request's WebApplicationContext on every call.
+// It is NOT a static facade backed by a mutable global (that design was removed in 1.5.0).
+// Note: it only works on threads that own the current request; in @Async / MQ threads it throws
+// UnAuthorizedException -- inject AuthProvider directly for those cases.
 // Note (>=1.4.0): these methods throw UnAuthorizedException when not logged in.
 Object loginId = AuthUtil.getLoginId();
 String loginIdStr = AuthUtil.getLoginIdAsString();
@@ -254,10 +273,58 @@ authProvider.deleteByCredentials(credentialsList.get(0));
 > repositories (single / caffeine / redis / jdbc) support it; a custom `SessionRepository`
 > that does not override it throws `UnsupportedOperationException`.
 
+### 2.2.6 Skip authorization with `@Ignore`
+
+Annotate a controller method (or class) with `@Ignore` to bypass annotation-based authorization:
+
+```java
+@Ignore
+@GetMapping("/public/health")
+public Result<?> health() {
+    return Result.ok();
+}
+```
+
+> `@Ignore` is honored on parent classes and interfaces as well (1.5.0+): if a superclass/interface method
+> carries the annotation, the overriding/implementing method inherits the behavior.
+
+### 2.2.7 Passing the token from the front end
+
+1. **Via header (recommended)**
+
+```javascript
+$.ajax({
+    url: "/xxx",
+    type: "GET",
+    headers: { "token": token },
+    success: function (data) { }
+});
+```
+
+2. **Via URL parameter**
+
+> ⚠️ **Disabled by default.** `tiny-security.enable-url-token` defaults to `false`, because tokens in URLs
+> leak into access logs, browser history and the `Referer` header. To use it you must explicitly set
+> `enable-url-token: true` (still **not recommended**).
+
+### 2.2.8 Exception translation
+
+The framework ships an exception resolver that converts framework exceptions into JSON responses.
+Configure it via:
+
+```yaml
+tiny-security:
+  exception-translation-enabled: true   # default true
+  force-http-status: false              # default false; when true always returns HTTP 200
+  exception-resolver-order:             # default null (equivalent to HIGHEST_PRECEDENCE)
+```
+
+If you prefer your own `@ControllerAdvice` to handle these exceptions first, set
+`exception-resolver-order` to `0` or higher.
+
 ---
 
 ## 2.3 Samples & Docs
 
 - Full usage: see [README.md](README.md) (Chinese)
 - Upgrade log: [CHANGELOG.md](CHANGELOG.md)
-- Security audit & roadmap: `docs/security-audit-and-roadmap-2026-09.md`
