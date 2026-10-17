@@ -25,7 +25,7 @@ public class RedisSessionRepository implements SessionRepository {
     private static final Logger log = LoggerFactory.getLogger(RedisSessionRepository.class);
 
     /**
-     * 「判断并发上限 + 加入在线列表」的原子脚本（P1-7）。
+     * 「判断并发上限 + 加入在线列表」的原子脚本。
      *
      * <p>这两步必须原子完成，否则并发登录会得到两种错误结果：
      * <ul>

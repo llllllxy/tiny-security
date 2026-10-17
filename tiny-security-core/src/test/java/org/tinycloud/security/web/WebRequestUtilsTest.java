@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * WebRequestUtils 测试。
  *
- * <p>核心回归点（1.5.0 · P0-6）：便捷重载默认<b>不</b>从 URL 参数读取 token，与框架自身的默认策略
+ * <p>核心回归点（1.5.0）：便捷重载默认<b>不</b>从 URL 参数读取 token，与框架自身的默认策略
  * （{@code tiny-security.enable-url-token} 默认 {@code false}）保持一致——否则用户直接调用
  * {@code getToken(request, "token")} 就把凭证重新暴露到访问日志 / Referer 头。
  */
@@ -35,7 +35,7 @@ class WebRequestUtilsTest {
     }
 
     /**
-     * P0-6 回归：便捷重载不再从 URL 参数读取 token。
+     * 回归：便捷重载不再从 URL 参数读取 token。
      * 修复前这三个调用都会返回 {@code "Bearer from-url"}。
      */
     @Test

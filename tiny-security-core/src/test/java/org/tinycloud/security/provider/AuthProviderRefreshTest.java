@@ -14,7 +14,7 @@ import org.tinycloud.security.session.SingleSessionRepository;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * {@code AuthProvider#refreshByCredentials(credentials, subject)} 的过期口径一致性（P1-14）。
+ * {@code AuthProvider#refreshByCredentials(credentials, subject)} 的过期口径一致性。
  *
  * <p><b>缺陷</b>：该方法只把「存储层 TTL」延长为 {@code timeout}，却**从不更新
  * {@code subject.loginExpireTime}**。而 {@code 1.5.0} 给内核补上的「绝对过期校验」
@@ -28,8 +28,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>注意两点用例设计上的讲究：
  * <ul>
  *     <li>刻意使用**内置** {@link SingleSessionRepository} 而非假仓储 —— 用假仓储验证可达性
- *         会得到假结论（P1-12 的教训）；</li>
- *     <li>{@code getSubject} 返回的是**副本**（P1-9），因此不能靠「改动读出来的对象」来伪造
+ *         会得到假结论（教训）；</li>
+ *     <li>{@code getSubject} 返回的是**副本**，因此不能靠「改动读出来的对象」来伪造
  *         过期状态，必须直接构造待刷新的 subject 传给 {@code refreshByCredentials}，
  *         这也正是该公开 API 的真实调用方式。</li>
  * </ul>

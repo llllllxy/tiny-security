@@ -19,8 +19,8 @@ import java.util.Base64;
  * <p>
  * 示例用法：
  * <pre>
- * String hash = new SimpleHash("SHA-256", "password", "salt", 10).toHex();
- * String sm3Hash = new SimpleHash("SM3", "password", "salt", 3).toBase64();
+ * String hash = new SimpleHash("SHA-256", "password", "salt", 10).toHex;
+ * String sm3Hash = new SimpleHash("SM3", "password", "salt", 3).toBase64;
  * </pre>
  */
 public class SimpleHash {

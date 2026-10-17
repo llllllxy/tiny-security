@@ -54,7 +54,7 @@ class AuthorizationInterceptorTest {
      * ——这是 1.3.1 引入的性能设计，必须保留（否则每个请求都要白白多查一次角色/权限）。
      *
      * <p>正因为这里不加载，{@code AuthUtil.hasRole/hasPermission} 才必须能在上下文缺数据时
-     * 按需懒加载（P0-1 的根因与修复见 {@code TinySecurityFacade#getRoleSet}）。
+     * 按需懒加载（的根因与修复见 {@code TinySecurityFacade#getRoleSet}）。
      */
     @Test
     void shouldSkipAuthorizationAndSkipSpiCallWhenNoAuthorizationAnnotationInAnnotationMode() throws Exception {

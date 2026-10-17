@@ -55,7 +55,7 @@ class SM3HashTest {
     }
 
     /**
-     * P0-7 回归：salt=null 必须归一化为空串，而不是被拼成字面量 {@code "null"}。
+     * 回归：salt=null 必须归一化为空串，而不是被拼成字面量 {@code "null"}。
      * 修复前 {@code (source + salt)} 会让 {@code salt=null} 与 {@code salt="null"} 产生同一哈希（真碰撞）。
      */
     @Test
@@ -71,7 +71,7 @@ class SM3HashTest {
     }
 
     /**
-     * P0-7 回归：{@code setSalt(null)} 与不设 salt（字段默认 {@code ""}）应得到相同结果。
+     * 回归：{@code setSalt(null)} 与不设 salt（字段默认 {@code ""}）应得到相同结果。
      */
     @Test
     void setNullSaltShouldMatchDefaultSalt() {
@@ -83,7 +83,7 @@ class SM3HashTest {
     }
 
     /**
-     * P0-7 回归：三参构造传入 null salt 与 {@code ""} 等价（走的是同一条归一化路径）。
+     * 回归：三参构造传入 null salt 与 {@code ""} 等价（走的是同一条归一化路径）。
      */
     @Test
     void nullSaltWithIterationsShouldMatchEmptySalt() {

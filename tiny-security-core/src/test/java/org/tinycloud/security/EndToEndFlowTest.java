@@ -31,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 端到端流程测试：验证 GlobalConfig 改造后完整链路是否跑通。
  *
- * <p>测试链路：AuthProvider.login() → SessionRepository 存储 →
- *           SecurityContextRepository 加载 → AuthUtil.getLoginId() / hasRole()
+ * <p>测试链路：AuthProvider.login → SessionRepository 存储 →
+ *           SecurityContextRepository 加载 → AuthUtil.getLoginId / hasRole
  *
  * @author liuxingyu01
  * @since 2026-08-08
@@ -131,7 +131,7 @@ class EndToEndFlowTest {
         String credentials = authProvider.getCredentialsByToken(token);
         assertTrue(sessionRepository.checkByCredentials(credentials));
 
-        // 将 token 放入请求头，模拟前端传递，logout() 才能从请求中取到 token
+        // 将 token 放入请求头，模拟前端传递，logout 才能从请求中取到 token
         MockHttpServletRequest req = (MockHttpServletRequest) currentRequest();
         req.addHeader("token", token);
 
@@ -156,7 +156,7 @@ class EndToEndFlowTest {
     }
 
     /**
-     * 权限校验流程（P0-1 回归）：只把登录主体放进上下文，**不手工塞角色/权限集合**，
+     * 权限校验流程（回归）：只把登录主体放进上下文，**不手工塞角色/权限集合**，
      * 让 AuthUtil.hasRole/hasPermission 走真实的「上下文未加载 → 向 AuthorizationInfoGet 懒加载」链路。
      * 修复前这里会全部返回 false（旧用例手工 setRoleSet/setPermissionSet，绕过了真实链路，因此照不出来）。
      */

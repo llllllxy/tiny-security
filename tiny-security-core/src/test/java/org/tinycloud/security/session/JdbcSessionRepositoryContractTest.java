@@ -7,7 +7,7 @@ import org.springframework.jdbc.datasource.SimpleDriverDataSource;
 /**
  * {@link JdbcSessionRepository} 的契约测试（TCK 子类），跑在内嵌 H2 上。
  *
- * <p>建表语句从随包发布的 {@code sql/t_auth_storage.sql} 读取（TST-5）：此前测试内联复制
+ * <p>建表语句从随包发布的 {@code sql/t_auth_storage.sql} 读取：此前测试内联复制
  * DDL，与真实发布的脚本存在漂移风险（例如唯一约束漏掉后碰撞路径就不可测）。这里改为
  * <b>加载同一份脚本</b>，让"测试通过"能代表"发布的 SQL 可用"。
  *
@@ -35,7 +35,7 @@ class JdbcSessionRepositoryContractTest extends SessionRepositoryContractTest {
     }
 
     /**
-     * Jdbc 实现目前**不支持**原子并发上限（P1-7 的已知残余）。
+     * Jdbc 实现目前**不支持**原子并发上限（的已知残余）。
      *
      * <p>原因：该仓储只有裸 {@code JdbcTemplate}（每条语句自动提交）、没有事务管理器，
      * 而"先 COUNT 再 INSERT"要原子必须让两步同处一个临界区。三个**不改表结构**的候选方案
