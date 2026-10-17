@@ -111,7 +111,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
      *
      * <p>返回**副本**：本仓储把对象引用存在内存里，若直接返回缓存实例，调用方修改它（如
      * {@code setLoginExpireTime(...)}）会污染缓存并在后续请求中生效，而 redis/jdbc 仓储每次
-     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致（P1-9）。
+     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
@@ -237,7 +237,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
     /**
      * 判断指定缓存中的凭证是否有效（存在、未过期、且主体自身的 {@code loginExpireTime} 未过期）。
      *
-     * <p><b>为什么两个有效期都要看（P1-9 / TCK 发现）</b>：本仓储的记录存活由缓存 TTL 决定，
+     * <p><b>为什么两个有效期都要看（TCK 发现）</b>：本仓储的记录存活由缓存 TTL 决定，
      * 但会话是否过期还应以 `LoginSubject.loginExpireTime` 为准 —— 这也是 redis / jdbc / caffeine
      * 三个仓储的口径。此前这里只看缓存 TTL，于是"缓存 TTL 仍有效、但 loginExpireTime 已过期"的
      * 会话会被判定为**有效**，与其它三个仓储行为不一致（TCK 的
@@ -260,7 +260,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
         }
         Long loginExpireTime = subject.getLoginExpireTime();
         // 缺 loginExpireTime 的主体按"已失效"处理，与内核（DefaultAuthenticationManager）及
-        // caffeine 仓储的口径一致；NEVER_EXPIRE_TIME 已随 P1-8 取消，这里不再有永不过期特例
+        // caffeine 仓储的口径一致；NEVER_EXPIRE_TIME 已取消，这里不再有永不过期特例
         return loginExpireTime != null && loginExpireTime > System.currentTimeMillis();
     }
 
@@ -281,7 +281,7 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
      *
      * <p>"判断上限"与"入列"必须在**同一把锁**内完成，否则并发登录会得到两种错误结果：
      * 都通过上限判断后各自入列 → 实际在线数突破上限；或都入列后各自发现超额、各自摘掉自己 →
-     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷，见 P1-7）。
+     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷）。
      *
      * @param loginId              账号ID
      * @param credentials          会话凭证

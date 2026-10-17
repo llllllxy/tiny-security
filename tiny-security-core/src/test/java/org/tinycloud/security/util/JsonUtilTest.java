@@ -85,8 +85,8 @@ class JsonUtilTest {
     }
 
     /**
-     * P0-4 回归：java.time 类型必须能序列化。
-     * 修复前（裸 {@code new ObjectMapper()}，未注册 JSR-310 模块）这里会抛
+     * 回归：java.time 类型必须能序列化。
+     * 修复前（裸 {@code new ObjectMapper}，未注册 JSR-310 模块）这里会抛
      * {@link TinySecurityException}（InvalidDefinitionException）。
      */
     @Test
@@ -101,7 +101,7 @@ class JsonUtilTest {
     }
 
     /**
-     * P0-4 回归（真实触发场景）：登录时把 java.time 值放进 {@code extraInfo}，不再让登录直接 500。
+     * 回归（真实触发场景）：登录时把 java.time 值放进 {@code extraInfo}，不再让登录直接 500。
      */
     @Test
     void shouldSerializeJavaTimeInsideLoginSubjectExtraInfo() {

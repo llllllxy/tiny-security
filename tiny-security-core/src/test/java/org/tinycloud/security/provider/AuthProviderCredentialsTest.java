@@ -100,7 +100,7 @@ class AuthProviderCredentialsTest {
     }
 
     /**
-     * 凭证为**空白字符**的 token 必须得到 401（P1-12），不得抛 {@link IllegalArgumentException}（→ 500）。
+     * 凭证为**空白字符**的 token 必须得到 401，不得抛 {@link IllegalArgumentException}（→ 500）。
      *
      * <p>可达性（已实测确认，非推测）：token 形态是 {@code credentials.signature}，凭证即分隔符
      * 左侧内容。{@code TokenSignUtil.sign} 用 {@code Assert.hasText} 拦住空凭证，但**用同一 secret
@@ -108,12 +108,12 @@ class AuthProviderCredentialsTest {
      * {@code " " + "." + base64url(HMAC-SHA256(" ", secret))} 这种 token 会被
      * {@code verifyAndExtract} 原样返回为 {@code " "}。
      *
-     * <p>此时 {@code checkLogin()} 把 {@code " "} 交给会话仓储，命中内置仓储里
+     * <p>此时 {@code checkLogin} 把 {@code " "} 交给会话仓储，命中内置仓储里
      * {@code Assert.hasText(credentials, ...)} 抛出的 {@code IllegalArgumentException}；它不是
      * {@link org.tinycloud.security.exception.TinySecurityException}，异常解析器返回 null，
      * 最终交给 Spring 默认处理 → **HTTP 500**，而非应有的 401。
      *
-     * <p>对照 {@link AuthProvider#isLogin()}：那里已 catch {@code Exception} 返回 false，是正确写法。
+     * <p>对照 {@link AuthProvider#isLogin}：那里已 catch {@code Exception} 返回 false，是正确写法。
      */
     @Test
     void shouldRejectBlankCredentialsTokenWithUnauthorizedInsteadOf500() {
@@ -126,7 +126,7 @@ class AuthProviderCredentialsTest {
     }
 
     /**
-     * 同一缺陷的第二种表现：{@code isLogin()} 与 {@code checkLogin()} 对空白凭证的行为必须一致
+     * 同一缺陷的第二种表现：{@code isLogin} 与 {@code checkLogin} 对空白凭证的行为必须一致
      * （前者返回 false，后者抛 401），不能一个容错、一个 500。
      */
     @Test
@@ -139,7 +139,7 @@ class AuthProviderCredentialsTest {
     }
 
     /**
-     * 构造「凭证.签名」形态的 token：用于生成 {@code sign()} 拒绝产出的畸形 token（空白凭证）。
+     * 构造「凭证.签名」形态的 token：用于生成 {@code sign} 拒绝产出的畸形 token（空白凭证）。
      */
     private static String signedToken(String secret, String credentials) {
         try {

@@ -183,10 +183,10 @@ class AuthorizationEvaluatorTest {
         assertFalse(AuthorizationEvaluator.checkUrlPermission(null, Set.of("/**")));
     }
 
-    // ---------------- checkUrlPermission 的 HTTP Method 限定（P1-10） ----------------
+    // ---------------- checkUrlPermission 的 HTTP Method 限定 ----------------
 
     /**
-     * 权限码带 Method 时，只有该 Method 才能通过 —— 这是 P1-10 的核心：
+     * 权限码带 Method 时，只有该 Method 才能通过 —— 这正是本次收紧的核心：
      * 此前只用 URI 做 Ant 匹配，于是「拥有 <code>GET /user</code> 读权限」等价于
      * 「拥有 <code>DELETE /user</code> 权限」。
      */

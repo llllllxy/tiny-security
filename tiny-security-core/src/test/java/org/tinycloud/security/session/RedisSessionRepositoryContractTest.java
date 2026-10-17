@@ -12,7 +12,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  *
  * <p><b>为什么必须用真实 Redis</b>：{@link RedisSessionRepositoryTest} 是纯 Mockito 的
  * 契约级验证，它无法覆盖 TTL 是否真的设置、Lua 脚本是否真的原子、JSON 序列化往返是否真的成立
- * （TST-6）。而 TCK 里的用例（读写往返、登录并发上限、过期判定）都必须落到真实服务上才有意义 ——
+ * 。而 TCK 里的用例（读写往返、登录并发上限、过期判定）都必须落到真实服务上才有意义 ——
  * 用 Mockito 跑 TCK 等于把"实现是否正确"换成"我是否把 mock 打桩打对了"。
  *
  * <p><b>如何启用</b>：默认**跳过**（CI 环境没有 Redis，且不应把连接信息写进仓库）。

@@ -19,9 +19,9 @@ import java.util.Map;
  *
  * <p>因此本类<b>只应增字段，不应改名或删除字段</b>；改字段语义时请按"新增字段 + 兼容旧字段"的方式演进。
  *
- * <p><b>1.5.0 · loginId 类型契约（P1-9）</b>：{@link #loginId} 声明为 {@code Object}，但 JSON 往返会让
+ * <p><b>1.5.0 · loginId 类型契约</b>：{@link #loginId} 声明为 {@code Object}，但 JSON 往返会让
  * 数值类型漂移 —— {@code Long 10001} 序列化后是 {@code 10001}，反序列化默认给回 {@code Integer}，
- * 于是 {@code (Long) subject.getLoginId()} 抛 {@code ClassCastException}。为了让四个仓储的
+ * 于是 {@code (Long) subject.getLoginId} 抛 {@code ClassCastException}。为了让四个仓储的
  * {@code getSubject} 行为一致（内存版存引用、Redis/JDBC 走 JSON），这里在**反序列化时统一归一化**：
  * <ul>
  *     <li>整型数值一律归一化为 {@link Long}（小数保持原样，避免有损转换）；</li>
@@ -68,7 +68,7 @@ public class LoginSubject implements Serializable {
      * 设置登录账号ID。
      *
      * <p>JSON 反序列化同样走这里，因此在此归一化整型类型：{@code Integer} → {@code Long}，
-     * 保证"直接构造"与"JSON 往返"得到同一类型（P1-9）。
+     * 保证"直接构造"与"JSON 往返"得到同一类型。
      */
     @JsonSetter("loginId")
     public void setLoginId(Object loginId) {
@@ -99,7 +99,7 @@ public class LoginSubject implements Serializable {
      * 而 {@code redis} / {@code jdbc} 仓储每次读出来都是 JSON 反序列化的**新对象**。若不复制，
      * 同样一份用户代码在四种仓储下语义不同 —— 例如调用方修改读到的 subject（如
      * {@code setLoginExpireTime(...)}），在内存版会**直接改写缓存中的共享实例**并在后续请求中生效，
-     * 在 Redis/JDBC 版则不会（P1-9）。返回副本后四种仓储行为一致。
+     * 在 Redis/JDBC 版则不会。返回副本后四种仓储行为一致。
      *
      * <p>浅拷贝即可：{@code extraInfo} 不深拷贝，因为四种仓储对它的处理本就不同（内存版共享、
      * Redis/JDBC 版每次反序列化重建），深拷贝无法改变这一事实，反而增加开销。当前框架内部

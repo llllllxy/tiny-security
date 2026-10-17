@@ -89,7 +89,7 @@ class TokenSignUtilTest {
      * 同理 {@code =} 填充符也去掉了，避免在查询串里与 {@code name=value} 的分隔符混淆。
      *
      * <p>这里遍历大量凭证而不是只测一个样本：单个签名只有 43 个字符，可能碰巧不含危险字符，
-     * 那样这个用例就抓不住「把 {@code getUrlEncoder()} 改成 {@code getEncoder()}」的改动。
+     * 那样这个用例就抓不住「把 {@code getUrlEncoder} 改成 {@code getEncoder}」的改动。
      */
     @Test
     void shouldProduceUrlSafeToken() {

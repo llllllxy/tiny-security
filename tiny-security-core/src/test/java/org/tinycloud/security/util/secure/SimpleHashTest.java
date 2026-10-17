@@ -60,7 +60,7 @@ class SimpleHashTest {
     }
 
     /**
-     * P0-7 回归：SM3 分支的 {@code salt=null} 现在与 JDK 分支语义一致（都视为不加盐），
+     * 回归：SM3 分支的 {@code salt=null} 现在与 JDK 分支语义一致（都视为不加盐），
      * 不再被拼成字面量 {@code "null"} 而与 {@code salt="null"} 碰撞。
      */
     @Test
