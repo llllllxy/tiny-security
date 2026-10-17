@@ -148,6 +148,18 @@
   - **行为变更**：原先漏掉的三种写法现在会生效。副作用是对 `@Ignore` 也一并生效（父类/接口上的 `@Ignore` 在重写/实现后不再被忽略）—— 因 `@Ignore` 是用户显式书写的框架自有注解，按"尊重用户意图"处理。
   - **说明**：`@RequiresPermissions` / `@RequiresRoles` / `@Ignore` 均**不是** `@Inherited`；但"父类标了注解、子类只继承不重写"这一场景**原本就不会漏**（反射拿到的 `Method` 其声明类即父类），不需要改动。
 
+### 🧪 测试补充
+
+- **补齐 4 处此前无覆盖的公开能力**（core +23 例，starter +2 例，总计 315 → 338 / 356）：
+  - **`AuthProvider#deleteByToken` 此前 0 覆盖**，现补 7 例：正常删除、只删目标会话不影响同账号其它会话、签名被篡改不得删除、credentials 被替换不得删除、空 token 抛断言异常、畸形 token 返回 false 而非抛异常、未登录态下 `getToken()` 抛 401。
+  - **`CookieUtil` 此前无直接测试**（仅被间接覆盖），现补 9 例 —— 重点锁定「删除 Cookie 必须带与写入一致的 Secure/SameSite」，即「登出后仍是登录态」那个缺陷的修复点；另覆盖 URL 编解码往返、非 Web 线程 response 为 null 时静默跳过、空名称不写入。
+  - **`TinySecurityHandlerExceptionResolver` 此前无直接测试**，现补 7 例：安全异常接管、非安全异常返回 null 交还 Spring、仅 cause 是安全异常时不接管（有意不做 cause 上溯）、默认优先级为 HIGHEST_PRECEDENCE、优先级可配。
+  - **`SpringSecurityEventPublisher` 此前无测试**，现补 2 例：三类事件均被原样转发、底层异常向上传播（不做吞没，否则上层的事件隔离逻辑走不到）。
+- **修复两处「空转断言」（写了但实际验证不到东西）**：
+  - `AuthProviderCookieTest#shouldLoginWithoutNpeOnNonWebRequestThread` 声称验证「非 Web 线程写 Cookie 不 NPE」，但 `enableCookie` 默认 `false` → **根本没走到写 Cookie**，那条 NPE 回归实际无保护。现已显式开启 Cookie，并做反向验证（把 `CookieUtil` 的 `response == null` 守卫变异为 `false`，该例精确报 NPE 变红）。
+  - `AuthAutoConfigurationTest` 的 `assertThat(bean).isInstanceOf(SessionRepository.class)` **恒真**（从容器按该类型取出的对象当然满足该类型）。现改为断言「容器里的 Bean 就是用户自定义的那个实例」（`isSameAs`）。已验证：旧写法下变异也照样通过，新写法下变异即变红。
+- **覆盖率**：core 行覆盖率 68.4% → **80.6%**，starter 58.1% → **63.3%**。
+
 ### 🧹 清理与收尾
 
 - **删除 `SM3ConvertUtil`（560 行）**：该类仅 3 个方法（`intToBytes` / `byteToInt` / `longToBytes`）被 `SM3` 使用，**其余约 540 行是公开死代码**，且内含 `Math.pow` 做 hex→int（浮点精度）、`byteToString` 符号扩展、`hexStringToBytes("GG")` 静默产出 `0xFF`、`byteConvert32Bytes` 对非 32/33 字节输入越界等一批缺陷。现已把仍需的 3 个转换**内联进 `SM3`** 并整类删除 —— 删掉即修复，不必逐条治理那些死方法。
