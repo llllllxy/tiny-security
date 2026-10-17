@@ -11,7 +11,7 @@ import java.security.SecureRandom;
  * 使用方法如下：
  * <p>
  * {@code
- * String pw_hash = BCrypt.hashpw(plain_password, BCrypt.gensalt());
+ * String pw_hash = BCrypt.hashpw(plain_password, BCrypt.gensalt);
  * }
  * <p>
  * 使用checkpw方法检查被加密的字符串是否与原始字符串匹配：
@@ -675,7 +675,7 @@ public class BCrypt {
     }
 
     /**
-     * Generate a salt for use with the BCrypt.hashpw() method
+     * Generate a salt for use with the BCrypt.hashpw method
      *
      * @param log_rounds the log2 of the number of rounds of
      *                   hashing to apply - the work factor therefore increases as
@@ -703,7 +703,7 @@ public class BCrypt {
     }
 
     /**
-     * Generate a salt for use with the BCrypt.hashpw() method
+     * Generate a salt for use with the BCrypt.hashpw method
      *
      * @param log_rounds the log2 of the number of rounds of
      *                   hashing to apply - the work factor therefore increases as
@@ -715,7 +715,7 @@ public class BCrypt {
     }
 
     /**
-     * Generate a salt for use with the BCrypt.hashpw() method,
+     * Generate a salt for use with the BCrypt.hashpw method,
      * selecting a reasonable default for the number of hashing
      * rounds to apply
      *

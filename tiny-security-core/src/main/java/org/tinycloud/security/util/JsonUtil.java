@@ -34,8 +34,8 @@ public class JsonUtil {
      *
      * <p>1.5.0 起做两件事，都是为了让它能真正承担"会话存 Redis/JDBC"的序列化职责：
      * <ul>
-     *     <li>{@code findAndRegisterModules()}：按 classpath 自动注册 Jackson 数据类模块
-     *         （JSR-310 / Jdk8 / ParameterNames 等）。此前是裸 {@code new ObjectMapper()}，
+     *     <li>{@code findAndRegisterModules}：按 classpath 自动注册 Jackson 数据类模块
+     *         （JSR-310 / Jdk8 / ParameterNames 等）。此前是裸 {@code new ObjectMapper}，
      *         {@code extraInfo} 里只要放进 {@code LocalDateTime} 这类 java.time 值，
      *         序列化就会抛 {@code InvalidDefinitionException}，表现为<b>登录直接 500</b>。</li>
      *     <li>关闭 {@code WRITE_DATES_AS_TIMESTAMPS}：让 java.time 值写成 ISO-8601 字符串
@@ -43,7 +43,7 @@ public class JsonUtil {
      *         这种数组，便于直接排查 Redis/JDBC 里存的会话内容。</li>
      * </ul>
      *
-     * <p>这里用 {@code findAndRegisterModules()} 而不是显式 {@code new JavaTimeModule()}：
+     * <p>这里用 {@code findAndRegisterModules} 而不是显式 {@code new JavaTimeModule}：
      * jsr310 只是 {@code spring-boot-starter-web} 的传递依赖，若使用者把它 exclude 掉，
      * 显式 new 会在类初始化阶段抛 {@code NoClassDefFoundError}，把整个框架一起拖垮；
      * 前者在缺少该模块时只是退回原有行为，不会更糟。

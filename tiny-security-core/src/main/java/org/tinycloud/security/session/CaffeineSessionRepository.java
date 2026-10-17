@@ -27,7 +27,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *     <li>成熟的惰性过期驱逐 + 缓存统计</li>
  * </ul>
  *
- * <p>过期语义：每个凭证的存活时间取自 {@link LoginSubject#getLoginExpireTime()}（与 Single/JDBC/Redis
+ * <p>过期语义：每个凭证的存活时间取自 {@link LoginSubject#getLoginExpireTime}（与 Single/JDBC/Redis
  * 一致，由框架会话 timeout 驱动）；续期（refresh）时重新 put 会重置过期时间。
  *
  * <p><b>可选依赖</b>：caffeine 以 provided 提供，使用 {@code store-type=caffeine} 时需自行引入：
@@ -164,7 +164,7 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
      *
      * <p>返回**副本**：本仓储把对象引用存在缓存里，若直接返回缓存实例，调用方修改它（如
      * {@code setLoginExpireTime(...)}）会污染缓存并在后续请求中生效，而 redis/jdbc 仓储每次
-     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致（P1-9）。
+     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
@@ -297,7 +297,7 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
      *
      * <p>"判断上限"与"入列"必须在**同一把锁**内完成，否则并发登录会得到两种错误结果：
      * 都通过上限判断后各自入列 → 实际在线数突破上限；或都入列后各自发现超额、各自摘掉自己 →
-     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷，见 P1-7）。
+     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷）。
      *
      * @param loginId              账号ID
      * @param credentials          会话凭证

@@ -146,7 +146,7 @@ class AuthProviderCookieTest {
     }
 
     /**
-     * 删除 Cookie 必须带上与写入时**一致**的属性，否则浏览器会忽略删除指令（P1-5）。
+     * 删除 Cookie 必须带上与写入时**一致**的属性，否则浏览器会忽略删除指令。
      *
      * <p>删除 Cookie 的本质是"写回一个同名同属性的 maxAge=0 Cookie"，属性必须逐字匹配
      * 才会被浏览器视为同一条。此前的 {@code removeCookie} 只带 path/maxAge/HttpOnly，
@@ -186,7 +186,7 @@ class AuthProviderCookieTest {
     }
 
     /**
-     * 默认配置（SameSite=Lax、非 Secure）下同样要带齐属性（P1-5）。
+     * 默认配置（SameSite=Lax、非 Secure）下同样要带齐属性。
      * <p>即便 Lax 场景浏览器较宽松，属性不一致也属于隐患，必须与写入保持一致。
      */
     @Test
@@ -214,10 +214,10 @@ class AuthProviderCookieTest {
 
     /**
      * {@code logout(request)} 在**传入的 request 与线程绑定的不是同一个**时，
-     * 宁可放弃清理，也不能把 Cookie 删到另一个请求的响应上（P1-5）。
+     * 宁可放弃清理，也不能把 Cookie 删到另一个请求的响应上。
      *
      * <p>Servlet API 无法从请求反查响应，响应只能来自线程绑定。此前实现无条件用
-     * {@code WebRequestUtils.getResponse()返回}，于是当两者不一致时，清理指令会落到**别的请求**
+     * {@code WebRequestUtils.getResponse返回}，于是当两者不一致时，清理指令会落到**别的请求**
      * 的响应里 —— 当前请求的 Cookie 没被清理（静默失效），却污染了另一个响应。
      */
     @Test

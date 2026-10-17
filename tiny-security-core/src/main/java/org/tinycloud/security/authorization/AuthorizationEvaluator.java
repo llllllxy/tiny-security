@@ -43,10 +43,10 @@ public final class AuthorizationEvaluator {
      * </ul>
      *
      * <p>之所以要支持 Method：此前只用 URI 做匹配，于是「拥有 {@code GET /user} 读权限」
-     * 等价于「拥有 {@code DELETE /user} 权限」（P1-10）。加 Method 是**可选收紧**，
+     * 等价于「拥有 {@code DELETE /user} 权限」。加 Method 是**可选收紧**，
      * 不写的仍然覆盖全部 Method，因此不构成破坏性变更。
      *
-     * <p><b>注意</b>：路径取的是 {@code request.getRequestURI()}，**含 context-path**。
+     * <p><b>注意</b>：路径取的是 {@code request.getRequestURI}，**含 context-path**。
      * 修改应用的 context-path 会让既有权限码全部失配（fail-closed，安全但需要同步调整配置）。
      *
      * @param request       HTTP请求

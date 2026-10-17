@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p><b>存在意义</b>：框架内置四种仓储（single / caffeine / redis / jdbc），README 也鼓励用户
  * 自定义实现。此前"四个仓储行为一致"只靠人工比对与零散用例保证，多次出现同一语义在不同仓储下
- * 表现不同（P1-6 过期会话复活、P1-7 并发上限强度不一、P1-8 `timeout` 四种语义、P1-9 共享引用
- * 与类型漂移）。本类把"契约"写成**一套可执行的断言**，四个实现各自继承即可验证。
+ * 表现不同（过期会话复活、并发上限强度不一、`timeout` 四种语义、共享引用与类型漂移）。
+ * 本类把"契约"写成**一套可执行的断言**，四个实现各自继承即可验证。
  *
  * <p><b>如何扩展</b>：新增仓储实现时，写一个子类实现 {@link #createRepository()} 与
  * {@link #destroyRepository(SessionRepository)} 即可获得全部契约校验。
@@ -46,7 +46,7 @@ abstract class SessionRepositoryContractTest {
     protected abstract void destroyRepository(SessionRepository repository);
 
     /**
-     * 该实现是否满足"并发登录上限原子生效"（P1-7）。
+     * 该实现是否满足"并发登录上限原子生效"。
      *
      * <p>默认 {@code true}。已知 Jdbc 实现因缺少事务/无法在不改表结构的前提下原子化而不满足，
      * 其子类覆盖为 {@code false} 并附说明 —— 豁免必须是**显式且记录在案**的。
@@ -140,13 +140,13 @@ abstract class SessionRepositoryContractTest {
         assertEquals(10001L, loaded.getLoginId(), "原会话必须保持不变");
     }
 
-    // ==================== P1-9：loginId 类型契约 ====================
+    // ==================== loginId 类型契约 ====================
 
     /**
-     * loginId 的类型必须在存储往返后保持稳定（P1-9）。
+     * loginId 的类型必须在存储往返后保持稳定。
      *
      * <p>Redis/JDBC 走 JSON 往返，数值默认会漂移成 {@code Integer}，导致
-     * {@code (Long) subject.getLoginId()} 抛 {@code ClassCastException}；内存版存引用则不会漂移。
+     * {@code (Long) subject.getLoginId} 抛 {@code ClassCastException}；内存版存引用则不会漂移。
      * 契约要求四种仓储**读出来的类型与写进去的一致**。
      */
     @Test
@@ -173,10 +173,10 @@ abstract class SessionRepositoryContractTest {
         assertEquals(10001L, back.getLoginId());
     }
 
-    // ==================== P1-9：getSubject 返回副本 ====================
+    // ==================== getSubject 返回副本 ====================
 
     /**
-     * {@code getSubject} 必须返回**副本**：调用方修改读到的对象不得影响存储（P1-9）。
+     * {@code getSubject} 必须返回**副本**：调用方修改读到的对象不得影响存储。
      *
      * <p>否则同样的用户代码在内存版会"改一下就持久生效"，在 Redis/JDBC 版则不会 —— 语义分叉。
      */
@@ -223,7 +223,7 @@ abstract class SessionRepositoryContractTest {
     }
 
     /**
-     * 缺少 {@code loginExpireTime} 的主体按"已过期"处理（与内核 P1-6 的口径一致），
+     * 缺少 {@code loginExpireTime} 的主体按"已过期"处理（与内核的绝对过期口径一致），
      * 不得被视为有效会话。
      */
     @Test
@@ -356,10 +356,10 @@ abstract class SessionRepositoryContractTest {
         assertTrue(credentials.contains("cred-d2"));
     }
 
-    // ==================== P1-7：并发登录上限 ====================
+    // ==================== 并发登录上限 ====================
 
     /**
-     * 并发登录上限必须**原子**生效（P1-7）：恰好放行 {@code max} 个，其余被明确拒绝，
+     * 并发登录上限必须**原子**生效：恰好放行 {@code max} 个，其余被明确拒绝，
      * 且不得有静默超额。
      *
      * <p><b>已知豁免</b>：Jdbc 实现目前**不满足**本条 —— 它只有裸 {@code JdbcTemplate}

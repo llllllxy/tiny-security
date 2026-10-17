@@ -18,8 +18,8 @@ import java.util.Set;
  * <p><b>1.5.0 起本类不再是公开 API</b>：此前它是独立的公开门面，并由 {@code AuthUtil} 通过一个
  * 可变静态变量（{@code AuthUtil.setFacade}）反向持有，而那个赋值点位于
  * {@code @ConditionalOnMissingBean(TinySecurityFacade.class)} 的 Bean 方法内 —— 用户一旦自定义
- * 门面 Bean，静态变量就永远不会被赋值，{@code AuthUtil} 与 {@code AuthProvider.getSecurityContext()}
- * 会一起失效（P1-1 / P1-2）。现在改为：本类仅供 {@link AuthProvider} 继承，外部请直接使用
+ * 门面 Bean，静态变量就永远不会被赋值，{@code AuthUtil} 与 {@code AuthProvider.getSecurityContext}
+ * 会一起失效。现在改为：本类仅供 {@link AuthProvider} 继承，外部请直接使用
  * {@link AuthProvider}（唯一实例门面）或 {@code AuthUtil}（静态便捷外观）。
  *
  * <p><b>1.3.4 行为统一</b>：所有 {@code get*} 与 {@code has*} 方法在未登录/会话失效时统一抛

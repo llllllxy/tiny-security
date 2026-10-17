@@ -54,7 +54,7 @@ class TinySecurityAutoConfigurationTest {
         }
 
         /**
-         * P0-1 需要容器里存在 AuthorizationInfoGet，Facade 才能按需懒加载角色/权限。
+         * 需要容器里存在 AuthorizationInfoGet，Facade 才能按需懒加载角色/权限。
          */
         @Bean
         AuthorizationInfoGet authorizationInfoGet() {
@@ -122,7 +122,7 @@ class TinySecurityAutoConfigurationTest {
     }
 
     /**
-     * 1.5.0（P1-1/P1-2 回归）：AuthUtil 不再持有可变静态全局变量，改为从当前请求的容器里解析
+     * 1.5.0（回归）：AuthUtil 不再持有可变静态全局变量，改为从当前请求的容器里解析
      * AuthProvider。这里不做任何静态注册，只绑定带真实 ServletContext 的请求：
      * <ul>
      *     <li>解析成功 → 未登录，抛 UnAuthorizedException</li>
@@ -174,7 +174,7 @@ class TinySecurityAutoConfigurationTest {
         String credentials = authProvider.getCredentialsByToken(token);
         assertTrue(sessionRepository.checkByCredentials(credentials));
 
-        // 将 token 放入请求头，logout() 才能从请求中取到
+        // 将 token 放入请求头，logout 才能从请求中取到
         MockHttpServletRequest req = (MockHttpServletRequest) currentRequest();
         req.addHeader("token", token);
 
@@ -184,7 +184,7 @@ class TinySecurityAutoConfigurationTest {
     }
 
     /**
-     * P0-1 端到端（自动装配层）：容器里的 AuthorizationInfoGet 必须被注入到 Facade，
+     * 端到端（自动装配层）：容器里的 AuthorizationInfoGet 必须被注入到 Facade，
      * 这样在接口上没有权限注解、上下文里也没加载过角色/权限时，AuthUtil.hasRole/hasPermission 依然正确。
      * 修复前这里会返回 false —— 因为它读到的是永不被填充的空集。
      */

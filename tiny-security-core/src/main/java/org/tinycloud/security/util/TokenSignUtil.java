@@ -32,7 +32,7 @@ import java.util.Base64;
  *         同时垃圾 token 在本地就被拒绝，不会穿透到会话仓储（避免无效流量放大成存储压力）。</li>
  *     <li>不保护：会话是否有效仍完全由会话仓储判定，签名不是第二道授权判定；
  *         也完全不解决「credentials 本身被猜中/枚举」的问题，那取决于凭证本身的随机性强度
- *         （框架固定用 {@code UUID.randomUUID()}，内部走 SecureRandom）。</li>
+ *         （框架固定用 {@code UUID.randomUUID}，内部走 SecureRandom）。</li>
  * </ul>
  *
  * @author liuxingyu01
