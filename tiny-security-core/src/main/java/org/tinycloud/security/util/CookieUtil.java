@@ -18,6 +18,12 @@ import java.net.URLEncoder;
  * @since 2021-01-30-11:18
  **/
 public class CookieUtil {
+
+    /**
+     * 工具类，禁止实例化。
+     */
+    private CookieUtil() {
+    }
     private static final Logger logger = LoggerFactory.getLogger(CookieUtil.class);
 
     /**

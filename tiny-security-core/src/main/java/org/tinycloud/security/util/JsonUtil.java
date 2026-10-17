@@ -21,6 +21,12 @@ import java.util.List;
  **/
 public class JsonUtil {
 
+    /**
+     * 工具类，禁止实例化。
+     */
+    private JsonUtil() {
+    }
+
     private final static Logger log = LoggerFactory.getLogger(JsonUtil.class);
 
     /**

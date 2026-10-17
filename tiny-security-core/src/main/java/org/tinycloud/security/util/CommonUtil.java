@@ -15,6 +15,12 @@ import java.util.Set;
  * @version 2023-01-06-9:33
  **/
 public class CommonUtil {
+
+    /**
+     * 工具类，禁止实例化。
+     */
+    private CommonUtil() {
+    }
     private final static String TIME_FORMAT = "yyyyMMddHHmmss";
 
     /**

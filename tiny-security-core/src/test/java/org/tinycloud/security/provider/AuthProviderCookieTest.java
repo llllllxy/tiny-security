@@ -77,7 +77,9 @@ class AuthProviderCookieTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
 
-        assertEquals("some-token", authProvider.getToken());
+        // getToken 返回**带前缀**的完整值（与 login 对称），裸值走 getRawToken
+        assertEquals("Bearer some-token", authProvider.getToken());
+        assertEquals("some-token", authProvider.getRawToken());
     }
 
     /**
@@ -317,7 +319,9 @@ class AuthProviderCookieTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
 
-        assertEquals("some-token", authProvider.getToken());
+        // getToken 返回**带前缀**的完整值（与 login 对称），裸值走 getRawToken
+        assertEquals("Bearer some-token", authProvider.getToken());
+        assertEquals("some-token", authProvider.getRawToken());
     }
 
     private MockHttpServletResponse bindRequestContext() {
