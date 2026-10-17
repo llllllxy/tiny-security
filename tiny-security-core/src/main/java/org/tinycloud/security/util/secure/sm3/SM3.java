@@ -115,12 +115,29 @@ public class SM3 {
         return arr;
     }
 
+    /**
+     * int → 大端 4 字节。
+     *
+     * <p>原先走 {@code back(SM3ConvertUtil.intToBytes(num))}（先按小端展开再整体逆序），
+     * 依赖一个 560 行、几乎全是死代码的工具类。此处直接按大端写出，语义等价且少一次数组拷贝。
+     */
     private static byte[] bigEndianIntToByte(int num) {
-        return back(SM3ConvertUtil.intToBytes(num));
+        return new byte[]{
+                (byte) (0xff & (num >> 24)),
+                (byte) (0xff & (num >> 16)),
+                (byte) (0xff & (num >> 8)),
+                (byte) (0xff & num)
+        };
     }
 
+    /**
+     * 大端 4 字节 → int（与 {@link #bigEndianIntToByte(int)} 互逆）。
+     */
     private static int bigEndianByteToInt(byte[] bytes) {
-        return SM3ConvertUtil.byteToInt(back(bytes));
+        return ((0x000000ff & bytes[0]) << 24)
+                | ((0x000000ff & bytes[1]) << 16)
+                | ((0x000000ff & bytes[2]) << 8)
+                | (0x000000ff & bytes[3]);
     }
 
     private static int FFj(int X, int Y, int Z, int j) {
@@ -196,7 +213,11 @@ public class SM3 {
         pos += in.length;
         System.arraycopy(padd, 0, out, pos, padd.length);
         pos += padd.length;
-        byte[] tmp = back(SM3ConvertUtil.longToBytes(n));
+        // 直接写大端 8 字节（原先为 back(SM3ConvertUtil.longToBytes(n))）
+        byte[] tmp = new byte[8];
+        for (int i = 0; i < 8; i++) {
+            tmp[i] = (byte) (0xff & (n >> (56 - i * 8)));
+        }
         System.arraycopy(tmp, 0, out, pos, tmp.length);
         return out;
     }

@@ -1,6 +1,16 @@
 package org.tinycloud.security.util.secure;
 
+/**
+ * 十六进制工具类。
+ *
+ * <p>原先还带有 {@code hexToBytes(String)} / {@code hexToByte(String)} 两个方法，
+ * 但全项目无人调用（框架内没有「十六进制字符串 → 字节」的需求），已一并删除 ——
+ * 保留无调用方的公开方法等于长期维护一份无人验证的代码。
+ */
 public class HexUtil {
+
+    private HexUtil() {
+    }
 
     /**
      * 字节数组转16进制
@@ -18,42 +28,6 @@ public class HexUtil {
             sb.append(hex);
         }
         return sb.toString();
-    }
-
-    /**
-     * hex字符串转byte字节数组
-     *
-     * @param inHex 待转换的Hex字符串
-     * @return 转换后的byte数组结果
-     */
-    public static byte[] hexToBytes(String inHex) {
-        int hexlen = inHex.length();
-        byte[] result;
-        if (hexlen % 2 == 1) {
-            // 奇数
-            hexlen++;
-            result = new byte[(hexlen / 2)];
-            inHex = "0" + inHex;
-        } else {
-            // 偶数
-            result = new byte[(hexlen / 2)];
-        }
-        int j = 0;
-        for (int i = 0; i < hexlen; i += 2) {
-            result[j] = hexToByte(inHex.substring(i, i + 2));
-            j++;
-        }
-        return result;
-    }
-
-    /**
-     * Hex字符串转byte
-     *
-     * @param inHex 待转换的Hex字符串
-     * @return 转换后的byte
-     */
-    public static byte hexToByte(String inHex) {
-        return (byte) Integer.parseInt(inHex, 16);
     }
 
 }
