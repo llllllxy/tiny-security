@@ -19,7 +19,7 @@ import java.util.Set;
  *
  * <p><b>1.5.0 起不再依赖任何可变静态全局变量。</b>此前本类持有一个由 {@code AuthAutoConfiguration}
  * 在 {@code @ConditionalOnMissingBean(TinySecurityFacade.class)} 的 Bean 方法里赋值的静态门面，
- * 用户一旦自定义该 Bean，赋值就永远不会发生，本类全部方法随之失效（P1-1）。现在改为每次调用时
+ * 用户一旦自定义该 Bean，赋值就永远不会发生，本类全部方法随之失效。现在改为每次调用时
  * 从「当前请求的 WebApplicationContext」解析出 {@link AuthProvider}（框架唯一的实例门面）：
  *
  * <pre>
@@ -31,7 +31,7 @@ import java.util.Set;
  *
  * <p><b>限制</b>：本类只适用于「持有当前请求的线程」（即 Web 请求线程）。非 Web 线程
  * （{@code @Async}、MQ 消费线程等）取不到请求，会抛 {@link UnAuthorizedException}；这与 1.5.0
- * 之前的行为一致，异步上下文传播是待办事项（P1-3）。这类场景请直接注入 {@link AuthProvider}。
+ * 之前的行为一致，异步上下文传播是待办事项。这类场景请直接注入 {@link AuthProvider}。
  *
  * <p><b>1.4.0 行为统一</b>：所有 {@code get*} 与 {@code has*} 方法在未登录/会话失效时统一抛
  * {@link UnAuthorizedException}（不再返回 null），与 {@code AuthProvider} 语义对齐。

@@ -43,7 +43,7 @@ class AuthAutoConfigurationTest {
             assertThat(context).hasSingleBean(SessionRepository.class);
             assertThat(context).hasSingleBean(SingleSessionRepository.class);
             assertThat(context).hasSingleBean(AuthProvider.class);
-            // 1.5.0：安全门面降为 AuthProvider 的内部实现，不再是容器里的公开 Bean（P1-1）
+            // 1.5.0：安全门面降为 AuthProvider 的内部实现，不再是容器里的公开 Bean
             assertThat(context).doesNotHaveBean("tinySecurityFacade");
             assertThat(context).hasSingleBean(SecurityContextRepository.class);
             assertThat(context).hasSingleBean(SecurityEventPublisher.class);

@@ -51,7 +51,7 @@ class AuthProviderEventTest {
     }
 
     /**
-     * 1.3.3：成功事件监听器抛异常时，会话已创建成功，login() 必须仍返回 token、
+     * 1.3.3：成功事件监听器抛异常时，会话已创建成功，login 必须仍返回 token、
      * 且不得误发 LoginFailureEvent（仅内部记录 WARN）。
      */
     @Test
@@ -70,7 +70,7 @@ class AuthProviderEventTest {
     }
 
     /**
-     * P1-11：失败路径的监听器抛异常时，不得顶掉原始异常。
+     * 失败路径的监听器抛异常时，不得顶掉原始异常。
      *
      * <p>修复前 {@code publishLoginFailure} 直接写在 catch 块里、没有单独保护，
      * 监听器抛出的异常会替换掉登录失败的原始异常，调用方（与异常翻译器）

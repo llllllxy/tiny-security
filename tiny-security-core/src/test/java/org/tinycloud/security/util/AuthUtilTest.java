@@ -56,7 +56,7 @@ class AuthUtilTest {
     }
 
     /**
-     * P1-1 回归：AuthUtil 跟随「当前请求所属容器」里注册的 AuthProvider，不存在任何可能失同步的
+     * 回归：AuthUtil 跟随「当前请求所属容器」里注册的 AuthProvider，不存在任何可能失同步的
      * 静态全局变量。修复前 AuthUtil 由一个静态 facade 变量驱动，只要那个赋值点没被执行
      * （例如用户自定义了门面 Bean），AuthUtil 就会整体瘫痪。
      */
@@ -138,7 +138,7 @@ class AuthUtilTest {
     }
 
     /**
-     * P0-1 的实际用户路径：接口上没有权限注解时上下文里的角色/权限是「未加载」状态，
+     * 实际用户路径：接口上没有权限注解时上下文里的角色/权限是「未加载」状态，
      * AuthUtil.hasRole/hasPermission 必须经由 AuthProvider 按需懒加载，而不是恒返回 false。
      */
     @Test

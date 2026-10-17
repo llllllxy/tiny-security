@@ -52,7 +52,7 @@ class RedisSessionRepositoryTest {
     /**
      * 登录时在线列表 key 必须被设置 2 倍会话超时的 TTL。
      *
-     * <p>自 P1-7 起，"判断并发上限 + 入列 + 设置列表 TTL"三步合并为一个 Lua 脚本原子执行，
+     * <p>自 1.5.0 起，"判断并发上限 + 入列 + 设置列表 TTL"三步合并为一个 Lua 脚本原子执行，
      * 所以这里断言的是脚本收到的参数（第三个参数即列表 TTL 秒数），不再是独立的 EXPIRE 命令。
      */
     @Test
@@ -75,7 +75,7 @@ class RedisSessionRepositoryTest {
      *
      * <p>自 TCK 落地后，失效判定不再只看 key 是否存在（{@code hasKey}），而是与
      * {@code checkByCredentials} 同口径：读主体并按 {@code loginExpireTime} 判过期。
-     * 因此这里用 {@code opsForValue().get()} 返回 {@code null}（key 不存在）来模拟失效凭证。
+     * 因此这里用 {@code opsForValue.get} 返回 {@code null}（key 不存在）来模拟失效凭证。
      */
     @Test
     void saveShouldCleanupDeadOnlineEntriesEvenWithoutLimit() {
@@ -112,7 +112,7 @@ class RedisSessionRepositoryTest {
      * 启用并发限制时，超限登录被拒绝且不写入新会话（原有能力不回归）。
      *
      * <p>自 TCK 落地后，"在线列表里的凭证是否有效"不再只看 {@code hasKey}，而是读主体并按
-     * {@code loginExpireTime} 判过期，因此这里用 {@code opsForValue().get()} 返回一个尚未过期的
+     * {@code loginExpireTime} 判过期，因此这里用 {@code opsForValue.get} 返回一个尚未过期的
      * 主体 JSON 来模拟"已有一个有效在线会话"。
      */
     @Test
@@ -147,7 +147,7 @@ class RedisSessionRepositoryTest {
     }
 
     /**
-     * 并发上限必须由**一个原子脚本**判定并入列（P1-7）。
+     * 并发上限必须由**一个原子脚本**判定并入列。
      *
      * <p>本用例锁住的是修复的**结构性前提**：上限值随脚本下传（ARGV[2]），
      * 且代码里不再存在"先 rightPush 再用 size 事后发现超额、然后摘掉自己"的两步写法 ——

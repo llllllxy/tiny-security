@@ -172,7 +172,7 @@ public class AuthAutoConfiguration implements WebMvcConfigurer {
      * 注册默认 AuthProvider 实例门面（1.5.0 起它是框架唯一的实例门面）。
      *
      * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
-     * 角色/权限（性能设计），此时 {@code AuthUtil.hasRole/hasPermission} 依赖门面按需懒加载（P0-1）。
+     * 角色/权限（性能设计），此时 {@code AuthUtil.hasRole/hasPermission} 依赖门面按需懒加载。
      *
      * <p>启动横幅与版本日志也在这里输出：1.5.0 之前它们挂在已被删除的门面 Bean 上，
      * 而本 Bean 是框架启动时必然创建的那一个。

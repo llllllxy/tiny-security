@@ -10,7 +10,7 @@ import java.util.HashMap;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 会话超时语义（P1-8）。
+ * 会话超时语义。
  *
  * <p>修复前 {@code tiny-security.timeout} 没有任何校验，非正值落到四个仓储上会分别表现为
  * 永不过期（single）/ 立即驱逐（caffeine）/ 登录失败（redis）/ 立即过期（jdbc）。

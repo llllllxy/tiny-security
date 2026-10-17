@@ -150,7 +150,7 @@ class TinySecurityFacadeTest {
     }
 
     /**
-     * P0-1 回归：接口上没有权限注解时，授权管理器不会为注解调用 SPI，上下文里的角色集合
+     * 回归：接口上没有权限注解时，授权管理器不会为注解调用 SPI，上下文里的角色集合
      * 处于「未加载」状态。此时 hasRole 必须按需从数据源加载，而不是恒返回 false。
      * 修复前本用例会失败。
      */
@@ -169,7 +169,7 @@ class TinySecurityFacadeTest {
     }
 
     /**
-     * P0-1 回归：权限集合同理，未加载时按需从数据源加载。
+     * 回归：权限集合同理，未加载时按需从数据源加载。
      */
     @Test
     void shouldLazilyLoadPermissionSetWhenNotLoadedYet() {
@@ -243,7 +243,7 @@ class TinySecurityFacadeTest {
     }
 
     /**
-     * 构造「已登录、但角色/权限集合尚未加载」的上下文——这正是无权限注解接口上的真实状态（P0-1 场景）。
+     * 构造「已登录、但角色/权限集合尚未加载」的上下文——这正是无权限注解接口上的真实状态（场景）。
      */
     private SecurityContext createContextWithoutAuthorization(Object loginId) {
         LoginSubject subject = new LoginSubject();

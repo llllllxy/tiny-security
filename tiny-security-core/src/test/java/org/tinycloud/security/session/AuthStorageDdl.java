@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 /**
  * 从**随包发布的** {@code sql/t_auth_storage.sql} 解析出建表语句，并转换为 H2 可执行的 DDL。
  *
- * <p><b>为什么要有这个类（TST-5）</b>：此前 JDBC 测试把建表语句**内联复制**在测试里，
+ * <p><b>为什么要有这个类</b>：此前 JDBC 测试把建表语句**内联复制**在测试里，
  * 与真实发布的脚本是两份独立维护的 DDL —— 一旦有人改了发布脚本（例如调整列、增删唯一约束），
  * 测试仍然按老结构跑，**测不出任何问题**。例如 {@code credentials} 唯一约束曾经漏掉，
  * 导致凭证碰撞路径长期不可测。这里改为读取**同一份发布文件**，让"测试通过"能代表"发布的 DDL 可用"。
@@ -85,7 +85,7 @@ final class AuthStorageDdl {
         statements.add("CREATE TABLE " + TABLE_NAME + " (\n    " + String.join(",\n    ", columns) + "\n)");
         statements.addAll(indexStatements);
 
-        // 防退化：credentials 唯一约束是凭证碰撞语义的基础（TST-5 记录的漂移事故），必须在场
+        // 防退化：credentials 唯一约束是凭证碰撞语义的基础（记录的漂移事故），必须在场
         boolean hasUniqueCredentials = statements.stream()
                 .anyMatch(s -> s.toUpperCase().contains("UNIQUE") && s.contains("credentials"));
         if (!hasUniqueCredentials) {

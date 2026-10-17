@@ -107,7 +107,7 @@ class DefaultAuthenticationManagerTest {
     }
 
     /**
-     * 已过期的会话必须被直接拒绝，绝不能被续期复活（P1-6）。
+     * 已过期的会话必须被直接拒绝，绝不能被续期复活。
      *
      * <p>修复前这里不会抛 401：因为「剩余 TTL ≤ 阈值」对已过期会话恒成立（剩余为负数），
      * 于是走续期分支把过期时间改写成 now + timeout，一个早已失效的会话就这么被无限复活了。
@@ -136,7 +136,7 @@ class DefaultAuthenticationManagerTest {
     }
 
     /**
-     * 内核的绝对过期校验必须**独立于仓储**生效（P1-6）。
+     * 内核的绝对过期校验必须**独立于仓储**生效。
      *
      * <p><b>本用例的前置条件在 TCK 落地后发生了变化，这里说明清楚</b>：本用例原本用**内置**
      * {@code SingleSessionRepository} 构造"存储层有效、但 loginExpireTime 已过期"的会话，
@@ -175,7 +175,7 @@ class DefaultAuthenticationManagerTest {
     /**
      * 内置仓储在 TCK 落地后也会自行过滤过期会话（与其它仓储口径一致）。
      *
-     * <p>这是 P1-9 / TCK 的产物：single 与 redis 原先把"存储层 TTL"当作唯一有效性依据，
+     * <p>这是 TCK 的产物：single 与 redis 原先把"存储层 TTL"当作唯一有效性依据，
      * 与 caffeine / jdbc 不一致。本用例把这个一致性固定下来。
      */
     @Test

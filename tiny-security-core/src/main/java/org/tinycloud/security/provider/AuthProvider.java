@@ -34,8 +34,8 @@ import java.util.UUID;
  *
  * <p><b>1.5.0 起本类是框架唯一的实例门面</b>：既负责 token 与会话读写，也负责当前请求的
  * 上下文与授权判定 —— 后者继承自内部基类 {@code TinySecurityFacade}，因此
- * {@code getLoginId() / getRoleSet() / hasRole()} 等方法在本类上直接可用，
- * 且不再需要任何静态全局变量来定位实现（P1-1 / P1-2）。
+ * {@code getLoginId / getRoleSet / hasRole} 等方法在本类上直接可用，
+ * 且不再需要任何静态全局变量来定位实现。
  *
  * @author liuxingyu01
  * @since 2026-04-28
@@ -69,7 +69,7 @@ public class AuthProvider extends TinySecurityFacade {
      * 构造 AuthProvider 外观（不含授权数据源，使用默认的 ThreadLocal 上下文仓储）。
      *
      * <p>该重载保持 1.5.0 之前的行为不变，适用于手工 {@code new} 的场景；此时
-     * {@code getRoleSet() / getPermissionSet()} 只读取上下文中已有的数据，不做按需懒加载。
+     * {@code getRoleSet / getPermissionSet} 只读取上下文中已有的数据，不做按需懒加载。
      *
      * @param sessionRepository       会话仓储
      * @param properties              配置属性
@@ -86,7 +86,7 @@ public class AuthProvider extends TinySecurityFacade {
      * 构造 AuthProvider 外观（完整形态）。
      *
      * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
-     * 角色/权限（性能设计），此时 {@code hasRole/hasPermission} 依赖按需懒加载（P0-1）。
+     * 角色/权限（性能设计），此时 {@code hasRole/hasPermission} 依赖按需懒加载。
      *
      * @param sessionRepository         会话仓储
      * @param properties                配置属性
@@ -288,7 +288,7 @@ public class AuthProvider extends TinySecurityFacade {
      * <p><b>过期口径必须与存储层 TTL 一致</b>：本方法在延长存储层 TTL 的同时，会把
      * {@code subject.loginExpireTime} 一并推进到 {@code now + timeout}。
      * 内核的「绝对过期校验」判定的正是这个时间戳，若只延长 TTL 而不推进它，
-     * 就会出现「存储里还有会话、用户却已经 401」的分叉（P1-14）——
+     * 就会出现「存储里还有会话、用户却已经 401」的分叉——
      * 表现为续期看起来没生效。此处与 {@code DefaultAuthenticationManager}
      * 自己的滑动续期路径（先 set 再 refresh）保持同一口径。
      *
@@ -442,7 +442,7 @@ public class AuthProvider extends TinySecurityFacade {
     public void logout() {
         if (resolveEnableCookie()) {
             // 删除指令必须带上与写入时一致的安全属性：SameSite=None 的 Cookie 若删除时不带
-            // SameSite+Secure，浏览器会忽略该删除指令，表现为"登出后仍是登录态"（P1-5）
+            // SameSite+Secure，浏览器会忽略该删除指令，表现为"登出后仍是登录态"
             CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName(),
                     "/", this.resolveCookieSecure(), this.resolveCookieSameSite());
         }
@@ -555,7 +555,7 @@ public class AuthProvider extends TinySecurityFacade {
             throw e;
         } catch (Exception e) {
             // 其余异常（如凭证为空导致仓储断言失败）同样按「未登录」处理，
-            // 避免把 IllegalArgumentException 透成 500（P1-12）
+            // 避免把 IllegalArgumentException 透成 500
             log.debug("AuthProvider checkLogin failed, Exception：", e);
             success = false;
         }

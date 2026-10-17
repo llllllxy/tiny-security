@@ -31,7 +31,7 @@ public class CommonUtil {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
-     * 获取当前时间 比如 DateTool.getCurrentTime(); 返回值为 20120515234420
+     * 获取当前时间 比如 DateTool.getCurrentTime; 返回值为 20120515234420
      *
      * @return dateTimeStr yyyyMMddHHmmss
      */
