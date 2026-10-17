@@ -3,6 +3,7 @@ package org.tinycloud.security.session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.Assert;
 import org.tinycloud.security.context.LoginSubject;
@@ -89,6 +90,10 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
             return num > 0;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;
+        } catch (DuplicateKeyException e) {
+            // 表上有 credentials 唯一约束：主键冲突即凭证碰撞，必须明确失败，绝不能覆盖掉另一个用户的会话
+            log.error("JdbcSessionRepository save failed: credentials collision detected, the generated token already exists!");
+            return false;
         } catch (Exception e) {
             log.error("JdbcSessionRepository save failed, Exception：", e);
             return false;

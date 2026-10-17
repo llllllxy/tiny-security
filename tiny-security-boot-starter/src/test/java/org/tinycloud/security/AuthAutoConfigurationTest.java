@@ -12,11 +12,7 @@ import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.SecurityContextRepository;
 import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.provider.AuthProvider;
-import org.tinycloud.security.session.CaffeineSessionRepository;
-import org.tinycloud.security.session.JdbcSessionRepository;
-import org.tinycloud.security.session.RedisSessionRepository;
-import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.session.SingleSessionRepository;
+import org.tinycloud.security.session.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -47,7 +43,8 @@ class AuthAutoConfigurationTest {
             assertThat(context).hasSingleBean(SessionRepository.class);
             assertThat(context).hasSingleBean(SingleSessionRepository.class);
             assertThat(context).hasSingleBean(AuthProvider.class);
-            assertThat(context).hasSingleBean(TinySecurityFacade.class);
+            // 1.5.0：安全门面降为 AuthProvider 的内部实现，不再是容器里的公开 Bean
+            assertThat(context).doesNotHaveBean("tinySecurityFacade");
             assertThat(context).hasSingleBean(SecurityContextRepository.class);
             assertThat(context).hasSingleBean(SecurityEventPublisher.class);
             assertThat(context).hasSingleBean(HandlerExceptionResolver.class);
@@ -93,8 +90,12 @@ class AuthAutoConfigurationTest {
                     // 用户自定义仓储存在时，默认仓储不创建，且 bean 不是默认的 Single 类型
                     assertThat(context).hasSingleBean(SessionRepository.class);
                     assertThat(context).doesNotHaveBean(SingleSessionRepository.class);
+                    // 关键：容器里那个 Bean 必须是**用户自定义的那个实例**，而不是框架默认实现。
+                    // （原写法 isInstanceOf(SessionRepository.class) 恒真 —— 从容器按该类型取出的
+                    //  对象当然满足该类型，等于什么都没断言。）
                     SessionRepository bean = context.getBean(SessionRepository.class);
-                    assertThat(bean).isInstanceOf(SessionRepository.class);
+                    SessionRepository userDefined = context.getBean("customSessionRepository", SessionRepository.class);
+                    assertThat(bean).isSameAs(userDefined);
                 });
     }
 
@@ -162,7 +163,7 @@ class AuthAutoConfigurationTest {
         @Bean
         AuthProvider customAuthProvider(SessionRepository sessionRepository) {
             AuthProperties properties = new AuthProperties();
-            properties.setJwtSecret("test-secret");
+            properties.setTokenSecret("test-secret");
             return new AuthProvider(sessionRepository, properties, null);
         }
     }

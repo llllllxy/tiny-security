@@ -6,7 +6,7 @@
 		<img src="https://img.shields.io/badge/license-Apache%202-green.svg" />
 	</a>
 	<a target="_blank" href="https://www.oracle.com/technetwork/java/javase/downloads/index.html">
-		<img src="https://img.shields.io/badge/JDK-8+-blue.svg" />
+		<img src="https://img.shields.io/badge/JDK-17%2B-blue.svg" />
 	</a>
     <a href="https://github.com/llllllxy/tiny-security/stargazers">
        <img src="https://img.shields.io/github/stars/llllllxy/tiny-security?style=flat-square&logo=GitHub">
@@ -35,6 +35,22 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 - 提供多种会话存储方案：redis、jdbc 和单机 session（支持自定义会话存储）
 - 无缝适配前后端分离与不分离项目
 - 完善的文档，包括使用说明、API文档、最佳实践等
+
+## 框架边界（请先阅读）
+
+本框架**只负责「认证 + 鉴权判定」**：身份认证、会话生命周期、注解/URL 鉴权判定、异常翻译、安全默认值与配置校验。
+
+**明确不做**（请在你的业务项目内实现）：
+
+- **数据权限 / 行级数据过滤**（如"仅本人""本部门及以下"）
+- **角色继承**、权限树、菜单与按钮码的数据模型
+- 权限的后台管理界面
+
+原因：「本人 / 本部门 / 自定义」这类判定取决于你自己的业务表结构（如 `sys_user` / `sys_dept` / `sys_role_dept`），
+框架无法在不假设一套数据模型的前提下做对。作为对照，**Spring Security** 的授权止于 `AuthorizationManager` / `GrantedAuthority`、
+**Shiro** 止于 `Realm` + `WildcardPermission`，**两者都不提供数据权限** —— 这类能力通常由业务脚手架（如若依）在业务项目内实现。
+
+> 想判断某个能力该不该进本框架，可以先问一句："Spring Security 做了吗？"
 
 
 ---
@@ -72,6 +88,8 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 
 ```yaml
 tiny-security:
+   # 是否打印框架启动 banner，默认 true；设为 false 可关闭启动日志中的框架信息输出
+   banner: true
    # 存储类型，目前支持jdbc、redis、single(单机内存)、caffeine(本地缓存)四种，如不配置，则默认为single
    # 注意：caffeine 为可选依赖，使用前需自行引入 com.github.ben-manes.caffeine:caffeine
    store-type: single
@@ -82,13 +100,14 @@ tiny-security:
    # 默认不再从 URL 参数读取（enable-url-token 默认 false），因为 URL 传 token 会进入访问日志，存在泄露风险
    token-name: token
    # 会话有效期（会话存储中的subject有效时长），单位秒，默认1800秒(30分钟)
+   # 只允许正整数：配置 0 或负数会在启动时直接报错（会话永不过期是反模式，故不支持该配置方式）
    timeout: 1800
    # 最大登录并发数，默认不限制
    max-concurrent-logins: 2
-   # credentials凭证类型：仅 uuid(默认)/random128/nanoid 具备密码学随机性，可用于生产；
-   # 其它取值一律回退为 uuid（snowflake/objectid/ulid 等含时间戳的凭证可被预测，已移除）
-   credentials-style: uuid
    # 当配置为jdbc时，存储会话信息的表名字，默认为t_auth_storage
+   # 建表脚本随 starter 一起发布，位于 tiny-security-boot-starter 的 resources/sql/t_auth_storage.sql
+   # 使用 jdbc 存储时请先执行该脚本建表（脚本内含 credentials 唯一约束，用于凭证碰撞检测）
+   # 注意：login_subject 列为 varchar(5000)，因此 extraInfo 序列化后不可超过该长度，否则登录会失败
    table-name: t_auth_storage
    # 是否开启权限(角色)校验，默认false不开启，开启后需要实现AuthorizationInfoGet接口
    authorization-enabled: true
@@ -98,12 +117,9 @@ tiny-security:
    force-http-status-200: false
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
-   # jwt密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥，重启后所有会话将失效）
-   jwt-secret: your-secret-key-please-replace-me
-   # jwt主题，不配置则使用默认值
-   jwt-subject: tiny-security
-   # jwt自身有效期（秒），默认2592000（即30天）；实际生效值不低于会话timeout，避免token先于会话过期
-   jwt-timeout: 2592000
+    # token签名密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥：重启后所有会话将失效，多实例部署下各实例也互不认可对方的token）
+    token-secret: your-secret-key-please-replace-me
+   # 长度建议 >= 32 字节；短于 32 字节会在启动时打印 WARN（不阻止启动）
    # 是否启用Cookie模式（登录写cookie、登出清理cookie、从cookie读取token）
    # 默认false纯token模式（前后端分离）；前后端不分离项目需开启
    enable-cookie: false
@@ -159,7 +175,7 @@ tiny-security:
 ```java
 @Component
 public class AuthorizationInfoGetImpl implements AuthorizationInfoGet {
-    private final static Logger logger = LoggerFactory.getLogger(PermissionInfoInterfaceImpl.class);
+    private final static Logger logger = LoggerFactory.getLogger(AuthorizationInfoGetImpl.class);
 
 
     /**
@@ -279,15 +295,22 @@ Long loginIdLong = authProvider.getLoginIdAsLong();
 LoginSubject loginSubject = authProvider.getLoginSubject();
 ```
 
-也可使用静态工具类 `AuthUtil`：
+也可使用静态工具类 `AuthUtil`（行为与 `AuthProvider` 一致，**无会话时同样抛 `UnAuthorizedException`**）：
 ```java
-// （这个方法在无会话时不会抛出异常，而是返回null），还可以直接getLoginIdAsString()， getLoginIdAsInt()， getLoginIdAsLong()
+// 无会话时抛 UnAuthorizedException（不是返回 null）
 Object loginId = AuthUtil.getLoginId();
+String loginIdStr = AuthUtil.getLoginIdAsString();
+Integer loginIdInt = AuthUtil.getLoginIdAsInt();
+Long loginIdLong = AuthUtil.getLoginIdAsLong();
 
-// （这个方法在无会话时不会抛出异常，而是返回null）
+// 无会话时抛 UnAuthorizedException（不是返回 null）
 SecurityContext securityContext = AuthUtil.getSecurityContext();
-LoginSubject loginSubject = securityContext == null ? null : securityContext.getLoginSubject();
+LoginSubject loginSubject = securityContext.getLoginSubject();
 ```
+
+> **注意**：`AuthUtil` 只适用于**持有当前请求的线程**。在 `@Async`、`Callable`、`DeferredResult`、
+> MQ 消费线程等非 Web 线程里调用会取不到请求、抛 `UnAuthorizedException` —— 这类场景请直接注入 `AuthProvider`。
+> 这是有意取舍而非缺陷：线程绑定的上下文（同 `RequestContextHolder`）切线程后本就失效。
 
 ---
 
@@ -296,10 +319,18 @@ LoginSubject loginSubject = securityContext == null ? null : securityContext.get
 @Autowired
 private AuthProvider authProvider;
 
+// 返回带 "Bearer " 前缀的完整 token（与 login() 的返回值同形，可直接放回请求头使用）
 String token = authProvider.getToken();
 // 或者
 String token = authProvider.getToken(HttpServletRequest);
+
+// 若需要不带前缀的裸值（credentials.signature），用 getRawToken()
+String rawToken = authProvider.getRawToken();
+String rawToken2 = authProvider.getRawToken(HttpServletRequest);
 ```
+
+> 提示：`getToken()` 自 `1.5.0` 起返回**带 `Bearer ` 前缀**的值（此前返回去前缀的裸值）。
+> 若你的代码依赖旧行为，请改用 `getRawToken()`。
 ---
 
 ### 2.2.5 获取当前登录用户凭证（对应redis或database里的唯一键）
@@ -331,14 +362,14 @@ authProvider.deleteByToken(token);
 authProvider.deleteByCredentials(credentials);
 
 // 根据用户loginId，使该用户的全部会话都注销
-authProvider.deleteTokenByLoginId(loginId);
+authProvider.deleteByLoginId(loginId);
 
 ```
 
 ### 2.2.8 查询指定账号的全部会话凭证
 
 获取某个账号当前所有**有效（未过期）**的会话凭证，常用于多设备管理（列出账号的所有在线设备/会话）、
-定向踢人（只注销其中某一个凭证，而非 `deleteTokenByLoginId` 的全量注销）。
+定向踢人（只注销其中某一个凭证，而非 `deleteByLoginId` 的全量注销）。
 账号无有效会话时返回空列表（不会返回 null）。
 
 ```java
@@ -445,7 +476,26 @@ AuthUtil.hasAnyPermission("permission1", "permission2");
 ```
 
 ### 2.3.3 直接通过URL控制权限（不支持角色校验）
-PermissionInfoInterfaceImpl实现类里返回的权限编码要和接口URL相匹配（需要带上context-path）
+AuthorizationInfoGet实现类里返回的权限编码要和接口URL相匹配（需要带上context-path）
+
+**可选：限定 HTTP Method（1.5.0 新增）**
+
+权限码可以写成 `METHOD 路径`（中间一个空格，Method 大小写不敏感）：
+
+| 权限码写法 | 匹配语义 |
+|---|---|
+| `/user/**` | 匹配**任意** Method（与 1.5.0 之前一致，存量配置无需改动） |
+| `GET /user/**` | 只匹配 GET |
+| `POST /user/**` | 只匹配 POST |
+| `* /user/**` | 匹配任意 Method（与不写 Method 等义） |
+
+> ⚠️ **建议显式限定 Method**：不写 Method 时，「拥有 `GET /user` 读权限」等价于「拥有
+> `DELETE /user` 权限」。读写分离的接口请写成 `GET /user/**` 与 `POST /user/**` 两条。
+
+> ⚠️ **context-path 警告**：权限码匹配的是**含 context-path 的完整 URI**（例如应用配了
+> `/api`，实际请求 URI 是 `/api/user/list`）。**修改应用的 context-path 会导致既有权限码
+> 全部失配**，表现为原本有权限的用户全部 403（fail-closed，不会越权，但需要同步调整配置）。
+> 若确实要改 context-path，请一并更新所有权限码。
 
 ---
 
@@ -502,17 +552,17 @@ public class GlobalExceptionHandler {
       // 判断具体异常类型
       if (e instanceof UnAuthorizedException) {
          // 未会话异常：使用子类的错误码
-         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+         return ApiResult.fail(e.getCode(), e.getMessage());
       } else if (e instanceof NoPermissionException) {
          // 无权限异常：使用子类的错误码
-         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+         return ApiResult.fail(e.getCode(), e.getMessage());
       } else if (e instanceof ConcurrentLoginOverLimitException) {
          // 并发登录超过最大限制：使用子类的错误码
-         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+         return ApiResult.fail(e.getCode(), e.getMessage());
       } else {
          // 兜底：处理 TinySecurityException 其他可能的子类（避免漏判）
          log.warn("未明确处理的 TinySecurityException 子类：{}，错误码：{}", e.getClass().getName(), e.getCode());
-         return ApiResult.fail(e.getCode(), I18nUtils.getMessage(e.getCode()));
+         return ApiResult.fail(e.getCode(), e.getMessage());
       }
    }
 }
@@ -523,7 +573,12 @@ public class GlobalExceptionHandler {
 ## 2.5、其他更多用法
 
 ### 2.5.1 前端传递token
-1. 放在参数里面用`token`传递：
+> ⚠️ **方式 1（URL 参数传 token）默认被禁用**：`tiny-security.enable-url-token` 默认为 `false`，
+> 因为 URL 上的 token 会进入**访问日志、浏览器历史与 Referer 头**，造成凭证泄露。
+> 若确需使用，必须在配置中显式开启 `enable-url-token: true`（仍**不推荐**）。
+> 推荐使用下方的方式 2（header）。
+
+1. 放在参数里面用`token`传递（需显式开启 `enable-url-token: true`）：
 ```javascript
 $.get("/xxx", { "token": token }, function(data) {
 
@@ -604,36 +659,45 @@ tiny-security:
 ```
 
 
-### 2.5.3 密码哈希与摘要算法
-框架封装了一些常见的密码哈希与摘要算法，可供使用（如需对称/非对称加密，推荐直接使用 JDK JCA 或 Hutool、BouncyCastle 等专用密码学库）
+### 2.5.3 摘要算法与密码哈希
 
-1. 摘要算法：
-   支持MD5、SHA256和国密SM3算法
+如需对称/非对称加密，推荐直接使用 JDK JCA 或 Hutool、BouncyCastle 等专用密码学库。
+
+#### 1. 摘要算法（`SimpleHash`）
+
+> ⚠️ **`SimpleHash` 是摘要工具，不是密码哈希算法，请勿用于存储用户口令。**
+>
+> 它把 MD5 / SHA-1 当作一等算法名，而这两者早已不适合任何安全用途；其 `iterations`
+> 参数只是**裸摘要的重复计算链**，**不是** PBKDF2 / scrypt / Argon2 这类具备内存硬度、
+> 抗 GPU 暴破的密钥派生函数；构造器允许不传盐（即无每用户随机盐）；并且**不提供任何校验 API**
+> —— 调用方只能自己写 `String.equals` 比对，会重新引入时序侧信道。
+>
+> **需要密码哈希请用下方的 `BCrypt`**；完整性校验、缓存键、去重指纹等非安全场景再用本工具。
+
+支持 JDK 内置算法（MD5、SHA-1、SHA-256 等）与国密 SM3，可输出 HEX 或 Base64：
+
 ```java
-    new MD5Hash("123456", "323@#@$1234da", 1).toHex();
-    new MD5Hash("123456", "323@#@$1234da").toHex();
-    new MD5Hash("123456").toHex();
-    new MD5Hash("123456", "323@#@$1234da", 2).toHex();
-    new MD5Hash("123456", "323@#@$1234da", 3).toHex();
-    new MD5Hash("123456", "323@#@$1234da", 3).toBase64();
-    
-    new Sha256Hash("123456", "323@#@$1234da", 10).toBase64();
-    new Sha256Hash("123456", "323@#@$1234da").toHex();
-    new Sha256Hash("123456").toHex();
-    new Sha256Hash("123456", "323@#@$1234da", 2).toHex();
-    new Sha256Hash("123456", "323@#@$1234da", 3).toHex();
-    new Sha256Hash("123456", "323@#@$1234da", 3).toBase64();
+    // 三参：算法 + 明文 + 盐（迭代 1 次）
+    new SimpleHash("MD5", "123456", "323@#@$1234da").toHex();
+    // 四参：末位为迭代次数，最少 1 次
+    new SimpleHash("MD5", "123456", "323@#@$1234da", 2).toHex();
+    new SimpleHash("MD5", "123456", "323@#@$1234da", 3).toBase64();
+    // 两参：不加盐
+    new SimpleHash("MD5", "123456").toHex();
 
-    new SM3Hash("123456", "323@#@$1234da", 1).toHex();
-    new SM3Hash("123456", "323@#@$1234da").toHex();
-    new SM3Hash("123456").toHex();
-    new SM3Hash("123456", "323@#@$1234da", 2).toHex();
-    new SM3Hash("123456", "323@#@$1234da", 4).toHex();
-    new SM3Hash("123456", "323@#@$1234da").toBase64();
+    new SimpleHash("SHA-256", "123456", "323@#@$1234da", 10).toBase64();
+    new SimpleHash("SHA-256", "123456", "323@#@$1234da").toHex();
+    new SimpleHash("SHA-256", "123456").toHex();
+
+    new SimpleHash("SM3", "123456", "323@#@$1234da").toHex();
+    new SimpleHash("SM3", "123456", "323@#@$1234da", 4).toBase64();
+    new SimpleHash("SM3", "123456").toHex();
 ```
 
-2. 密码哈希算法
-   支持BCrypt算法
+#### 2. 密码哈希（`BCrypt`）
+
+**存储用户口令请使用 `BCrypt`**：自带随机盐、work factor 可调，且 `checkpw` 是恒定时间比较。
+
 ```java
     // 密码哈希
     String hashedPassword = BCrypt.hashpw("123456", BCrypt.gensalt());
