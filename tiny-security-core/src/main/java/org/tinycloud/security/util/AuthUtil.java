@@ -1,7 +1,7 @@
 package org.tinycloud.security.util;
 
-import jakarta.servlet.ServletContext;
-import jakarta.servlet.http.HttpServletRequest;
+import javax.servlet.ServletContext;
+import javax.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 import org.springframework.web.context.WebApplicationContext;

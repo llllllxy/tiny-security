@@ -255,9 +255,10 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             return false;
         }
         Object content = this.timedCache.getObject(cacheKey);
-        if (!(content instanceof LoginSubject subject)) {
+        if (!(content instanceof LoginSubject)) {
             return false;
         }
+        LoginSubject subject = (LoginSubject) content;
         Long loginExpireTime = subject.getLoginExpireTime();
         // 缺 loginExpireTime 的主体按"已失效"处理，与内核（DefaultAuthenticationManager）及
         // caffeine 仓储的口径一致；NEVER_EXPIRE_TIME 已取消，这里不再有永不过期特例

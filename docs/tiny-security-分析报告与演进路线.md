@@ -806,7 +806,7 @@ token = "Bearer " + credentials + "." + base64url(HMAC-SHA256(credentials, secre
 
 - 新增 [`TokenSignUtil`](../tiny-security-core/src/main/java/org/tinycloud/security/util/TokenSignUtil.java)，只用 JDK 的 `javax.crypto.Mac` 与 `MessageDigest.isEqual`（常量时间比对），**约 150 行含注释**。
 - `credentials`（uuid / random128 / nanoid）与 base64url 的字母表都不含 `.`，故按**最后一个** `.` 切分即可；格式非法一律返回 `null` → 401，不抛异常穿透。
-- **收益**：删掉 `java-jwt` 依赖（pom 里 `jwt.version` 与 dependencyManagement 条目一并删除）；删掉 payload 编解码；删掉**第二条过期时间线**（原 `jwt-timeout` 与会话 `timeout` 取较大值的语义陷阱）；token 里**没有算法字段**，算法在代码里写死 `HmacSHA256`，`alg=none` / 算法混淆风险面归零。
+- **收益**：删掉 `java-jwt` 依赖（pom 里 `jwt.version` 与 dependencyManagement 条目一并删除；**注**：该项在 IR-1 落地时遗漏，直到 `1.5.0` 收尾才真正删除，见 CHANGELOG 勘误）；删掉 payload 编解码；删掉**第二条过期时间线**（原 `jwt-timeout` 与会话 `timeout` 取较大值的语义陷阱）；token 里**没有算法字段**，算法在代码里写死 `HmacSHA256`，`alg=none` / 算法混淆风险面归零。
 - **配置**：`tiny-security.jwt-secret` → `tiny-security.token-secret`（本就是破坏性变更，顺带改名以免误导）；`jwt-subject` / `jwt-timeout` **直接删除，不留兼容垫片**。
 - **API**：`AuthConsts.JWT_TOKEN_PREFIX` → `TOKEN_PREFIX`（前缀保留，值仍为 `"Bearer "`）；`AuthProvider.getCredentialsByToken(String)` **保留原名**，内部由「解 JWT」换成「验签后取 credentials」。
 

@@ -16,6 +16,7 @@
 - **移除 JWT，token 改为 HMAC-SHA256 签名信封**：token 形态从 `Bearer <JWT>` 变为
   `Bearer <credentials>.<base64url(HMAC-SHA256(credentials, token-secret))>`。
   - **不再依赖 `com.auth0:java-jwt`**（签名改用 JDK 自带的 `javax.crypto`），依赖树更干净；token 里**没有算法字段**，算法在代码中写死 `HmacSHA256`，`alg=none` / 算法混淆风险面归零。
+    - **勘误**：移除 JWT 时**只换了实现、没删依赖声明** —— `pom.xml` 的 `jwt.version` 属性、`dependencyManagement` 条目与 core 模块的 `java-jwt` 依赖一直保留到 `1.5.0` 收尾才真正删除。代码中已无任何 `com.auth0` 引用，该依赖属纯冗余。
   - **移除第二条过期时间线**：原先 JWT 有效期取 `max(jwt-timeout, 会话 timeout)`，有效期有两个来源；现在 token 只是凭证的签名信封，**有效期完全以会话为准**（`tiny-security.timeout`）。
   - token 格式与签名算法都变了，**升级后所有老 token 立即失效**，在线用户需重新登录。
 - **配置项重命名与删除**：
