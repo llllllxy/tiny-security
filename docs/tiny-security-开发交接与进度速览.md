@@ -24,7 +24,7 @@ git log -1 --oneline
 
 | 项 | 要求 | 说明 |
 |---|---|---|
-| 分支 | `springboot3` | Spring Boot 3 / Jakarta。`master` 是旧的 SB2/javax 分支，**不要**在上面开发 |
+| 分支 | `springboot3`（主开发分支） | Spring Boot 3 / Jakarta。`master` 是 SB2/javax 分支，**继续维护但不在上面开发**（`1.5.0` 决策 4：不做 EOL） |
 | JDK | **17 必须**，21 也需能跑通 | 编译目标 17；CI 跑 17/21 矩阵 |
 | Maven | 3.9+（无 wrapper） | 仓库没有 `mvnw`，用本机 `mvn` |
 | 构建命令 | `mvn -B clean verify -Dgpg.skip=true` | **`-Dgpg.skip=true` 不可省**：GPG 插件绑在 `verify`，无密钥会失败 |
@@ -75,7 +75,8 @@ mvn -B test -pl tiny-security-core -am -Dtest=RedisSessionRepositoryContractTest
 | `d0c1a54` | P1-5 Cookie 登出 | `SameSite=None` 时删除指令被浏览器忽略 → "登出后仍是登录态" |
 | `038b258` | **TCK + P1-9 + TST-5** | 见 §2.3 |
 | `4c80aa3` | P1-11（1/3）+ P1-13 + DOC-1/DOC-12 | 失败路径事件隔离；README 摘要/密码哈希降级（顺带修掉示例里的**不存在类** `MD5Hash`/`Sha256Hash`） |
-| （本次） | **P1-14** `refreshByCredentials` 口径收口 | 只延长存储层 TTL、不推进 `loginExpireTime`；内核补绝对过期校验后表现为续期"没生效"，`single` 下 `getSubject` 直接返回 `null` |
+| `ed6f372` | **P1-14** `refreshByCredentials` 口径收口 | 只延长存储层 TTL、不推进 `loginExpireTime`；内核补绝对过期校验后表现为续期"没生效"，`single` 下 `getSubject` 直接返回 `null` |
+| （本次） | **P2-7 / P2-9 / P2-11 + P3-1 / P3-2 / P3-5 / P3-6 / P3-7 + 全部剩余 DOC** | 见 §2.5 |
 
 ### 2.2 `35f5f74`（P1-6 / P1-7 / P1-8）—— 破坏性变更，务必知道
 
@@ -90,11 +91,25 @@ mvn -B test -pl tiny-security-core -am -Dtest=RedisSessionRepositoryContractTest
 - **P1-9**：`getSubject` 返回**副本**（原先内存版返回共享实例，改一下会污染缓存）；`loginId` 反序列化**归一化为 `Long`**（原先 `Long 10001` 经 JSON 往返变 `Integer`，`(Long)` 强转抛 `ClassCastException`）。
 - **TST-5**：Jdbc 测试改为加载**随包发布的** `sql/t_auth_storage.sql`（不再内联复制 DDL）。
 
+### 2.5 本次批次（P2 + P3 + DOC 收尾）
+
+| 项 | 内容 | 关键点 |
+|---|---|---|
+| **P2-7** | `getToken()` 前缀语义与 `login()` 对齐 | 此前 `getToken()` 返回**去前缀**裸值，放回请求头会 401；现返回带 `Bearer ` 前缀值，裸值走新增的 `getRawToken()`。**行为变更**，已入升级清单 |
+| **P2-9** | `SameSite=None` + `cookie-secure=false` 告警 | 浏览器会丢弃该 Cookie（症状同 P1-5）；只 WARN、不擅自改用户配置 |
+| **P2-11** | `token-secret` 短于 32 字节告警 | 只 WARN、**不阻止启动**（强制长度会破坏存量配置） |
+| **P3-1** | 删 `BCrypt.main` + 5 处 `System.out` | 生产代码 `main`/`System.out`/`printStackTrace` 现均为 0 处 |
+| **P3-2** | **删 `SM3ConvertUtil`（560 行）** | 仅 3 个方法被用，其余约 540 行死代码；3 个转换内联进 `SM3` 并直接写大端。**SM3 字节级不变**（KAT `66c7f0f4…` 通过） |
+| **P3-5/6/7** | 重复 import 核查（已无）、工具类补私有构造、`target/` 清理 | — |
+| **DOC** | 除 DOC-10 外的全部 DOC 条目 | 含 `I18nUtils`（**不存在的类**）、`deleteTokenByLoginId` 错名、`AuthUtil.getLoginId()` 描述与代码**相反**、JDK 徽章 8+→17 |
+
+> **P2-7 是本批次唯一的破坏性变更**：若代码依赖 `getToken()` 返回裸值，请改用 `getRawToken()`。
+
 ### 2.4 当前基线
 
 ```
-core 309 例（含 20 个按需跳过的 Redis 契约用例）+ starter 16 例
-生产类 58 个；测试源码 38 个（其中 32 个含 @Test，另 6 个是辅助类 / 契约子类）
+core 315 例（含 20 个按需跳过的 Redis 契约用例）+ starter 16 例
+生产类 57 个；测试源码 39 个（其中 33 个含 @Test，另 6 个是辅助类 / 契约子类）
 JDK 17 与 21 均 BUILD SUCCESS，JaCoCo 门槛（LINE 50%）通过
 ```
 
@@ -121,11 +136,14 @@ JDK 17 与 21 均 BUILD SUCCESS，JaCoCo 门槛（LINE 50%）通过
 | 项 | 内容 | 状态 | 备注 |
 |---|---|---|---|
 | **JDBC 并发上限** | 唯一可行且**无需事务**的方案：加 `slot` 列 + `UNIQUE (login_id, slot)`，登录时试 `slot = 1..max`，唯一键冲突即占位失败 | **WONTFIX（暂缓）** | 三个免改表结构方案已实测否决（见文档 §4.3 第 13 行）；因需**破坏性 DDL** 而暂缓。当前 TCK 中以 `supportsAtomicConcurrentLimit()` **显式豁免**，非静默放过 |
-| **P1-11 事件机制** | 失败路径监听器异常会顶掉原始异常；`LoginSuccessEvent` 携带完整 token | **DONE（1/3）** | 失败路径隔离已完成（含反向验证）；另两条属公开 API 变更/新特性，留待阶段 2 |
+| **P1-11 事件机制** | 失败路径监听器异常会顶掉原始异常；`LoginSuccessEvent` 携带完整 token | **DONE（1/3）** | 失败路径隔离已完成（含反向验证）；另两条属公开 API 变更/新特性，留待后续与事件机制一并重做 |
 | **P1-13 `SimpleHash`** | 被 README 当作"密码哈希"宣传，实为摘要工具 | **DONE** | 纯文档降级 + 警告块；顺带修掉 DOC-1（示例用的 `MD5Hash`/`Sha256Hash` 是**不存在的类**） |
+| **P1-14 `refreshByCredentials`** | 只延长存储层 TTL、不推进 `loginExpireTime`，两套过期口径分叉 | **DONE** | `single` 下 `getSubject` 直接返回 `null`（比"401"更严重）；已按方案 A 口径合一 |
 | **TST-6** | 引入 Testcontainers，让 CI 也能跑真实 Redis | `DOING` | 已能本地跑（见 §1）；CI 仍不跑 |
 | **`AntPathMatcher` → `PathPattern`** | — | ⏭️ **WONTFIX** | 实测：修不了编码绕过（那是输入源问题）、现有词汇表两者结论一致、中间 `**` 会让存量权限码**直接抛异常**。**不要照着旧条目的"修复方向"去改** |
-| 阶段 2 | 授权做深（角色继承 + 数据范围 + 权限缓存） | 未开始 | 见文档 §4.4/§5 |
+| ~~阶段 2 · 授权做深~~ | ~~角色继承 + 数据范围 + 权限缓存~~ | ⏭️ **WONTFIX（已改向）** | **超出安全框架职责**：数据范围依赖业务表结构，Spring Security / Shiro 同样不做。**不要照着旧路线图去做数据权限**（见文档 §4.1「方案 B 推翻记录」）。阶段 2 已改为「内核对齐与工程收尾」 |
+
+> **⚠️ 交接必读（`1.5.0` 拍板）**：**不要**去实现数据权限 / 角色继承 / 权限树。判断某能力该不该进框架，用文档 §4.1 末尾的**框架职责边界表**，或问一句「Spring Security 做了吗？」。另外 **SB2 分支（`master`）继续维护**，不做 EOL。
 
 ---
 

@@ -100,6 +100,13 @@
   - **修复**：失败路径的事件发布补上独立的 `try/catch` + WARN 日志，与**成功路径既有的隔离写法对齐**（成功路径本就已隔离，无需改动）。发布失败只记录日志，原始异常照常抛出。
   - **不受影响**：正常登录失败（监听器不抛异常时行为完全不变）。
   - **本次未做的部分**：`LoginSuccessEvent` 仍携带完整 token、发布策略仍为同步 —— 这两条属**公开 API 变更 / 新特性**（`getToken()` 是已发布 API，改成不可逆标识会让存量监听器拿不到 token），留待后续版本与事件机制一并重做。
+- **修复 `getToken()` 与 `login()` 的 token 前缀语义不一致**：
+  - **症状**：`login()` 返回**带 `Bearer ` 前缀**的值，而 `getToken()` 返回**去掉前缀**的裸值。用户按直觉把 `getToken()` 的返回值放回请求头，会直接 401 —— 两个 API 形态不一致，且 `AuthConsts.TOKEN_PREFIX` 的 javadoc 本就写明「token 在请求中与**登录返回值里**都以此前缀开头」，是 `getToken()` 违反了该约定。
+  - **修复**：`getToken()` 统一返回**带前缀**的完整值（与 `login()` 同形、可直接放回请求头）；新增 `getRawToken()` / `getRawToken(request)` 提供去前缀的裸值（内部鉴权链路继续用裸值，`getCredentialsByToken` 本就容忍两种形态，故生产鉴权路径行为不变）。
+  - **行为变更**：依赖 `getToken()` 旧行为的代码请改用 `getRawToken()`（已列入升级检查清单）。
+- **消除两处「静默配置错误」**（`1.5.0`）：
+  - **`cookie-same-site: NONE` + `cookie-secure: false`**：这是**非法组合** —— `SameSite=None` 的 Cookie 规范要求必须伴随 `Secure`，否则浏览器会**直接丢弃**该 Cookie，表现为「登录成功但下一个请求又未登录」（与 P1-5 是同一类症状）。现在装配期检测并打印 WARN（含两种修法）。**只告警、不擅自改写用户配置**：强开 Secure 会让纯 http 调试环境反而丢 Cookie，框架替用户猜这个会引入歧义。仅在 `enable-cookie=true` 时提示。
+  - **`token-secret` 过短**：HMAC-SHA256 的密钥短于摘要长度（32 字节）会削弱抗暴破强度，而此前只判非空（`token-secret: 123` 也接受）。现在短于 32 字节会打印 WARN（含实际字节数与 `openssl rand -base64 48` 建议）。**未采用强制最小长度** —— 那会让存量配置升级后直接启动失败，属破坏性变更。
 - **修复 `AuthProvider.refreshByCredentials(credentials, subject)` 续期"不生效"**：
   - **症状**：该方法只延长**存储层 TTL**，**从不更新 `subject.loginExpireTime`**。而内核的「绝对过期校验」判定的正是这个时间戳 —— 两套过期口径分叉后，存储里的会话明明还有 TTL，用户却已经 401，**表现为续期没生效**。旧逻辑靠"下一跳顺手续期"把这条缝盖住了，所以一直没暴露。
   - **实测比预期更严重**：在 `store-type: single`（默认值）下，`SingleSessionRepository` 的有效性判定同样读 `loginExpireTime`，时间戳停在过去时 `getSubject` **直接返回 `null`** —— 会话根本读不回来（`checkByCredentials` 也返回 false），而不仅仅是"读到了但被判过期"。
@@ -141,16 +148,49 @@
   - **行为变更**：原先漏掉的三种写法现在会生效。副作用是对 `@Ignore` 也一并生效（父类/接口上的 `@Ignore` 在重写/实现后不再被忽略）—— 因 `@Ignore` 是用户显式书写的框架自有注解，按"尊重用户意图"处理。
   - **说明**：`@RequiresPermissions` / `@RequiresRoles` / `@Ignore` 均**不是** `@Inherited`；但"父类标了注解、子类只继承不重写"这一场景**原本就不会漏**（反射拿到的 `Method` 其声明类即父类），不需要改动。
 
+### 🧹 清理与收尾
+
+- **删除 `SM3ConvertUtil`（560 行）**：该类仅 3 个方法（`intToBytes` / `byteToInt` / `longToBytes`）被 `SM3` 使用，**其余约 540 行是公开死代码**，且内含 `Math.pow` 做 hex→int（浮点精度）、`byteToString` 符号扩展、`hexStringToBytes("GG")` 静默产出 `0xFF`、`byteConvert32Bytes` 对非 32/33 字节输入越界等一批缺陷。现已把仍需的 3 个转换**内联进 `SM3`** 并整类删除 —— 删掉即修复，不必逐条治理那些死方法。
+  - 内联时顺带把实现**直接写成大端**（原先为「先按小端展开 + `back()` 整体逆序」的绕行写法），语义等价且少一次数组拷贝。
+  - **SM3 算法字节级不变**：GM/T 0004-2012 标准测试向量 `66c7f0f4…` 与全部 KAT 断言保持通过。
+- **删除 `BCrypt.main` 及其 5 处 `System.out.println`**：该方法会把硬编码的示例口令打印到 stdout / CI 日志。同时复核全项目生产代码，`public static void main` / `System.out` / `printStackTrace` 现均为 **0 处**。
+  - 与之配套，CHANGELOG 的 1.3.3 段补了一条**勘误** —— 该段此前声称已清理 `main()`/`System.out`，实际漏清了 `BCrypt.main`。保留原记录并加勘误，不做静默改写。
+- **删除 `HexUtil.hexToBytes` / `hexToByte`**：全项目无调用方（框架内没有「十六进制字符串 → 字节」的需求），保留无调用方的公开方法等于长期维护一份无人验证的代码。
+- **工具类补私有构造函数**：`CommonUtil` / `CookieUtil` / `JsonUtil` / `HexUtil`（`TokenSignUtil` 本就有）。
+
 ### 📖 文档修正
 
+- **新增 `AuthProvider.getRawToken()`，`getToken()` 改为返回带前缀值**（P2-7，见下方「缺陷修复」）：README 的 `getToken()` 章节同步说明两者区别，并提示旧行为请改用 `getRawToken()`。
+- **修正 README 中无法编译 / 与代码相反的多处示例**（一次性收掉 DOC-2/3/4/5/6/8/11/13/14/15）：
+  - `I18nUtils.getMessage(...)` —— **该类全项目不存在**，改为异常自带消息 `e.getMessage()`。
+  - `deleteTokenByLoginId(...)` → 真实方法名 **`deleteByLoginId`**。
+  - `AuthUtil.getLoginId()` 被描述为「未登录返回 null」—— 与代码**完全相反**（实际抛 `UnAuthorizedException`），已改正并去掉 null 判断写法；同时补上「`AuthUtil` 只适用于持有当前请求的线程」这一边界说明。
+  - `PermissionInfoInterfaceImpl` → 真实 SPI 名 **`AuthorizationInfoGet`**。
+  - JDK 徽章 `JDK 8+` → **`JDK 17+`**（pom 的 `source/target` 就是 17）。
+  - §2.5.1 教用户从 URL 参数传 token，但 `enable-url-token` 默认 `false`、照做必然 401 —— 已加显式警告。
+  - 补上 `t_auth_storage.sql` 的位置与导入说明、`login_subject` 为 `varchar(5000)` 的上限提示。
+  - 补齐配置项 `banner`（逐项核对 `AuthProperties` 全部 17 个字段后，它是唯一缺失项）。
+  - `README.en.md` 补齐边界说明、`@Ignore`、token 传递、异常翻译等章节；英文注释里「`AuthUtil` is a static facade」的过时描述已改正。
+  - 移除两处对**不存在的文档**的引用。
+
+- **明确框架边界：不做数据权限与角色继承**（定位决策，非代码变更）：
+  - **本框架只做「认证 + 鉴权判定」内核**：身份认证、会话生命周期、注解/URL 鉴权判定、异常翻译、安全默认值与配置校验。
+  - **明确不做**：数据范围（行级数据过滤）、角色继承、权限树、菜单/按钮码的数据模型、权限后台管理界面。**这些请在业务项目内实现。**
+  - **为什么**：「本人 / 本部门 / 本部门及以下 / 自定义」这类数据范围判定，取决于 `sys_user` / `sys_dept` / `sys_role_dept` 这类**业务表结构** —— 框架要声称支持它，就必须假设一套它并不拥有的数据模型。作为对照：**Spring Security** 的授权止于 `AuthorizationManager` / `GrantedAuthority`，数据过滤明确交给业务；**Shiro** 止于 `Realm` + `WildcardPermission`，角色继承需自行实现 —— **两者都不提供数据范围**。真正带数据范围的是若依（RuoYi）这类 Admin 脚手架，且它是在**业务项目内**实现的。
+  - **若强行在框架层做，代价会落在用户身上**：已知唯一可行形态是 `@DataScope(deptAlias=..., userAlias=...)` + ORM 拦截器拼 SQL，即把**表名/列名当字符串**传进拦截器（脆弱 + 注入面）、**绑死具体 ORM**（本框架目前零持久层依赖），且仍覆盖不了非 MyBatis 场景。
+  - **对已有用户的影响**：**无**。这是边界声明，不删除任何现有 API —— `AuthorizationInfoGet`（`Set<String>`）与 `@RequiresPermissions` / `@RequiresRoles` 的 SPI 契约均保持不变。
+  - **保留项**：「请求级权限缓存」**早已在框架内**（`SecurityContext` 懒加载，每请求每类数据最多查一次 SPI），不受本次边界调整影响。
 - **README §2.5.3 把 `SimpleHash` 从「密码哈希」降级为「摘要工具」**（原章节把 MD5/SHA-1 与 BCrypt 并列在"密码哈希"语境下推荐）：
   - 章节标题改为「**摘要算法与密码哈希**」，摘要工具在前、密码哈希在后，并在 `SimpleHash` 示例上方加了显式警告：**它是摘要工具、不是密码哈希算法、请勿用于存储用户口令**，理由逐条写明 —— MD5/SHA-1 已不适合任何安全用途；`iterations` 只是**裸摘要的重复计算链**，不是 PBKDF2/scrypt/Argon2 这类有内存硬度、抗 GPU 暴破的密钥派生函数；构造器允许不传盐（无每用户随机盐）；**没有任何校验 API**，调用方只能自己写 `String.equals`，会重新引入时序侧信道。同时把用户**指引到 `BCrypt`**，并在 BCrypt 段补上正面理由（自带随机盐、work factor 可调、`checkpw` 恒定时间比较）。
   - **顺带修复示例代码无法编译的错误**：该节此前的示例用的是 `new MD5Hash(...)` / `new Sha256Hash(...)` —— 这两个类**在项目中根本不存在**（真实类名是 `SimpleHash`），12 行示例全部无法编译。现已全部换成真实 API，并把 `new SM3Hash(...)` 的示例统一为 `new SimpleHash("SM3", ...)` 写法。
   - 改写后的所有示例已**逐行照抄进临时类、用 JDK 17 实际编译运行通过**后删除，确保文档示例可用。
   - **无代码改动**：`SimpleHash` 与 `SM3Hash` 本身均保留，本次只纠正定位与措辞。
+- **CHANGELOG 的 1.3.3 段补勘误**：见上方「清理与收尾」。
+
 
 ### 升级检查清单
 
+- [ ] 若代码依赖 `getToken()` 返回**不带前缀**的裸值：该行为自 `1.5.0` 起改变，**请改用 `getRawToken()`**（`getToken()` 现返回带 `Bearer ` 前缀的完整值，与 `login()` 同形）
 - [ ] 把 `tiny-security.jwt-secret` 改名为 `tiny-security.token-secret`（**务必配置固定值**，否则重启后会话全失效、多实例之间互不认可）
 - [ ] 删除配置文件中的 `tiny-security.jwt-subject` 与 `tiny-security.jwt-timeout`
 - [ ] 删除配置文件中的 `tiny-security.credentials-style`（已失效）
@@ -245,12 +285,13 @@
 ### 工程清理
 
 - 清理生产类残留 `main()`/`System.out`/`printStackTrace`（`BCrypt`/`SimpleHash`/`SM3Hash`/`SM3ConvertUtil`/banner 输出）；README 版本号同步至 1.3.3 并更新配置说明。
+  - **勘误（`1.5.0` 补记）**：本次**实际漏清了 `BCrypt.main`**（含 5 处 `System.out.println`，会把硬编码示例口令打到 stdout/CI 日志），该残留直到 `1.5.0` 才真正删除（见 §1.5.0 的 P3-1）。此处保留原记录并加勘误，不做静默改写。
 
 ---
 
 ## 1.3.2
 
-> 发布日期：2026-08-27 ｜ 升级路径：1.3.1 → 1.3.2 ｜ 完整分析见 `docs/project-analysis-2026-08.md`
+> 发布日期：2026-08-27 ｜ 升级路径：1.3.1 → 1.3.2
 
 ### 类型概览
 
