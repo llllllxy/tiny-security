@@ -90,8 +90,12 @@ class AuthAutoConfigurationTest {
                     // 用户自定义仓储存在时，默认仓储不创建，且 bean 不是默认的 Single 类型
                     assertThat(context).hasSingleBean(SessionRepository.class);
                     assertThat(context).doesNotHaveBean(SingleSessionRepository.class);
+                    // 关键：容器里那个 Bean 必须是**用户自定义的那个实例**，而不是框架默认实现。
+                    // （原写法 isInstanceOf(SessionRepository.class) 恒真 —— 从容器按该类型取出的
+                    //  对象当然满足该类型，等于什么都没断言。）
                     SessionRepository bean = context.getBean(SessionRepository.class);
-                    assertThat(bean).isInstanceOf(SessionRepository.class);
+                    SessionRepository userDefined = context.getBean("customSessionRepository", SessionRepository.class);
+                    assertThat(bean).isSameAs(userDefined);
                 });
     }
 
