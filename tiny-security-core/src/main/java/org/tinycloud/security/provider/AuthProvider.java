@@ -109,39 +109,103 @@ public class AuthProvider extends TinySecurityFacade {
         Integer timeout = properties.getTimeout();
         Assert.isTrue(timeout == null || timeout > 0,
                 "Invalid tiny-security.timeout: " + timeout + ". It must be a positive number of seconds.");
+        // 弱密钥告警（不阻止启动，避免破坏存量部署）
+        warnIfTokenSecretTooShort(properties.getTokenSecret());
+        // SameSite=None 必须配合 Secure，否则浏览器会直接丢弃 Cookie
+        warnIfCookieSameSiteNoneWithoutSecure();
     }
 
     /**
-     * 从指定请求中提取并解析 token（去除 Bearer 前缀）。
+     * token 签名密钥长度告警。
+     *
+     * <p>HMAC-SHA256 的密钥短于摘要长度（32 字节）会削弱抗暴力破解强度。这里**只告警不报错** ——
+     * 强制最小长度会让存量配置（如 {@code token-secret: 123}）升级后直接启动失败，属破坏性变更。
+     * 未配置时走随机密钥路径（{@link #resolveTokenSecret()}），随机串为 128 位，不受本告警影响。
+     */
+    private void warnIfTokenSecretTooShort(String configuredSecret) {
+        if (!StringUtils.hasText(configuredSecret)) {
+            return;
+        }
+        int length = configuredSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        if (length < 32) {
+            log.warn("tiny-security: tiny-security.token-secret is too short ({} bytes, recommended >= 32 bytes). "
+                            + "A short key weakens HMAC-SHA256 resistance to brute force. "
+                            + "Please use a long random secret, e.g. openssl rand -base64 48.",
+                    length);
+        }
+    }
+
+    /**
+     * 检测 {@code cookie-same-site: NONE} 与 {@code cookie-secure: false} 的非法组合。
+     *
+     * <p>{@code SameSite=None} 的 Cookie 规范要求必须伴随 {@code Secure}，否则浏览器会**直接丢弃**
+     * 该 Cookie —— 表现为「登录成功但下一个请求又是未登录」。这里只告警，不擅自改写用户的
+     * 配置值（框架替用户猜配置会引入歧义）。
+     */
+    private void warnIfCookieSameSiteNoneWithoutSecure() {
+        if (this.resolveEnableCookie()
+                && this.properties.getCookieSameSite() == CookieSameSite.NONE
+                && !this.resolveCookieSecure()) {
+            log.warn("tiny-security: tiny-security.cookie-same-site is NONE but tiny-security.cookie-secure is false. "
+                    + "Browsers reject SameSite=None cookies without the Secure attribute, so the login cookie will be dropped. "
+                    + "Please set tiny-security.cookie-secure=true (requires HTTPS), or use cookie-same-site=LAX.");
+        }
+    }
+
+    /**
+     * 从指定请求中提取 token（**带 {@code Bearer } 前缀**）。
+     *
+     * <p>返回值与 {@link #login()} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
+     * 需要不带前缀的裸值请用 {@link #getRawToken(HttpServletRequest)}。
+     *
+     * @param request HTTP 请求
+     * @return 带前缀的 token
+     */
+    public String getToken(HttpServletRequest request) {
+        String token = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
+        if (!StringUtils.hasText(token) || !token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            throw new UnAuthorizedException();
+        }
+        return token;
+    }
+
+    /**
+     * 从当前请求上下文提取 token（**带 {@code Bearer } 前缀**）。
+     *
+     * <p>返回值与 {@link #login()} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
+     * 需要不带前缀的裸值请用 {@link #getRawToken()}。
+     *
+     * @return 带前缀的 token
+     */
+    public String getToken() {
+        String token = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
+        if (!StringUtils.hasText(token) || !token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            throw new UnAuthorizedException();
+        }
+        return token;
+    }
+
+    /**
+     * 从指定请求中提取 token 并**去掉 {@code Bearer } 前缀**（裸凭证信封）。
+     *
+     * <p>内部鉴权链路使用该方法；对外请优先用 {@link #getToken(HttpServletRequest)}。
      *
      * @param request HTTP 请求
      * @return 去前缀后的 token
      */
-    public String getToken(HttpServletRequest request) {
-        String token = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
-        if (!StringUtils.hasText(token)) {
-            throw new UnAuthorizedException();
-        }
-        if (token.startsWith(AuthConsts.TOKEN_PREFIX)) {
-            return token.substring(AuthConsts.TOKEN_PREFIX.length());
-        }
-        throw new UnAuthorizedException();
+    public String getRawToken(HttpServletRequest request) {
+        return this.getToken(request).substring(AuthConsts.TOKEN_PREFIX.length());
     }
 
     /**
-     * 从当前请求上下文提取并解析 token（去除 Bearer 前缀）。
+     * 从当前请求上下文提取 token 并**去掉 {@code Bearer } 前缀**（裸凭证信封）。
+     *
+     * <p>内部鉴权链路使用该方法；对外请优先用 {@link #getToken()}。
      *
      * @return 去前缀后的 token
      */
-    public String getToken() {
-        String token = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
-        if (!StringUtils.hasText(token)) {
-            throw new UnAuthorizedException();
-        }
-        if (token.startsWith(AuthConsts.TOKEN_PREFIX)) {
-            return token.substring(AuthConsts.TOKEN_PREFIX.length());
-        }
-        throw new UnAuthorizedException();
+    public String getRawToken() {
+        return this.getToken().substring(AuthConsts.TOKEN_PREFIX.length());
     }
 
     /**

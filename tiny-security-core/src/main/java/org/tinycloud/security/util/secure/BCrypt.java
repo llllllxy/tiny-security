@@ -746,25 +746,4 @@ public class BCrypt {
             ret |= hashed_bytes[i] ^ try_bytes[i];
         return ret == 0;
     }
-
-
-    public static void main(String[] args) {
-        long start = System.currentTimeMillis();
-
-        // 原始密码
-        String rawPassword = "password123" + "f_%7l3&qu6p$;b5W5_{QoIO6l8)0";
-
-        // 对密码进行编码
-        String encodedPassword = BCrypt.hashpw(rawPassword, BCrypt.gensalt());
-
-        System.out.println("原始密码: " + rawPassword);
-        System.out.println("编码后的密码: " + encodedPassword);
-
-        // 验证密码
-        boolean isMatch = BCrypt.checkpw(rawPassword, encodedPassword);
-        System.out.println("密码验证结果: " + isMatch);
-
-
-        System.out.println("耗时: " + (System.currentTimeMillis() - start) + "毫秒");
-    }
 }
