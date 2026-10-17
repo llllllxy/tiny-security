@@ -29,12 +29,18 @@ class AuthProviderCookieTest {
     @Test
     void shouldLoginWithoutNpeOnNonWebRequestThread() {
         RequestContextHolder.resetRequestAttributes();
-        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), defaultProperties(), null);
+        // 必须显式开启 Cookie：否则 login 根本不会走到「写 Cookie」这一段，
+        // 本用例声称保护的非 Web 线程 NPE 回归就失去意义（空转断言）。
+        AuthProperties properties = defaultProperties();
+        properties.setEnableCookie(true);
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(), properties, null);
 
         String token = authProvider.login("user-1", null);
 
         assertNotNull(token);
         assertTrue(token.startsWith("Bearer "));
+        // 非 Web 线程上 CookieUtil 应静默跳过：既不能抛异常，也不能改写任何响应
+        assertNull(RequestContextHolder.getRequestAttributes());
     }
 
     /**
