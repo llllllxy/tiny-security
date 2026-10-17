@@ -105,11 +105,16 @@ mvn -B test -pl tiny-security-core -am -Dtest=RedisSessionRepositoryContractTest
 
 > **P2-7 是本批次唯一的破坏性变更**：若代码依赖 `getToken()` 返回裸值，请改用 `getRawToken()`。
 
+**测试补充（同批次）**：`deleteByToken`（此前 0 覆盖，+7 例）、`CookieUtil`（+9 例，锁定登出必须带 SameSite/Secure）、
+`TinySecurityHandlerExceptionResolver`（+7 例）、`SpringSecurityEventPublisher`（+2 例）；
+另修复两处「空转断言」—— 非 Web 线程 Cookie 用例原本没开 `enableCookie` 而覆盖不到目标代码、
+`isInstanceOf(SessionRepository.class)` 恒真，两处均已改为能证伪的断言（含反向验证）。
+
 ### 2.4 当前基线
 
 ```
-core 315 例（含 20 个按需跳过的 Redis 契约用例）+ starter 16 例
-生产类 57 个；测试源码 39 个（其中 33 个含 @Test，另 6 个是辅助类 / 契约子类）
+core 338 例（含 20 个按需跳过的 Redis 契约用例）+ starter 18 例 = 356
+生产类 57 个；core 行覆盖率 80.6% / starter 63.3%
 JDK 17 与 21 均 BUILD SUCCESS，JaCoCo 门槛（LINE 50%）通过
 ```
 
