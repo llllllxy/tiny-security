@@ -21,6 +21,7 @@ import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.CookieUtil;
+import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.TokenSignUtil;
 import org.tinycloud.security.web.WebRequestUtils;
 
@@ -42,6 +43,15 @@ import java.util.UUID;
  */
 public class AuthProvider extends TinySecurityFacade {
     private static final Logger log = LoggerFactory.getLogger(AuthProvider.class);
+
+    /**
+     * 会话主体序列化后的最大字符数。
+     *
+     * <p>对应 {@code t_auth_storage.login_subject} 的 {@code varchar(5000)}（字符数，非字节数）。
+     * 只有 jdbc 仓储受此限制，但校验统一放在登录入口做：否则用户要等到切到 jdbc 才发现超长，
+     * 而且体现为一条不直观的 SQL 截断/插入失败。
+     */
+    private static final int MAX_LOGIN_SUBJECT_LENGTH = 5000;
 
     /**
      * 会话仓储：token 只是凭证的签名信封，真正的登录主体与有效期存在这里
@@ -275,11 +285,33 @@ public class AuthProvider extends TinySecurityFacade {
         subject.setLoginTime(currentTime);
         subject.setLoginExpireTime(currentTime + timeout * 1000L);
 
+        // extraInfo 会被序列化进整个会话主体，与其它字段共享 login_subject 的长度上限。
+        // 检查放在 save 之前：让用户在登录时就看到明确原因，而不是等 jdbc 仓储插入时
+        // 得到一条不直观的 SQL 错误（或其它仓储静默存下超长内容、切库后才炸）
+        this.checkLoginSubjectLength(subject, extraInfo);
+
         boolean success = this.sessionRepository.save(subject, timeout, this.resolveMaxConcurrentLogins());
         if (!success) {
             throw new TinySecurityException("Failed to create auth. Please retry!");
         }
         return AuthConsts.TOKEN_PREFIX + TokenSignUtil.sign(this.tokenSecret, credentials);
+    }
+
+    /**
+     * 校验会话主体序列化后的长度不超过存储上限。
+     *
+     * @param subject   待保存的登录主体
+     * @param extraInfo 扩展信息（仅用于报错提示定位）
+     * @throws TinySecurityException 超长时抛出，消息中给出实际长度与上限
+     */
+    private void checkLoginSubjectLength(LoginSubject subject, Map<String, Object> extraInfo) {
+        int length = JsonUtil.writeValueAsString(subject).length();
+        if (length > MAX_LOGIN_SUBJECT_LENGTH) {
+            throw new TinySecurityException("The extraInfo is too large: the serialized login subject is "
+                    + length + " characters, which exceeds the limit of " + MAX_LOGIN_SUBJECT_LENGTH
+                    + " (t_auth_storage.login_subject is varchar(" + MAX_LOGIN_SUBJECT_LENGTH + ")). "
+                    + "Please reduce the size of extraInfo.");
+        }
     }
 
     /**

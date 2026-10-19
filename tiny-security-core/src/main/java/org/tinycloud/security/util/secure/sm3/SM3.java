@@ -6,12 +6,24 @@ package org.tinycloud.security.util.secure.sm3;
  * @version  2021-01-02-14:45
  **/
 public class SM3 {
-    public static final byte[] iv = { 0x73, (byte) 0x80, 0x16, 0x6f, 0x49, 0x14, (byte) 0xb2, (byte) 0xb9, 0x17, 0x24,
+    /**
+     * SM3 初始向量。
+     *
+     * <p>包内私有：{@code final} 只锁定引用，挡不住 {@code iv[0] = x}。若暴露为 public，
+     * 任何代码都能改写它，从而**全局污染 SM3 摘要结果且不会报错**（调用方使用的是
+     * {@link SM3Digest}，它每次都 {@code clone()} 一份副本再计算）。
+     */
+    static final byte[] iv = { 0x73, (byte) 0x80, 0x16, 0x6f, 0x49, 0x14, (byte) 0xb2, (byte) 0xb9, 0x17, 0x24,
             0x42, (byte) 0xd7, (byte) 0xda, (byte) 0x8a, 0x06, 0x00, (byte) 0xa9, 0x6f, 0x30, (byte) 0xbc, (byte) 0x16,
             0x31, 0x38, (byte) 0xaa, (byte) 0xe3, (byte) 0x8d, (byte) 0xee, 0x4d, (byte) 0xb0, (byte) 0xfb, 0x0e,
             0x4e };
 
-    public static int[] Tj = new int[64];
+    /**
+     * SM3 常量 Tj[0..63]：前 16 个为 0x79cc4519，其余为 0x7a879d8a。
+     *
+     * <p>包内私有，理由同 {@link #iv}：外露即可被任意改写并静默污染摘要结果。
+     */
+    static final int[] Tj = new int[64];
 
     static {
         for (int i = 0; i < 16; i++) {
