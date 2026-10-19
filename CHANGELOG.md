@@ -108,6 +108,14 @@
 - **消除两处「静默配置错误」**（`1.5.0`）：
   - **`cookie-same-site: NONE` + `cookie-secure: false`**：这是**非法组合** —— `SameSite=None` 的 Cookie 规范要求必须伴随 `Secure`，否则浏览器会**直接丢弃**该 Cookie，表现为「登录成功但下一个请求又未登录」（与 P1-5 是同一类症状）。现在装配期检测并打印 WARN（含两种修法）。**只告警、不擅自改写用户配置**：强开 Secure 会让纯 http 调试环境反而丢 Cookie，框架替用户猜这个会引入歧义。仅在 `enable-cookie=true` 时提示。
   - **`token-secret` 过短**：HMAC-SHA256 的密钥短于摘要长度（32 字节）会削弱抗暴破强度，而此前只判非空（`token-secret: 123` 也接受）。现在短于 32 字节会打印 WARN（含实际字节数与 `openssl rand -base64 48` 建议）。**未采用强制最小长度** —— 那会让存量配置升级后直接启动失败，属破坏性变更。
+- **修复 `VersionUtil` 在 `core.properties` 缺失时抛 NPE 导致启动失败**：
+  - **症状**：原实现直接 `properties.load(getResourceAsStream("core.properties"))`。资源不存在时 `getResourceAsStream` 返回 `null`，而 `Properties.load(null)` 抛的是 **`NullPointerException`**，不是 `IOException`，因此不会被原有的 `catch (IOException)` 接住 —— 异常一路冒到调用方，而调用方正是**启动流程**（打印 banner 与 "started successfully" 日志）。等于一个仅用于展示的资源文件没打进包，就能让框架起不来。
+  - **修复**：`stream == null` 时直接返回空串。版本号只用于日志展示，缺失应降级而非失败。
+- **`extraInfo` 超长现在会在登录时被明确拒绝（而不是等切换仓储后才失败）**：
+  - **症状**：`extraInfo` 会被序列化进整个 `LoginSubject`，而 jdbc 仓储把它存进 `t_auth_storage.login_subject varchar(5000)`。此前没有任何长度校验 —— 在 `single` / `caffeine` / `redis` 下会**静默成功**，直到切到 jdbc 才失败，且失败信息是一条不直观的 SQL 错误。
+  - **修复**：登录时先做一次序列化长度检查，超过 5000 字符直接抛 `TinySecurityException`，消息中给出**实际长度、上限值与被限制的字段名**。校验放在 `save` 之前，失败的登录不会留下任何会话。
+  - **注意**：该限制对应 jdbc 的表结构；其它仓储本身不限制长度，这里统一校验是为了让问题尽早暴露、且行为可预测。
+- **收紧 `SM3.iv` / `SM3.Tj` 的可见性**：二者原为 `public static` 数组 —— `final` 只锁引用，挡不住 `iv[0] = x`，任何代码都能改写它们，之后**所有 SM3 摘要都会静默算错**且无任何异常或日志。现改为包内私有（类内只有 `SM3Digest` 使用，且其本就 `clone()` 副本后再计算）。
 - **修复 `AuthProvider.refreshByCredentials(credentials, subject)` 续期"不生效"**：
   - **症状**：该方法只延长**存储层 TTL**，**从不更新 `subject.loginExpireTime`**。而内核的「绝对过期校验」判定的正是这个时间戳 —— 两套过期口径分叉后，存储里的会话明明还有 TTL，用户却已经 401，**表现为续期没生效**。旧逻辑靠"下一跳顺手续期"把这条缝盖住了，所以一直没暴露。
   - **实测比预期更严重**：在 `store-type: single`（默认值）下，`SingleSessionRepository` 的有效性判定同样读 `loginExpireTime`，时间戳停在过去时 `getSubject` **直接返回 `null`** —— 会话根本读不回来（`checkByCredentials` 也返回 false），而不仅仅是"读到了但被判过期"。
