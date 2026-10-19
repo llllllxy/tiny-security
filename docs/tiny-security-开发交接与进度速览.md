@@ -113,7 +113,7 @@ mvn -B test -pl tiny-security-core -am -Dtest=RedisSessionRepositoryContractTest
 ### 2.4 当前基线
 
 ```
-core 338 例（含 20 个按需跳过的 Redis 契约用例）+ starter 18 例 = 356
+core 348 例（含 20 个按需跳过的 Redis 契约用例）+ starter 18 例 = 366
 生产类 57 个；core 行覆盖率 80.6% / starter 63.3%
 JDK 17 与 21 均 BUILD SUCCESS，JaCoCo 门槛（LINE 50%）通过
 ```
