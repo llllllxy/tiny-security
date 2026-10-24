@@ -17,7 +17,7 @@ public interface SessionRepository {
      *
      * @param subject              登录主体
      * @param timeoutSeconds       会话超时时间（秒）
-     * @param maxConcurrentLogins  最大并发登录数（<=0 表示不限制）
+     * @param maxConcurrentLogins  最大并发登录数（{@code <=0} 表示不限制）
      * @return 是否创建成功
      */
     boolean save(LoginSubject subject, int timeoutSeconds, int maxConcurrentLogins);
@@ -94,5 +94,63 @@ public interface SessionRepository {
     default List<String> getCredentialsByLoginId(Object loginId) {
         throw new UnsupportedOperationException(
                 "getCredentialsByLoginId is not supported by " + this.getClass().getName());
+    }
+
+    /**
+     * 获取全部在线账号ID（去重，一个账号多端登录只算一个）。
+     *
+     * <p>典型用途：运维后台的「在线用户」列表、全量在线人数统计。与
+     * {@link #getCredentialsByLoginId(Object)}（单账号的全部会话）互补 —— 后者回答
+     * "某个人在哪些设备上在线"，本方法回答"现在一共有谁在线"。
+     *
+     * <p><b>返回元素的实际类型是 {@link String}</b>：jdbc/redis 存的就是 varchar 列 / Redis key 后缀，
+     * 内存版（single / caffeine）也统一 {@code String.valueOf(loginId)} 后返回，
+     * 避免同一份代码切换 {@code store-type} 后拿到的 loginId 类型漂移。
+     * 调用方需要数值时请自行转换（如 {@code Long.valueOf(String.valueOf(loginId))}）。
+     *
+     * <p><b>实现成本与存储强相关（重要）</b>：本方法是"全局维度"的查询，而四种仓储的全局索引能力差异很大：
+     * <ul>
+     *     <li>{@code jdbc}：一条 {@code SELECT DISTINCT login_id ... WHERE credentials_expire_time > ?}，
+     *         可走索引，成本最低；</li>
+     *     <li>{@code single} / {@code caffeine}：遍历本地内存 Map 的 keySet，O(账号数) 纯内存操作；
+     *         <b>多实例部署下只能看到本实例</b>；</li>
+     *     <li>{@code redis}：没有任何全局结构，只能 {@code SCAN} 在线列表 key 前缀
+     *         （{@code tiny:security:online:*}）。这不是 {@code KEYS}（会阻塞 Redis），
+     *         但仍是 <b>O(全库 key 数)</b> 的遍历 —— 详见 {@code RedisSessionRepository} 的实现注释。</li>
+     * </ul>
+     * 因此本方法<b>不适合高频调用</b>（如每次请求都调、或放进轮询接口）。
+     *
+     * <p><b>默认实现抛 {@link UnsupportedOperationException}</b>：内置四种仓储均已实现；自定义仓储若未重写，
+     * 说明该存储不支持全局查询，调用时明确报错而非静默返回空列表（与
+     * {@link #getCredentialsByLoginId(Object)} 一致的策略，且同样用 default 保持编译兼容）。
+     *
+     * @return 当前存在有效会话的账号ID列表（去重）；无在线账号时返回空列表（<b>不返回 null</b>）
+     * @throws UnsupportedOperationException 仓储未实现该方法时抛出
+     */
+    default List<Object> getOnlineLoginIds() {
+        throw new UnsupportedOperationException(
+                "getOnlineLoginIds is not supported by " + this.getClass().getName());
+    }
+
+    /**
+     * 统计在线账号数（去重，与 {@link #countValidOnlineSessions(Object)} 的"会话数"是两个口径）。
+     *
+     * <p>一个账号在 3 台设备登录：本方法返回 {@code 1}（在线"人"数），而三个账号各自的
+     * {@code countValidOnlineSessions} 之和为 {@code 3}（在线"会话"数）。
+     * 报表里"当前在线人数"要的是前者，"当前活跃会话数"要的是后者，请勿混用。
+     *
+     * <p><b>默认实现为 {@code getOnlineLoginIds().size()}</b>：正确但要把全量账号拉回来再计数。
+     * 内置仓储中 jdbc 已覆写为 {@code COUNT(DISTINCT login_id)} 下推到数据库执行，
+     * 其余三个仓储直接沿用默认实现（它们的 {@link #getOnlineLoginIds()} 本就是内存/遍历操作，
+     * 没有更省的下推方式）。自定义仓储若能用一条命令完成计数，建议覆写本方法。
+     *
+     * <p>性能注意事项与 {@link #getOnlineLoginIds()} 完全相同（同样是全局查询），
+     * 且默认实现会拉取全量账号列表，开销不低于 {@link #getOnlineLoginIds()}。
+     *
+     * @return 在线账号数；无人在线时返回 0
+     * @throws UnsupportedOperationException 仓储未实现 {@link #getOnlineLoginIds()} 时抛出
+     */
+    default int countOnlineUsers() {
+        return this.getOnlineLoginIds().size();
     }
 }

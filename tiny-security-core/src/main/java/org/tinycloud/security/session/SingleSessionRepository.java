@@ -10,8 +10,10 @@ import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.session.timedcache.LocalTimeCache;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -232,6 +234,38 @@ public class SingleSessionRepository implements SessionRepository, DisposableBea
             }
             return new ArrayList<>(credentialsList);
         }
+    }
+
+    /**
+     * 获取全部在线账号ID（去重）。
+     *
+     * <p>本仓储把"账号 → 凭证列表"的索引整个放在内存 Map 里，因此全局查询就是遍历它的 keySet ——
+     * 纯内存操作，无需像 redis 仓储那样 SCAN key 空间。
+     *
+     * <p>逐个用 {@link #countValidOnlineSessions(Object)} 回查，而不是直接返回 keySet：
+     * 索引里的凭证可能因缓存 TTL 到期或 {@code loginExpireTime} 过期而失效（内存索引不会自动清理，
+     * 清理靠"该账号下次被访问时"惰性触发），直接返回会把已掉线的账号算作在线。
+     * 这次回查顺带完成惰性清理。
+     *
+     * <p><b>多实例部署只能看到本实例</b>：本仓储是单机内存存储（{@code store-type=single}），
+     * 每个 JVM 持有自己的一份会话。这里的"全量"指的是<b>当前这个实例</b>的全部在线账号，
+     * 不是整个集群的。需要全局视图请用 {@code redis} 或 {@code jdbc} 存储。
+     *
+     * <p>实现细节：遍历的是 keySet 的<b>副本</b>——{@code countValidOnlineSessions} 在账号的
+     * 凭证全部失效时会 {@code loginIdToCredentialsMap.remove(...)}，直接迭代 keySet 会触发
+     * {@code ConcurrentModificationException}。
+     *
+     * @return 存在有效会话的账号ID列表（去重，元素为 String）；无在线账号时返回空列表
+     */
+    @Override
+    public List<Object> getOnlineLoginIds() {
+        Set<String> loginIds = new LinkedHashSet<>();
+        for (String loginId : new ArrayList<>(this.loginIdToCredentialsMap.keySet())) {
+            if (loginId != null && this.countValidOnlineSessions(loginId) > 0) {
+                loginIds.add(loginId);
+            }
+        }
+        return new ArrayList<>(loginIds);
     }
 
     /**

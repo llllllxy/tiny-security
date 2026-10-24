@@ -273,7 +273,68 @@ authProvider.deleteByCredentials(credentialsList.get(0));
 > repositories (single / caffeine / redis / jdbc) support it; a custom `SessionRepository`
 > that does not override it throws `UnsupportedOperationException`.
 
-### 2.2.6 Skip authorization with `@Ignore`
+### 2.2.6 Query all online users
+
+`getCredentialsByLoginId` answers "which devices is *this* account online on?".
+The methods below answer "**who** is online right now?".
+
+```java
+@Autowired
+private AuthProvider authProvider;
+
+// 1. Online account ids (deduplicated; multi-device login counts once). Elements are String.
+List<Object> loginIds = authProvider.getOnlineLoginIds();
+
+// 2. Number of online accounts (people, not sessions)
+int onlineUserCount = authProvider.countOnlineUsers();
+
+// 3. Session details (one entry per session; multi-device login yields multiple entries)
+List<OnlineSession> sessions = authProvider.getOnlineSessions();
+
+// 4. Kick one specific session; other devices of the same account stay logged in
+authProvider.deleteBySessionId(session.getLoginId(), session.getSessionId());
+```
+
+**`OnlineSession` deliberately has no `credentials` field.** A credential *is* the signed
+bearer token — returning it in a list response would hand over session takeover.
+Instead each entry carries a `sessionId`: the **SHA-256 digest** of the credential.
+It cannot be reversed into the credential (which is a 122-bit random UUID), but it is
+enough for the backend to resolve the real credential and revoke it.
+
+> ⚠️ `sessionId` is a digest, **not** an authentication token — anyone holding it can still call
+> the kick-out API. Protect the kick-out endpoint the same way you protect the list endpoint.
+
+**Performance (important).** These are *global* queries, and the cost depends heavily on `store-type`:
+
+| store-type | Implementation | Cost |
+|---|---|---|
+| `jdbc` | one `SELECT DISTINCT login_id ... WHERE credentials_expire_time > ?` | lowest; index-friendly |
+| `single` / `caffeine` | scans the in-memory index | O(accounts), no I/O |
+| `redis` | `SCAN`s the online-list key prefix | **highest**, see below |
+
+- `redis` uses **`SCAN`, not `KEYS`**: `KEYS` walks the whole keyspace in one shot and **blocks the
+  single-threaded Redis** (sa-token hit exactly this bug and only switched to `SCAN` in v1.46.0).
+  `SCAN` is cursor-based and never holds Redis for long — but it is still **O(total keys)**, plus one
+  validity re-check per account. For a few thousand online accounts expect roughly
+  **1–3 seconds** on a LAN Redis.
+- For reference, sa-token publishes these numbers for its equivalent API (`StpUtil.searchSessionId`):
+  **1M sessions, take 10 → 0.255s standalone / 3.322s on Redis.** Same order of magnitude.
+- `getOnlineSessions()` is **more expensive** than `getOnlineLoginIds()`: after listing accounts it
+  reads every session body one by one. Use `countOnlineUsers()` / `getOnlineLoginIds()` when you only
+  need the count or the id list.
+
+> ⚠️ **Do not call these on hot paths.** They are meant for on-demand admin queries. Traversal-based
+> statistics inherently lag behind reality — for second-accurate presence, push updates over WebSocket.
+
+Other notes:
+
+- With `single` / `caffeine` in a **multi-instance deployment, only the local instance's sessions are
+  returned**. Use `redis` or `jdbc` for a cluster-wide view.
+- A custom `SessionRepository` that does not override these `default` methods throws
+  `UnsupportedOperationException` — "unsupported" is reported loudly rather than silently
+  returning an empty list.
+
+### 2.2.7 Skip authorization with `@Ignore`
 
 Annotate a controller method (or class) with `@Ignore` to bypass annotation-based authorization:
 
@@ -288,7 +349,7 @@ public Result<?> health() {
 > `@Ignore` is honored on parent classes and interfaces as well (1.5.0+): if a superclass/interface method
 > carries the annotation, the overriding/implementing method inherits the behavior.
 
-### 2.2.7 Passing the token from the front end
+### 2.2.8 Passing the token from the front end
 
 1. **Via header (recommended)**
 
@@ -307,7 +368,7 @@ $.ajax({
 > leak into access logs, browser history and the `Referer` header. To use it you must explicitly set
 > `enable-url-token: true` (still **not recommended**).
 
-### 2.2.8 Exception translation
+### 2.2.9 Exception translation
 
 The framework ships an exception resolver that converts framework exceptions into JSON responses.
 Configure it via:

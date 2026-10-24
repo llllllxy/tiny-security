@@ -387,6 +387,76 @@ authProvider.deleteByCredentials(credentialsList.get(0));
 > 该方法依赖仓储的「账号 → 凭证」反向索引，内置四种仓储（single / caffeine / redis / jdbc）均已支持；
 > 自定义 `SessionRepository` 未实现该方法时，调用会抛 `UnsupportedOperationException`。
 
+### 2.2.9 查询全量在线用户
+
+「谁现在在线」是全局维度的查询。上一节的 `getCredentialsByLoginId` 回答的是"某个人在哪些设备上在线"，
+本节的方法回答的是"现在一共有谁在线"。
+
+```java
+@Autowired
+private AuthProvider authProvider;
+
+// 1、在线账号ID列表（去重，一个账号多端登录只算一个）；元素统一为 String
+List<Object> loginIds = authProvider.getOnlineLoginIds();
+
+// 2、在线账号数（去重后的「人」数，不是会话数）
+int onlineUserCount = authProvider.countOnlineUsers();
+
+// 3、在线会话明细（每一份会话一条，同一账号多端登录会有多条）
+List<OnlineSession> sessions = authProvider.getOnlineSessions();
+for (OnlineSession session : sessions) {
+    System.out.println(session.getLoginId());          // 账号ID
+    System.out.println(session.getLoginTime());        // 登录时间
+    System.out.println(session.getSessionId());        // 会话标识（用于踢人）
+    System.out.println(session.getExtraInfo());        // 登录时存入的扩展信息（IP/设备等）
+}
+
+// 4、按会话标识踢出指定会话（定向下线，同账号其它设备不受影响）
+authProvider.deleteBySessionId(session.getLoginId(), session.getSessionId());
+```
+
+**关于 `sessionId`：列表接口不返回凭证，只返回它的 SHA-256 摘要。**
+
+凭证就是 bearer token 的签名原文，等同于用户身份凭据——一旦出现在列表接口的响应体里，
+拿到响应的人就能直接接管会话。因此 `OnlineSession` **刻意不含 `credentials` 字段**，
+改为提供 `sessionId`（凭证摘要）用于定位会话：它不可逆推凭证（凭证是 122 bit 随机 UUID），
+但足以让后端反查出真凭证并踢出。业务代码全程不需要接触原始凭证。
+
+> ⚠️ `sessionId` 是摘要，**不是身份凭证，也不做鉴权**。拿到 `sessionId` 的人同样可以调用踢人接口，
+> 因此踢人接口仍必须与列表接口做同等的权限校验。
+
+**分页**：框架不内置分页（分页模型是业务概念），返回的是全量结果。在线量较大时请在业务侧自行分页或缓存。
+
+#### 性能说明（重要）
+
+这四个方法都是**全局查询**，开销与 `store-type` 强相关：
+
+| store-type | 实现 | 开销 |
+|---|---|---|
+| `jdbc` | 一条 `SELECT DISTINCT login_id ... WHERE credentials_expire_time > ?` | 最低，可走索引；`countOnlineUsers` 已下推为 `COUNT(DISTINCT login_id)` |
+| `single` / `caffeine` | 遍历本地内存索引 | O(账号数) 纯内存操作，无 IO |
+| `redis` | `SCAN` 在线列表 key 前缀 | **最贵**，见下文 |
+
+- **`redis` 用 `SCAN` 而不是 `KEYS`**：`KEYS` 会一次性遍历整个 key 空间，在 key 数量多时**阻塞 Redis 单线程**
+  （sa-token 的同类 API 早期就踩过这个坑，其 v1.46.0 才改为 `SCAN`）。`SCAN` 是游标式分批遍历，不会长时间占住 Redis。
+  但它仍是 **O(全库 key 数)** 的遍历，且每个账号还要回查一次有效会话。
+  **按"几千在线账号、人均 1~2 个会话"估算，大致是万级 Redis 往返（局域网约 1~3 秒）。**
+- **`getOnlineSessions()` 比 `getOnlineLoginIds()` 更贵**：拿到名单后还要对每份会话各读一次会话主体。
+  只需要人数或名单时，请用 `countOnlineUsers()` / `getOnlineLoginIds()`。
+
+> ⚠️ **请勿高频调用**。这些方法适合运维后台按需查询，**不要放进每次请求都要走的链路，也不要做成高频轮询接口**。
+> 需要精确到秒的实时在线状态，请用 WebSocket 推送——遍历式统计天然滞后于真实状态
+> （扫描与读取之间存在时间差，期间登录/登出/过期的会话可能出现在结果里或被漏掉）。
+
+**其它注意点：**
+
+- **`single` / `caffeine` 多实例部署下只返回本实例的数据**（本地内存存储，每个 JVM 持有自己的一份会话）。
+  需要全局视图请用 `redis` 或 `jdbc`。
+- **自定义 `SessionRepository` 未实现这些方法时，调用会抛 `UnsupportedOperationException`**
+  （接口上是 `default` 方法，这样设计是为了不破坏升级前已有的自定义实现，同时让"不支持"被明确报错而非静默返回空列表）。
+- jdbc 存储在在线账号量较大时，建议在 `(credentials_expire_time)` 或 `(login_id, credentials_expire_time)` 上建索引；
+  过期行由清理线程按 24 小时周期删除，在此之前它们留在表里。
+
 ---
 
 
@@ -648,6 +718,20 @@ public class MongoSessionRepository implements SessionRepository {
     @Override
     public List<String> getCredentialsByLoginId(Object loginId) {
         return Collections.emptyList();
+    }
+
+    // 可选实现：全量在线账号查询（「在线用户列表」场景需要，见 2.2.9）
+    // 两个都是 default 方法，不实现时调用会抛 UnsupportedOperationException；
+    // 只实现 getOnlineLoginIds 即可，countOnlineUsers 默认按它的 size() 计算
+    @Override
+    public List<Object> getOnlineLoginIds() {
+        return Collections.emptyList();
+    }
+
+    // 存储层若能一条命令完成计数（如 SQL 的 COUNT DISTINCT），建议覆写本方法
+    @Override
+    public int countOnlineUsers() {
+        return 0;
     }
 }
 ```

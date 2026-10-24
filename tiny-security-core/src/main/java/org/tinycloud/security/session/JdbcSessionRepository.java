@@ -220,6 +220,55 @@ public class JdbcSessionRepository implements SessionRepository, DisposableBean 
     }
 
     /**
+     * 获取全部在线账号ID（去重）。
+     *
+     * <p><b>为什么 jdbc 是四种仓储里最轻松的一个</b>：会话本身就有 {@code login_id} 列与
+     * {@code credentials_expire_time} 列，"谁在线"直接是表上的一次查询，不需要任何额外索引结构
+     * —— 而 redis 仓储为此只能 SCAN 整个 key 空间。
+     *
+     * <p>用 {@code DISTINCT} 去掉多端登录产生的重复行（一个账号 3 个会话只返回 1 个账号）。
+     *
+     * <p><b>索引建议</b>：在线账号量较大时，建议在 {@code (credentials_expire_time)} 或
+     * {@code (login_id, credentials_expire_time)} 上建索引，避免每次查询全表扫描
+     * —— 过期的历史会话行由清理线程（见 {@link #clean()}）按 24 小时周期删除，
+     * 在此之前它们是留在表里的。
+     *
+     * @return 存在有效会话的账号ID列表（去重，元素为 String）；无在线账号或查询失败时返回空列表
+     */
+    @Override
+    public List<Object> getOnlineLoginIds() {
+        String sql = "SELECT DISTINCT login_id FROM " + tableName + " WHERE credentials_expire_time > ?";
+        try {
+            List<String> loginIdList = jdbcTemplate.queryForList(sql, String.class, System.currentTimeMillis());
+            return loginIdList == null ? new ArrayList<>() : new ArrayList<>(loginIdList);
+        } catch (Exception e) {
+            log.error("JdbcSessionRepository getOnlineLoginIds failed", e);
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 统计在线账号数（去重）。
+     *
+     * <p>覆写默认实现（{@code getOnlineLoginIds().size()}）：把 {@code COUNT(DISTINCT login_id)}
+     * 下推到数据库执行，<b>不必把全量账号列表拉回应用</b>——在线账号多时省掉一次大结果集传输与
+     * 一次全量去重，也让"只看人数不看名单"的场景（如首页显示在线人数）成本可控。
+     *
+     * @return 在线账号数；无人在线或查询失败时返回 0
+     */
+    @Override
+    public int countOnlineUsers() {
+        String sql = "SELECT COUNT(DISTINCT login_id) FROM " + tableName + " WHERE credentials_expire_time > ?";
+        try {
+            Long count = jdbcTemplate.queryForObject(sql, Long.class, System.currentTimeMillis());
+            return count == null ? 0 : count.intValue();
+        } catch (Exception e) {
+            log.error("JdbcSessionRepository countOnlineUsers failed", e);
+            return 0;
+        }
+    }
+
+    /**
      * 统一将登录ID转为字符串再绑定到 login_id（varchar）列。
      * loginId 允许是 Number 或 String，若按 Number 原样绑定会触发数据库隐式转换：
      * MySQL 上导致 login_id 索引失效，严格类型数据库（PostgreSQL 等）直接报错被吞掉后

@@ -18,13 +18,19 @@ import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.interfaces.AuthorizationInfoGet;
+import org.tinycloud.security.session.OnlineSession;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.CookieUtil;
 import org.tinycloud.security.util.JsonUtil;
 import org.tinycloud.security.util.TokenSignUtil;
+import org.tinycloud.security.util.secure.HexUtil;
 import org.tinycloud.security.web.WebRequestUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -165,7 +171,7 @@ public class AuthProvider extends TinySecurityFacade {
     /**
      * 从指定请求中提取 token（**带 {@code Bearer } 前缀**）。
      *
-     * <p>返回值与 {@link #login()} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
+     * <p>返回值与 {@link #login(Object)} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
      * 需要不带前缀的裸值请用 {@link #getRawToken(HttpServletRequest)}。
      *
      * @param request HTTP 请求
@@ -182,7 +188,7 @@ public class AuthProvider extends TinySecurityFacade {
     /**
      * 从当前请求上下文提取 token（**带 {@code Bearer } 前缀**）。
      *
-     * <p>返回值与 {@link #login()} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
+     * <p>返回值与 {@link #login(Object)} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
      * 需要不带前缀的裸值请用 {@link #getRawToken()}。
      *
      * @return 带前缀的 token
@@ -414,6 +420,178 @@ public class AuthProvider extends TinySecurityFacade {
      */
     public List<String> getCredentialsByLoginId(Object loginId) {
         return this.sessionRepository.getCredentialsByLoginId(loginId);
+    }
+
+    /**
+     * 获取全部在线账号ID（去重，一个账号多端登录只算一个）。
+     *
+     * <p>与 {@link #getCredentialsByLoginId(Object)} 互补：后者回答"某个人在哪些设备上在线"，
+     * 本方法回答"现在一共有谁在线"。
+     *
+     * <p><b>返回元素实际类型是 {@link String}</b>（四种仓储统一按字符串返回，避免切 store-type 后类型漂移）。
+     *
+     * <p><b>性能：这是全局查询，请勿高频调用。</b>开销与存储强相关：
+     * <ul>
+     *     <li>{@code jdbc}：一条 {@code SELECT DISTINCT login_id}，可走索引，成本最低；</li>
+     *     <li>{@code single} / {@code caffeine}：遍历本地内存索引，纯内存操作；
+     *         <b>多实例部署下只返回本实例的在线账号</b>；</li>
+     *     <li>{@code redis}：没有全局索引，只能 {@code SCAN} 在线列表 key 前缀（不是 {@code KEYS}，
+     *         不会阻塞 Redis，但仍是 O(全库 key 数) 的遍历）。几千在线账号量级约 1~3 秒。</li>
+     * </ul>
+     * 参照 sa-token 的同类 API（{@code StpUtil.searchSessionId}）：其官方给出的参考数据是
+     * "百万会话取 10 条，Redis 模式 3.322 秒"，属同一量级。因此本方法适合运维后台按需查询，
+     * <b>不要放进每次请求都要走的链路，也不要做成高频轮询接口</b>。
+     *
+     * @return 存在有效会话的账号ID列表（去重）；无在线账号时返回空列表
+     * @throws UnsupportedOperationException 当前会话仓储不支持全局查询时抛出（自定义仓储未实现时）
+     */
+    public List<Object> getOnlineLoginIds() {
+        return this.sessionRepository.getOnlineLoginIds();
+    }
+
+    /**
+     * 统计在线账号数（去重）。
+     *
+     * <p><b>注意与"会话数"是两个口径</b>：一个账号在 3 台设备登录，本方法返回 {@code 1}（在线"人"数），
+     * 而 {@code getCredentialsByLoginId(loginId).size()} 为 {@code 3}（在线"会话"数）。
+     * "当前在线人数"用本方法，"当前活跃会话数"用后者，报表上请勿混用。
+     *
+     * <p>性能注意事项与 {@link #getOnlineLoginIds()} 相同（jdbc 仓储已下推为
+     * {@code COUNT(DISTINCT login_id)}，其余仓储等价于拉取全量名单后计数）。
+     *
+     * @return 在线账号数；无人在线时返回 0
+     * @throws UnsupportedOperationException 当前会话仓储不支持全局查询时抛出
+     */
+    public int countOnlineUsers() {
+        return this.sessionRepository.countOnlineUsers();
+    }
+
+    /**
+     * 获取全部在线会话明细（<b>不含凭证</b>）。
+     *
+     * <p>返回的是 {@link OnlineSession} 视图而不是 {@link LoginSubject}：
+     * {@code LoginSubject} 带着 {@code credentials}（即 bearer token 的签名原文），
+     * 一旦随列表接口序列化出去就是批量凭证泄露。视图里给的是 {@code sessionId}
+     * （凭证的 SHA-256 摘要），够用于定位会话、无法反推凭证。
+     *
+     * <p><b>性能：比 {@link #getOnlineLoginIds()} 更贵。</b>在拿到账号名单之后，还要对每个账号的
+     * 每份会话各读一次会话主体 —— redis 仓储下是"每账号一次 LRANGE + 每会话一次 GET"。
+     * 几千会话量级是万级 Redis 往返。若只需要人数或名单，请用
+     * {@link #countOnlineUsers()} / {@link #getOnlineLoginIds()}。
+     *
+     * <p>并发下结果可能与真实状态有偏差：扫描与读取之间存在时间差，期间登录/登出/过期的会话
+     * 可能出现在结果里或被漏掉。这是遍历式查询的固有特性，与 sa-token 文档对同类 API 的说明一致
+     * （"基于活跃 Token 的统计会比实际情况略有延迟"）。需要精确到秒的实时在线状态请用 WebSocket 推送。
+     *
+     * @return 在线会话列表（每个会话一个条目，同一账号多端登录会有多条）；无人在线时返回空列表
+     * @throws UnsupportedOperationException 当前会话仓储不支持全局查询时抛出
+     */
+    public List<OnlineSession> getOnlineSessions() {
+        List<OnlineSession> sessions = new ArrayList<>();
+        for (Object loginId : this.getOnlineLoginIds()) {
+            List<String> credentialsList = this.getCredentialsByLoginId(loginId);
+            if (credentialsList == null) {
+                continue;
+            }
+            for (String credentials : credentialsList) {
+                LoginSubject subject = this.getSubject(credentials);
+                // 扫描与读取之间会话可能已过期/被登出，属正常竞态，跳过即可
+                if (subject == null) {
+                    continue;
+                }
+                sessions.add(this.toOnlineSession(subject, credentials));
+            }
+        }
+        return sessions;
+    }
+
+    /**
+     * 按会话标识踢出指定会话（定向下线）。
+     *
+     * <p>用于「在线用户列表 → 强制下线某台设备」：列表给出 {@code loginId} 与 {@code sessionId}，
+     * 这里据此反查到真实凭证并删除，业务代码<b>全程不需要接触原始凭证</b>。
+     *
+     * <p>与 {@link #deleteByLoginId(Object)}（踢掉账号的全部会话）的区别：本方法只踢掉
+     * 匹配的那一份会话，同账号的其它设备不受影响。
+     *
+     * <p><b>"不允许踢掉自己"这类规则不在这里做</b>：那是业务规则，不同系统诉求相反
+     * （有的允许"踢掉我的其它设备"、有的禁止），框架只提供能力。业务侧可先用
+     * {@link #getSessionId()} 取出当前会话标识自行比对。
+     *
+     * @param loginId   账号ID（缩小反查范围，避免遍历全部账号）
+     * @param sessionId 会话标识，取自 {@link OnlineSession#getSessionId()}
+     * @return true-已删除；false-未找到匹配的会话（可能已过期/已登出）
+     * @throws org.tinycloud.security.exception.TinySecurityException 当前会话仓储不支持按账号反查凭证时
+     */
+    public boolean deleteBySessionId(Object loginId, String sessionId) {
+        Assert.notNull(loginId, "The loginId cannot be null!");
+        Assert.hasText(sessionId, "The sessionId cannot be empty!");
+        List<String> credentialsList = this.getCredentialsByLoginId(loginId);
+        if (credentialsList == null) {
+            return false;
+        }
+        for (String credentials : credentialsList) {
+            if (this.getSessionIdByCredentials(credentials).equals(sessionId)) {
+                return this.deleteByCredentials(credentials);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 获取当前请求会话的会话标识（凭证的 SHA-256 摘要）。
+     *
+     * <p>用途：前端拿到在线列表后，用本方法返回的标识比对出"哪一条是当前设备"，
+     * 或业务侧据此实现"不允许踢掉自己"。
+     *
+     * @return 当前会话标识
+     * @throws org.tinycloud.security.exception.UnAuthorizedException 未登录时
+     */
+    public String getSessionId() {
+        return this.getSessionIdByCredentials(this.getCredentials());
+    }
+
+    /**
+     * 计算指定凭证的会话标识（凭证的 SHA-256 摘要）。
+     *
+     * <p>摘要<b>不可逆也不可暴力枚举</b>（凭证是 122 bit 随机 UUID），因此把它返回给前端是安全的；
+     * 但它<b>不做身份验证</b> —— 拿到 {@code sessionId} 的人同样可以调用
+     * {@link #deleteBySessionId(Object, String)}，所以踢人接口仍需与列表接口同等保护。
+     *
+     * <p>不加盐：凭证本身是高熵随机值，加盐对"防反推"没有额外收益，反而让同一个会话
+     * 在不同时刻/不同实例得到不同标识（列表里刚显示、点踢人就失效）。
+     *
+     * @param credentials 会话凭证
+     * @return 会话标识（64 位十六进制字符串）
+     */
+    public String getSessionIdByCredentials(String credentials) {
+        Assert.hasText(credentials, "The credentials cannot be empty!");
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexUtil.bytesToHex(digest.digest(credentials.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 是 MessageDigest 规范要求 JDK 必须提供的标准算法，理论上不可能走到这里。
+            // 这里必须抛异常而不是返回空串/占位值：空摘要会让 deleteBySessionId 误匹配到
+            // 空 sessionId 从而误删会话。
+            throw new TinySecurityException("SHA-256 digest is not available in this JVM", e);
+        }
+    }
+
+    /**
+     * 把登录主体转换为不含凭证的在线会话视图。
+     *
+     * @param subject     登录主体
+     * @param credentials 会话凭证（仅用于计算 {@code sessionId}，不会写入视图）
+     * @return 在线会话视图
+     */
+    private OnlineSession toOnlineSession(LoginSubject subject, String credentials) {
+        OnlineSession session = new OnlineSession();
+        session.setLoginId(subject.getLoginId());
+        session.setLoginTime(subject.getLoginTime());
+        session.setLoginExpireTime(subject.getLoginExpireTime());
+        session.setExtraInfo(subject.getExtraInfo());
+        session.setSessionId(this.getSessionIdByCredentials(credentials));
+        return session;
     }
 
     /**
