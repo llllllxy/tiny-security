@@ -11,6 +11,35 @@
 
 > 升级路径：1.4.0 → 1.5.0 ｜ 本次为**移除 JWT + 凭证固定为 UUID**（破坏性变更）
 
+### ✨ 新增特性
+
+- **新增「全量在线用户」查询 API**（`AuthProvider`）：此前框架只有"某账号的全部会话"
+  （`getCredentialsByLoginId`），缺少"现在一共有谁在线"这一全局维度的能力，运维后台只能
+  自己拼（常见做法是业务代码直接扫框架的 Redis key 前缀，耦合了框架内部存储结构）。
+  本次补齐四个方法：
+  - `getOnlineLoginIds()`：在线账号ID列表（按账号去重，元素统一为 `String`）
+  - `countOnlineUsers()`：在线账号数（去重后的"人"数，与 `countValidOnlineSessions` 的"会话数"是两个口径）
+  - `getOnlineSessions()`：在线会话明细（每份会话一条，返回 `OnlineSession` 视图）
+  - `deleteBySessionId(loginId, sessionId)`：按会话标识踢出指定会话（定向下线，同账号其它设备不受影响）
+- **列表接口不返回凭证，只返回凭证的 SHA-256 摘要（`sessionId`）**：凭证就是 bearer token 的签名原文，
+  等同于用户身份凭据。若列表接口直接返回 `LoginSubject`，凭证会随响应体序列化出去，拿到响应的人
+  即可接管会话。因此新增的 `OnlineSession` **刻意不含 `credentials` 字段**，改用不可逆推凭证的
+  `sessionId` 定位会话，业务代码全程不需要接触原始凭证。
+  （`LoginSubject.toString()` 虽有脱敏，但那只管日志——Jackson 序列化不看 `toString()`。）
+- **`SessionRepository` 新增两个 `default` 方法**（`getOnlineLoginIds` / `countOnlineUsers`），
+  内置四种仓储均已实现；沿用 `getCredentialsByLoginId` 的策略：自定义仓储未实现时抛
+  `UnsupportedOperationException` 明确报错，而非静默返回空列表。用 `default` 而非抽象方法，
+  保证升级前已有的自定义实现**编译不受影响**。
+- 四种仓储的实现差异（性能特征不同，选型时请注意，详见 README 2.2.9）：
+  - `jdbc`：一条 `SELECT DISTINCT login_id`，可走索引，成本最低；`countOnlineUsers` 已下推为 `COUNT(DISTINCT login_id)`
+  - `single` / `caffeine`：遍历本地内存索引；**多实例部署下只返回本实例的数据**
+  - `redis`：无全局索引，只能 `SCAN` 在线列表 key 前缀。**用 `SCAN` 而非 `KEYS`** ——
+    `KEYS` 会一次性遍历 key 空间并阻塞 Redis 单线程（sa-token 的同类 API 早期即为此实现，其 v1.46.0 才改为 `SCAN`）
+
+> ⚠️ **这四个方法是全局查询，请勿高频调用**（不要放进每次请求都要走的路径，也不要做成轮询接口）。
+> `redis` 存储在几千在线账号量级约 1~3 秒（sa-token 对其同类 API 给出的参考数据为：
+> 百万会话取 10 条，单机 0.255s、Redis 模式 3.322s，属同一量级）。
+
 ### ⚠️ 行为变更（升级必读）
 
 - **移除 JWT，token 改为 HMAC-SHA256 签名信封**：token 形态从 `Bearer <JWT>` 变为

@@ -13,8 +13,10 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -278,6 +280,35 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
             }
             return new ArrayList<>(credentialsList);
         }
+    }
+
+    /**
+     * 获取全部在线账号ID（去重）。
+     *
+     * <p>与 {@link SingleSessionRepository#getOnlineLoginIds()} 同思路：遍历内存中的
+     * "账号 → 凭证列表"索引，并逐个用 {@link #countValidOnlineSessions(Object)} 回查有效性，
+     * 剔除"索引还在、但会话已被 Caffeine 驱逐"的账号（惰性清理，与仓储其它方法口径一致）。
+     *
+     * <p><b>多实例部署只能看到本实例</b>：{@code store-type=caffeine} 是本地缓存，
+     * 每个 JVM 一份数据，这里的"全量"仅指本实例。需要全局视图请用 {@code redis} 或 {@code jdbc}。
+     *
+     * <p><b>容量上限会影响结果</b>：本仓储按 {@code caffeine-maximum-size}（默认 10000）做 LRU 驱逐，
+     * 超过上限时最早写入的会话会被挤掉 —— 那时它们不在缓存里，自然也不会出现在线上列表中。
+     *
+     * <p>实现细节：遍历 keySet 的<b>副本</b>，因为 {@code countValidOnlineSessions} 会在账号
+     * 凭证全部失效时从 map 中移除该账号，直接迭代 keySet 会触发 {@code ConcurrentModificationException}。
+     *
+     * @return 存在有效会话的账号ID列表（去重，元素为 String）；无在线账号时返回空列表
+     */
+    @Override
+    public List<Object> getOnlineLoginIds() {
+        Set<String> loginIds = new LinkedHashSet<>();
+        for (String loginId : new ArrayList<>(this.loginIdToCredentialsMap.keySet())) {
+            if (loginId != null && this.countValidOnlineSessions(loginId) > 0) {
+                loginIds.add(loginId);
+            }
+        }
+        return new ArrayList<>(loginIds);
     }
 
     /**
