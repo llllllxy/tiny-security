@@ -17,6 +17,8 @@ import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.SessionRepository;
 
 import java.util.Set;
+import java.util.Arrays;
+import java.util.HashSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -147,7 +149,7 @@ class AuthUtilTest {
         SecurityContext context = createContext("lazy-user");
         AuthTestSupport.bindRequestWithAuthProvider(authProvider(
                 new FixedSecurityContextRepository(context),
-                stubAuthorizationInfo(Set.of("admin"), Set.of("user:read"))));
+                stubAuthorizationInfo(new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read")))));
 
         assertTrue(AuthUtil.hasRole("admin"));
         assertFalse(AuthUtil.hasRole("guest"));

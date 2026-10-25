@@ -74,7 +74,7 @@ Pick the starter matching your Spring Boot version:
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.3.1</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 
@@ -83,7 +83,7 @@ Pick the starter matching your Spring Boot version:
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 

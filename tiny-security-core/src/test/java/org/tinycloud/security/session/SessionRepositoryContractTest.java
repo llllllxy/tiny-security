@@ -356,6 +356,108 @@ abstract class SessionRepositoryContractTest {
         assertTrue(credentials.contains("cred-d2"));
     }
 
+    // ==================== 全局在线查询 ====================
+
+    /**
+     * 无人在线时返回空列表（不返回 null），账号数为 0。
+     */
+    @Test
+    void getOnlineLoginIdsShouldReturnEmptyWhenNobodyOnline() {
+        List<Object> loginIds = repository().getOnlineLoginIds();
+        assertNotNull(loginIds, "必须返回空列表而非 null");
+        assertTrue(loginIds.isEmpty());
+        assertEquals(0, repository().countOnlineUsers());
+    }
+
+    /**
+     * 全量在线账号：多个账号登录后都应出现在结果里。
+     *
+     * <p><b>统一按 String 返回</b>是本契约的一部分：jdbc 存的是 varchar 列、redis 存的是 key 后缀，
+     * 内存版也刻意 {@code String.valueOf(...)} —— 否则同一份业务代码切换 {@code store-type}
+     * 后拿到的 loginId 类型会漂移（内存版 Long、redis 版 String）。
+     */
+    @Test
+    void getOnlineLoginIdsShouldReturnAllAccountsWithValidSessions() {
+        assertTrue(repository().save(buildSubject(10001L, "cred-o1"), 60, 0));
+        assertTrue(repository().save(buildSubject(20002L, "cred-o2"), 60, 0));
+
+        List<Object> loginIds = repository().getOnlineLoginIds();
+        assertEquals(2, loginIds.size(), "实际结果：" + loginIds);
+        assertTrue(loginIds.contains("10001"), "应包含 10001（字符串形式），实际：" + loginIds);
+        assertTrue(loginIds.contains("20002"), "应包含 20002（字符串形式），实际：" + loginIds);
+    }
+
+    /**
+     * 同一账号多端登录：全量名单里只应出现一次（去重）。
+     *
+     * <p>这是"在线账号"与"在线会话"的分水岭 —— 名单按账号去重，会话明细才按份计。
+     */
+    @Test
+    void getOnlineLoginIdsShouldDeduplicateAccountsWithMultipleSessions() {
+        assertTrue(repository().save(buildSubject(10001L, "cred-m1"), 60, 0));
+        assertTrue(repository().save(buildSubject(10001L, "cred-m2"), 60, 0));
+        assertTrue(repository().save(buildSubject(10001L, "cred-m3"), 60, 0));
+
+        List<Object> loginIds = repository().getOnlineLoginIds();
+        assertEquals(1, loginIds.size(), "同一账号的 3 个会话只应产生 1 个账号，实际：" + loginIds);
+        assertEquals("10001", loginIds.get(0));
+    }
+
+    /**
+     * 已过期的会话不能让其账号继续留在在线名单里。
+     *
+     * <p>对 redis 仓储尤其关键：在线列表 key 的 TTL 是会话超时的 <b>2 倍</b>，会话过期后列表 key
+     * 仍会存活一段时间。若直接把 SCAN 到的 key 后缀当作在线账号返回，名单会虚高
+     * （用户已掉线却仍显示在线，最长可达一个会话周期）。
+     */
+    @Test
+    void getOnlineLoginIdsShouldExcludeExpiredOnes() {
+        assertTrue(repository().save(buildSubject(10001L, "cred-e1"), 60, 0));
+        LoginSubject expired = buildSubject(20002L, "cred-e2");
+        expired.setLoginExpireTime(System.currentTimeMillis() - 1_000L);
+        repository().save(expired, 60, 0);
+
+        List<Object> loginIds = repository().getOnlineLoginIds();
+        assertTrue(loginIds.contains("10001"), "有效会话的账号必须出现，实际：" + loginIds);
+        assertFalse(loginIds.contains("20002"), "已过期会话的账号不应出现在线，实际：" + loginIds);
+    }
+
+    /**
+     * 会话被删除（单个凭证登出 / 整账号踢出）后，对应账号不应再出现在在线名单里。
+     */
+    @Test
+    void getOnlineLoginIdsShouldExcludeDeletedOnes() {
+        assertTrue(repository().save(buildSubject(10001L, "cred-x1"), 60, 0));
+        assertTrue(repository().save(buildSubject(20002L, "cred-x2"), 60, 0));
+
+        assertTrue(repository().deleteByCredentials("cred-x1"));
+        List<Object> afterSingleDelete = repository().getOnlineLoginIds();
+        assertFalse(afterSingleDelete.contains("10001"),
+                "10001 的唯一会话已删除，不应再算在线，实际：" + afterSingleDelete);
+        assertTrue(afterSingleDelete.contains("20002"));
+
+        assertTrue(repository().deleteByLoginId(20002L));
+        assertTrue(repository().getOnlineLoginIds().isEmpty(), "全部踢出后名单应为空");
+    }
+
+    /**
+     * {@code countOnlineUsers} 数的是"账号数"而不是"会话数"。
+     *
+     * <p>这是最容易和 {@link #countValidOnlineSessions(Object)} 混淆的地方：一个账号 2 台设备登录，
+     * 在线"人"数是 1，在线"会话"数是 2。报表上的"当前在线人数"要的是前者。
+     */
+    @Test
+    void countOnlineUsersShouldCountAccountsNotSessions() {
+        assertTrue(repository().save(buildSubject(10001L, "cred-n1"), 60, 0));
+        assertTrue(repository().save(buildSubject(10001L, "cred-n2"), 60, 0));
+        assertTrue(repository().save(buildSubject(20002L, "cred-n3"), 60, 0));
+
+        assertEquals(2, repository().countOnlineUsers(),
+                "在线账号数应为 2（按账号去重），而不是会话数 3");
+        assertEquals(2, repository().countValidOnlineSessions(10001L), "该账号的会话数是 2");
+        assertEquals(1, repository().countValidOnlineSessions(20002L));
+    }
+
     // ==================== 并发登录上限 ====================
 
     /**

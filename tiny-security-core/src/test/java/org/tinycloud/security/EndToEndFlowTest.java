@@ -25,6 +25,8 @@ import org.tinycloud.security.util.AuthUtil;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Arrays;
+import java.util.HashSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -281,12 +283,12 @@ class EndToEndFlowTest {
     static class StubAuthorizationInfoGet implements AuthorizationInfoGet {
         @Override
         public Set<String> getPermissionSet(LoginSubject subject) {
-            return Set.of("user:read", "user:write");
+            return new HashSet<>(Arrays.asList("user:read", "user:write"));
         }
 
         @Override
         public Set<String> getRoleSet(LoginSubject subject) {
-            return Set.of("admin");
+            return new HashSet<>(Arrays.asList("admin"));
         }
     }
 }

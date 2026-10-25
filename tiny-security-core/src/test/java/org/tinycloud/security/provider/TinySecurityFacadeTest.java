@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -56,7 +57,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldReturnSecurityContextFromRepository() {
         bindRequest();
-        SecurityContext context = createContext("user-1", Set.of("admin"), Set.of("user:read"));
+        SecurityContext context = createContext("user-1", new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read")));
         repository.setContext(context);
 
         SecurityContext actual = facade.getSecurityContext();
@@ -112,7 +113,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldCheckRoleCorrectly() {
         bindRequest();
-        repository.setContext(createContext("user-1", Set.of("admin", "user"), Collections.emptySet()));
+        repository.setContext(createContext("user-1", new HashSet<>(Arrays.asList("admin", "user")), Collections.emptySet()));
 
         assertTrue(facade.hasRole("admin"));
         assertTrue(facade.hasRole("user"));
@@ -126,7 +127,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldCheckPermissionCorrectly() {
         bindRequest();
-        repository.setContext(createContext("user-1", Collections.emptySet(), Set.of("user:read", "user:write")));
+        repository.setContext(createContext("user-1", Collections.emptySet(), new HashSet<>(Arrays.asList("user:read", "user:write"))));
 
         assertTrue(facade.hasPermission("user:read"));
         assertTrue(facade.hasPermission("user:write"));
@@ -159,7 +160,7 @@ class TinySecurityFacadeTest {
         bindRequest();
         repository.setContext(createContextWithoutAuthorization("user-1"));
         TinySecurityFacade lazyFacade = new TinySecurityFacade(repository,
-                stubAuthorizationInfo(Set.of("admin"), Set.of("user:read")));
+                stubAuthorizationInfo(new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read"))));
 
         assertTrue(lazyFacade.hasRole("admin"));
         assertFalse(lazyFacade.hasRole("guest"));
@@ -176,7 +177,7 @@ class TinySecurityFacadeTest {
         bindRequest();
         repository.setContext(createContextWithoutAuthorization("user-1"));
         TinySecurityFacade lazyFacade = new TinySecurityFacade(repository,
-                stubAuthorizationInfo(Set.of("admin"), Set.of("user:read", "user:write")));
+                stubAuthorizationInfo(new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read", "user:write"))));
 
         assertTrue(lazyFacade.hasPermission("user:read"));
         assertTrue(lazyFacade.hasPermission("user:write"));
@@ -214,7 +215,7 @@ class TinySecurityFacadeTest {
     @Test
     void shouldNotReloadWhenAlreadyLoaded() {
         bindRequest();
-        repository.setContext(createContext("user-1", Set.of("admin"), Set.of("user:read")));
+        repository.setContext(createContext("user-1", new HashSet<>(Arrays.asList("admin")), new HashSet<>(Arrays.asList("user:read"))));
         AtomicInteger roleQueryCount = new AtomicInteger();
         AtomicInteger permissionQueryCount = new AtomicInteger();
         TinySecurityFacade lazyFacade = new TinySecurityFacade(repository,
@@ -279,13 +280,13 @@ class TinySecurityFacadeTest {
         @Override
         public Set<String> getPermissionSet(LoginSubject subject) {
             this.permissionQueryCount.incrementAndGet();
-            return Set.of("user:read", "user:write");
+            return new HashSet<>(Arrays.asList("user:read", "user:write"));
         }
 
         @Override
         public Set<String> getRoleSet(LoginSubject subject) {
             this.roleQueryCount.incrementAndGet();
-            return Set.of("admin", "user");
+            return new HashSet<>(Arrays.asList("admin", "user"));
         }
     }
 

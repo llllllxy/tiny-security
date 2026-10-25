@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
 
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 
@@ -97,51 +98,18 @@ public class CookieUtil {
             cookie.setMaxAge(maxAge);
             cookie.setHttpOnly(true);
             cookie.setSecure(secure);
+            if (StringUtils.hasText(sameSite)) {
+                // Servlet 6 / jakarta 才提供 Cookie#setAttribute；javax.servlet 3.1 通过反射调用，
+                // 找不到方法时静默跳过，保证两分支共用同一份源码
+                trySetCookieAttribute(cookie, "SameSite", sameSite);
+            }
             try {
                 cookie.setValue(URLEncoder.encode(value, "utf-8"));
             } catch (UnsupportedEncodingException e) {
                 logger.error("CookieUtil setCookie url encode failed!", e);
             }
-            if (StringUtils.hasText(sameSite)) {
-                // Servlet 3.1 的 Cookie 没有 setAttribute，SameSite 通过 Set-Cookie 头下发
-                addCookieWithSameSite(response, cookie, sameSite);
-            } else {
-                response.addCookie(cookie);
-            }
+            response.addCookie(cookie);
         }
-    }
-
-    /**
-     * 写出一个带 SameSite 属性的 Cookie。
-     *
-     * <p>Servlet 3.1（javax）的 {@code Cookie} 没有 {@code setAttribute}，无法直接设置 SameSite；
-     * 而 SameSite 若缺失，Chrome/Edge 会默认按 Lax 处理，导致跨站场景下 Cookie 不被发送。
-     * 因此这里手工拼装 {@code Set-Cookie} 头。
-     *
-     * @param response 响应对象
-     * @param cookie   已配置好属性（path/maxAge/httpOnly/secure/value）的 Cookie
-     * @param sameSite SameSite 取值（Strict / Lax / None）
-     */
-    private static void addCookieWithSameSite(HttpServletResponse response, Cookie cookie, String sameSite) {
-        StringBuilder header = new StringBuilder();
-        header.append(cookie.getName()).append('=');
-        if (cookie.getValue() != null) {
-            header.append(cookie.getValue());
-        }
-        if (cookie.getPath() != null) {
-            header.append("; Path=").append(cookie.getPath());
-        }
-        if (cookie.getMaxAge() >= 0) {
-            header.append("; Max-Age=").append(cookie.getMaxAge());
-        }
-        if (cookie.isHttpOnly()) {
-            header.append("; HttpOnly");
-        }
-        if (cookie.getSecure()) {
-            header.append("; Secure");
-        }
-        header.append("; SameSite=").append(sameSite);
-        response.addHeader("Set-Cookie", header.toString());
     }
 
     /**
@@ -193,11 +161,10 @@ public class CookieUtil {
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
         if (StringUtils.hasText(sameSite)) {
-            // 与写入时使用同一套属性拼装，确保浏览器认可这条删除指令
-            addCookieWithSameSite(response, cookie, sameSite);
-        } else {
-            response.addCookie(cookie);
+            // 同 setCookie：Servlet 6 才有 Cookie#setAttribute，旧版 javax 走反射降级
+            trySetCookieAttribute(cookie, "SameSite", sameSite);
         }
+        response.addCookie(cookie);
     }
 
     /**
@@ -280,6 +247,29 @@ public class CookieUtil {
             }
         }
         return value;
+    }
+
+    /**
+     * 通过反射尝试调用 {@code Cookie#setAttribute(String, String)}（Servlet 6 / jakarta 新增）。
+     *
+     * <p>本框架的 springboot3 分支基于 jakarta.servlet 6，可直接调用；master 分支基于
+     * javax.servlet 3.1（Spring Boot 2.x / JDK 8），该方法不存在。为保证两分支共用同一份源码，
+     * 这里统一走反射：方法不存在时静默跳过，仅影响 SameSite 属性写入，不影响 Cookie 其它属性。
+     *
+     * @param cookie Cookie 实例
+     * @param name   属性名（如 SameSite）
+     * @param value  属性值（如 Lax / Strict / None）
+     */
+    private static void trySetCookieAttribute(Cookie cookie, String name, String value) {
+        try {
+            Method method = Cookie.class.getMethod("setAttribute", String.class, String.class);
+            method.invoke(cookie, name, value);
+        } catch (NoSuchMethodException e) {
+            // javax.servlet 3.1 无此方法，属预期内降级
+            logger.debug("CookieUtil trySetCookieAttribute skipped: Cookie#setAttribute not supported by current Servlet API.");
+        } catch (Exception e) {
+            logger.debug("CookieUtil trySetCookieAttribute failed: name={}, value={}", name, value, e);
+        }
     }
 
 }

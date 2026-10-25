@@ -86,14 +86,19 @@ class VersionUtilTest {
     /**
      * 能加载类与其它资源、但刻意"看不见"指定资源名的类加载器。
      *
-     * <p>父加载器取 platform classloader：它包含 JDK 类，但不含测试类路径，
+     * <p>父加载器取"平台类加载器"：它包含 JDK 类，但不含测试类路径，
      * 因此 {@code core.properties} 只能从本加载器自身的 URL 里找，从而可以被精确屏蔽。
+     *
+     * <p>注意这里用 {@code getSystemClassLoader().getParent()} 而不是
+     * {@code ClassLoader.getPlatformClassLoader()}：后者是 JDK 9+ API，master(JDK 8) 不存在；
+     * 而在 JDK 8 与 JDK 9+ 上，系统类加载器的父加载器分别正是扩展类加载器 / 平台类加载器，
+     * 语义一致，因此两分支可共用同一份源码。
      */
     private static class BlockingClassLoader extends URLClassLoader {
         private final String blocked;
 
         BlockingClassLoader(URL[] urls, String blocked) {
-            super(urls, ClassLoader.getPlatformClassLoader());
+            super(urls, ClassLoader.getSystemClassLoader().getParent());
             this.blocked = blocked;
         }
 

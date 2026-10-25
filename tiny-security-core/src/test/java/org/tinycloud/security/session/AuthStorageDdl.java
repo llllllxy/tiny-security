@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -100,10 +101,11 @@ final class AuthStorageDdl {
      */
     private static String readShippedSql() {
         for (String candidate : CANDIDATE_PATHS) {
-            Path path = Path.of(candidate);
+            Path path = Paths.get(candidate);
             if (Files.isRegularFile(path)) {
                 try {
-                    return Files.readString(path, StandardCharsets.UTF_8);
+                    // Path.of / Files.readString 是 JDK 11+ API，master(JDK 8) 用等价写法
+                    return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
                 } catch (IOException e) {
                     throw new IllegalStateException("读取发布 SQL 失败: " + path.toAbsolutePath(), e);
                 }

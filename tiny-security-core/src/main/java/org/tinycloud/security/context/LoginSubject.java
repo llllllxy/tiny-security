@@ -3,7 +3,6 @@ package org.tinycloud.security.context;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSetter;
 
-import java.io.Serial;
 import java.io.Serializable;
 import java.util.Map;
 
@@ -32,7 +31,6 @@ import java.util.Map;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LoginSubject implements Serializable {
-    @Serial
     private static final long serialVersionUID = -1L;
 
     /**

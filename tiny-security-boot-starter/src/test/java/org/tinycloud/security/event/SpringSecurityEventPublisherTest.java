@@ -6,6 +6,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,8 +29,8 @@ class SpringSecurityEventPublisherTest {
         RecordingEventPublisher spring = new RecordingEventPublisher();
         SpringSecurityEventPublisher publisher = new SpringSecurityEventPublisher(spring);
 
-        LoginSuccessEvent success = new LoginSuccessEvent(1L, "Bearer t", Map.of(), 1000L);
-        LoginFailureEvent failure = new LoginFailureEvent(2L, Map.of(), "reason", 2000L);
+        LoginSuccessEvent success = new LoginSuccessEvent(1L, "Bearer t", Collections.emptyMap(), 1000L);
+        LoginFailureEvent failure = new LoginFailureEvent(2L, Collections.emptyMap(), "reason", 2000L);
         AuthorizationFailureEvent authz =
                 new AuthorizationFailureEvent(3L, "/admin", "list", "no permission", 3000L);
 
@@ -55,7 +56,7 @@ class SpringSecurityEventPublisherTest {
         SpringSecurityEventPublisher publisher = new SpringSecurityEventPublisher(broken);
 
         assertThrows(IllegalStateException.class,
-                () -> publisher.publishLoginSuccess(new LoginSuccessEvent(1L, "t", Map.of(), 1L)));
+                () -> publisher.publishLoginSuccess(new LoginSuccessEvent(1L, "t", Collections.emptyMap(), 1L)));
     }
 
     /**

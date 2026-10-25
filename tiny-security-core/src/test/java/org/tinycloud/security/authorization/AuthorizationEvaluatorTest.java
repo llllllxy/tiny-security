@@ -198,9 +198,9 @@ class AuthorizationEvaluatorTest {
         MockHttpServletRequest getRequest = new MockHttpServletRequest("GET", "/user");
         getRequest.setRequestURI("/user");
 
-        assertTrue(AuthorizationEvaluator.checkUrlPermission(getRequest, Set.of("GET /user/**")),
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(getRequest, new HashSet<>(Arrays.asList("GET /user/**"))),
                 "GET 请求应被 GET 权限码放行");
-        assertFalse(AuthorizationEvaluator.checkUrlPermission(getRequest, Set.of("DELETE /user/**")),
+        assertFalse(AuthorizationEvaluator.checkUrlPermission(getRequest, new HashSet<>(Arrays.asList("DELETE /user/**"))),
                 "GET 请求不得被 DELETE 权限码放行");
     }
 
@@ -209,7 +209,7 @@ class AuthorizationEvaluatorTest {
      */
     @Test
     void checkUrlPermissionShouldSeparateReadAndWritePermissions() {
-        Set<String> permissions = Set.of("GET /user/**", "POST /user/**");
+        Set<String> permissions = new HashSet<>(Arrays.asList("GET /user/**", "POST /user/**"));
 
         assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("GET", "/user/list"), permissions));
         assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("POST", "/user/list"), permissions));
@@ -225,7 +225,7 @@ class AuthorizationEvaluatorTest {
      */
     @Test
     void checkUrlPermissionShouldMatchAnyMethodWhenMethodNotSpecified() {
-        Set<String> permissions = Set.of("/user/**");
+        Set<String> permissions = new HashSet<>(Arrays.asList("/user/**"));
 
         assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("GET", "/user/list"), permissions));
         assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("DELETE", "/user/1"), permissions));
@@ -239,8 +239,8 @@ class AuthorizationEvaluatorTest {
     void checkUrlPermissionShouldIgnoreMethodCase() {
         MockHttpServletRequest request = mockRequest("GET", "/user/list");
 
-        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("get /user/**")));
-        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("Get /user/**")));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, new HashSet<>(Arrays.asList("get /user/**"))));
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, new HashSet<>(Arrays.asList("Get /user/**"))));
     }
 
     /**
@@ -251,7 +251,7 @@ class AuthorizationEvaluatorTest {
     void checkUrlPermissionShouldTreatNonMethodPrefixAsPlainPath() {
         // "system:user:add" 不是合法 Method，应作为整条路径参与 Ant 匹配
         MockHttpServletRequest request = mockRequest("GET", "system:user:add");
-        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, Set.of("system:user:add")),
+        assertTrue(AuthorizationEvaluator.checkUrlPermission(request, new HashSet<>(Arrays.asList("system:user:add"))),
                 "非 Method 前缀的权限码必须按裸路径匹配，不能被截断成 Method");
     }
 
@@ -260,7 +260,7 @@ class AuthorizationEvaluatorTest {
      */
     @Test
     void checkUrlPermissionShouldSupportWildcardMethod() {
-        Set<String> permissions = Set.of("* /user/**");
+        Set<String> permissions = new HashSet<>(Arrays.asList("* /user/**"));
 
         assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("GET", "/user/list"), permissions));
         assertTrue(AuthorizationEvaluator.checkUrlPermission(mockRequest("DELETE", "/user/1"), permissions));

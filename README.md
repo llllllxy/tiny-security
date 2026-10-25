@@ -71,7 +71,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.3.1</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 
@@ -80,7 +80,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 

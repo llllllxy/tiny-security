@@ -15,6 +15,8 @@ import org.tinycloud.security.util.JsonUtil;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -65,7 +67,7 @@ class RedisSessionRepositoryTest {
         assertTrue(repository.save(buildSubject(10001L, "cred-1"), 60, 0));
 
         // ARGV[3] = 120 = 会话超时 60 秒 × 2
-        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of(ONLINE_KEY)), eq("cred-1"), eq("0"), eq("120"));
+        verify(redisTemplate).execute(any(RedisScript.class), eq(Arrays.asList(ONLINE_KEY)), eq("cred-1"), eq("0"), eq("120"));
         verify(valueOperations).setIfAbsent(eq("tiny:security:credentials:cred-1"), anyString(), eq(60L), eq(TimeUnit.SECONDS));
     }
 
@@ -81,7 +83,7 @@ class RedisSessionRepositoryTest {
     void saveShouldCleanupDeadOnlineEntriesEvenWithoutLimit() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
-        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("dead-cred"), List.of());
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(Arrays.asList("dead-cred"), Collections.emptyList());
         // dead-cred 已不存在（get 返回 null）→ 判为失效，应从在线列表移除
         when(valueOperations.get("tiny:security:credentials:dead-cred")).thenReturn(null);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
@@ -119,7 +121,7 @@ class RedisSessionRepositoryTest {
     void saveShouldRejectWhenConcurrentLimitReached() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
-        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of("other-cred"));
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(Arrays.asList("other-cred"));
         when(valueOperations.get("tiny:security:credentials:other-cred"))
                 .thenReturn(JsonUtil.writeValueAsString(buildSubject(10001L, "other-cred")));
 
@@ -160,14 +162,14 @@ class RedisSessionRepositoryTest {
     void saveShouldJudgeConcurrentLimitAtomicallyInScript() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
-        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of());
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(Collections.emptyList());
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(1L);
 
         assertTrue(repository.save(buildSubject(10001L, "cred-3"), 60, 3));
 
         // ARGV[2] = 并发上限；上限判定发生在脚本内，而非 Java 侧的先查后写
-        verify(redisTemplate).execute(any(RedisScript.class), eq(List.of(ONLINE_KEY)), eq("cred-3"), eq("3"), eq("120"));
+        verify(redisTemplate).execute(any(RedisScript.class), eq(Arrays.asList(ONLINE_KEY)), eq("cred-3"), eq("3"), eq("120"));
         verify(listOperations, never()).rightPush(anyString(), anyString());
         verify(listOperations, never()).size(anyString());
     }
@@ -180,7 +182,7 @@ class RedisSessionRepositoryTest {
     void saveShouldRollbackSessionWhenScriptRejectsOverLimit() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForList()).thenReturn(listOperations);
-        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(List.of());
+        when(listOperations.range(ONLINE_KEY, 0L, -1L)).thenReturn(Collections.emptyList());
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any(TimeUnit.class))).thenReturn(true);
         when(redisTemplate.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(0L);
 
@@ -212,7 +214,7 @@ class RedisSessionRepositoryTest {
     void deleteByLoginIdShouldDeleteAllSessions() {
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         when(listOperations.range(ONLINE_KEY, 0L, -1L))
-                .thenReturn(List.of("cred-a", "cred-b"));
+                .thenReturn(Arrays.asList("cred-a", "cred-b"));
 
         assertTrue(repository.deleteByLoginId(10001L));
 
@@ -233,7 +235,7 @@ class RedisSessionRepositoryTest {
         when(redisTemplate.opsForList()).thenReturn(listOperations);
         // 第一次读取在线列表（含失效项），清理后第二次读取只剩有效项
         when(listOperations.range(ONLINE_KEY, 0L, -1L))
-                .thenReturn(List.of("cred-alive", "cred-dead"), List.of("cred-alive"));
+                .thenReturn(Arrays.asList("cred-alive", "cred-dead"), Arrays.asList("cred-alive"));
         when(valueOperations.get("tiny:security:credentials:cred-alive"))
                 .thenReturn(JsonUtil.writeValueAsString(buildSubject(10001L, "cred-alive")));
         when(valueOperations.get("tiny:security:credentials:cred-dead")).thenReturn(null);

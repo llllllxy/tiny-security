@@ -4,7 +4,6 @@ package org.tinycloud.security.exception;
 import org.tinycloud.security.consts.AuthConsts;
 
 
-
 /**
  * 无权限访问-异常
  */

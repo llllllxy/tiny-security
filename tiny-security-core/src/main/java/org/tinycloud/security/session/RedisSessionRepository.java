@@ -2,16 +2,22 @@ package org.tinycloud.security.session;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 import org.tinycloud.security.util.JsonUtil;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -46,6 +52,15 @@ public class RedisSessionRepository implements SessionRepository {
                     + "if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3])) end\n"
                     + "return 1\n",
             Long.class);
+
+    /**
+     * {@code SCAN} 单次迭代的期望返回数量。
+     *
+     * <p>这只是给 Redis 的<b>建议值</b>，不是返回上限：SCAN 每次迭代可能返回多于或少于该数量的 key，
+     * 甚至返回 0 条（扫到的桶恰好为空），游标必须用 {@code hasNext()} 循环推进到结束，不能按条数提前退出。
+     * 取值 500 是在"单次响应体积"与"往返次数"之间的折中。
+     */
+    private static final long SCAN_BATCH_COUNT = 500L;
 
     private final StringRedisTemplate redisTemplate;
 
@@ -254,6 +269,72 @@ public class RedisSessionRepository implements SessionRepository {
     }
 
     /**
+     * 获取全部在线账号ID（去重）。
+     *
+     * <p><b>实现说明：为什么只能 SCAN</b>：本仓储的数据模型里<b>没有全局索引</b>——
+     * 只有"一个账号一个在线列表 key"（{@code tiny:security:online:{loginId}}）。
+     * 因此要回答"现在一共有谁在线"，只能遍历这类 key 的前缀。另一种选择是额外维护一个
+     * 全局 ZSET 索引（登录/登出/续期四处同步维护），查询能快一个数量级；
+     * 但"在线用户查询"是低频运维操作，为此给<b>每次登录</b>都增加一次写放大、并引入一个全局热点 key
+     * 并不划算，因此这里选择零维护成本的 SCAN。
+     *
+     * <p><b>用 SCAN 而不是 KEYS</b>：{@code KEYS} 会一次性遍历并返回整个 key 空间，
+     * 在 key 数量多时<b>阻塞 Redis 单线程</b>（同 sa-token 早期实现的坑，其 v1.46.0 才改为 SCAN）。
+     * SCAN 是游标式分批遍历，单次只扫一小批，不会长时间占住 Redis。
+     *
+     * <p><b>Cluster 限制</b>：{@code RedisTemplate.scan()} 只在<b>当前连接所在的那一个节点</b>上扫描。
+     * 单机/哨兵模式没问题；Redis Cluster 下需要自行遍历各 master 节点分别 SCAN 后合并，
+     * 否则只能看到部分数据。本仓储不做该适配（框架不持有集群拓扑），请自定义仓储实现。
+     *
+     * <p><b>为什么拿到 key 后还要逐个回查</b>：在线列表 key 的 TTL 是会话超时的 <b>2 倍</b>
+     * （见 {@link #addToOnlineListIfLimitNotExceeded}），因此"列表 key 存在" ≠ "账号在线" ——
+     * 会话过期后列表最多还会残留一个 timeout 周期（默认 30 分钟）。若直接把 key 后缀当作在线账号返回，
+     * 运维列表会把已掉线的用户继续显示在线。这里复用
+     * {@link #getCredentialsByLoginId(Object)} 回查有效会话，既完成过滤，
+     * 也顺带触发它对列表里失效凭证的清理。
+     *
+     * <p><b>开销</b>：{@code SCAN} 本身是 O(全库 key 数) 的遍历，加上每个账号一次
+     * {@code LRANGE} 与每份会话一次 {@code GET}。以"几千在线账号、人均 1~2 个会话"估算，
+     * 大致是万级 Redis 往返（局域网约 1~3 秒）。<b>请勿高频调用</b>（如放进轮询接口或每次请求调用）。
+     *
+     * <p><b>失败语义</b>：扫描过程中出现异常时记录 ERROR 日志并返回<b>空列表</b>（与其它方法一致的降级口径）。
+     * 注意此时<b>无法区分"无人在线"与"查询失败"</b>——这里刻意不返回已扫到的部分结果，
+     * 因为残缺的在线名单比空名单更容易被误判为"全量"而引发错误的运维操作。
+     *
+     * @return 存在有效会话的账号ID列表（去重，元素为 String）；无在线账号或查询失败时返回空列表
+     */
+    @Override
+    public List<Object> getOnlineLoginIds() {
+        Set<String> loginIds = new LinkedHashSet<>();
+        String prefix = AuthConsts.ONLINE_CREDENTIALS_KEY_PREFIX;
+        ScanOptions options = ScanOptions.scanOptions()
+                .match(prefix + "*")
+                .count(SCAN_BATCH_COUNT)
+                .build();
+        try (Cursor<String> cursor = this.redisTemplate.scan(options)) {
+            while (cursor.hasNext()) {
+                String key = cursor.next();
+                // MATCH 已在 Redis 侧按模式过滤，这里再判一次是防御性校验：
+                // 代理/云 Redis 的 MATCH 语义偶有偏差，且空 key 不应产生一个空 loginId
+                if (key == null || !key.startsWith(prefix)) {
+                    continue;
+                }
+                String loginId = key.substring(prefix.length());
+                if (!StringUtils.hasText(loginId)) {
+                    continue;
+                }
+                if (!this.getCredentialsByLoginId(loginId).isEmpty()) {
+                    loginIds.add(loginId);
+                }
+            }
+        } catch (Exception e) {
+            log.error("RedisSessionRepository getOnlineLoginIds failed, Exception：", e);
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(loginIds);
+    }
+
+    /**
      * 清理在线列表中的失效凭证并返回有效凭证。
      *
      * <p>失效判定与 {@link #checkByCredentials(String)} 口径一致：不仅要看 key 是否存在
@@ -332,7 +413,7 @@ public class RedisSessionRepository implements SessionRepository {
         // 仅在会话超时为正数时设置 TTL（timeout 已由 AuthProvider 装配期保证为正数，此处为防御性判断）
         long listTimeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds * 2L : 0L;
         Long added = this.redisTemplate.execute(ADD_TO_ONLINE_LIST_SCRIPT,
-                List.of(onlineKey),
+                Collections.singletonList(onlineKey),
                 credentials,
                 String.valueOf(maxConcurrentLogins),
                 String.valueOf(listTimeoutSeconds));

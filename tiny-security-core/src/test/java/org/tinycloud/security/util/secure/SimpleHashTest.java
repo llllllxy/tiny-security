@@ -53,7 +53,7 @@ class SimpleHashTest {
     }
 
     /**
-     * hex 字符串 → byte[]，仅测试内使用（master 基于 JDK 8，无 java.util.HexFormat）。
+     * hex 字符串 → byte[]（JDK 8 无 java.util.HexFormat，测试内自实现）。
      */
     private static byte[] parseHex(String hex) {
         int len = hex.length();
