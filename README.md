@@ -71,7 +71,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot-starter</artifactId>
-    <version>1.3.1</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 
@@ -80,7 +80,7 @@ tiny-security 是一款基于 SpringBoot 开发的轻量级 Java Web 权限认�
 <dependency>
     <groupId>top.lxyccc</groupId>
     <artifactId>tiny-security-boot3-starter</artifactId>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
 </dependency>
 ```
 
@@ -117,8 +117,8 @@ tiny-security:
    force-http-status-200: false
    # 权限校验方式，可配置ANNOTATION（注解方式）、URL（url方式）
    perm-check-mode: ANNOTATION
-    # token签名密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥：重启后所有会话将失效，多实例部署下各实例也互不认可对方的token）
-    token-secret: your-secret-key-please-replace-me
+   # token签名密钥，强烈建议配置固定的高强度随机值（不配置时框架会生成临时随机密钥：重启后所有会话将失效，多实例部署下各实例也互不认可对方的token）
+   token-secret: your-secret-key-please-replace-me
    # 长度建议 >= 32 字节；短于 32 字节会在启动时打印 WARN（不阻止启动）
    # 是否启用Cookie模式（登录写cookie、登出清理cookie、从cookie读取token）
    # 默认false纯token模式（前后端分离）；前后端不分离项目需开启
