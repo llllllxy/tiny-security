@@ -1,14 +1,13 @@
 package org.tinycloud.security.util;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
 
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Method;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 
@@ -19,6 +18,12 @@ import java.net.URLEncoder;
  * @since 2021-01-30-11:18
  **/
 public class CookieUtil {
+
+    /**
+     * 工具类，禁止实例化。
+     */
+    private CookieUtil() {
+    }
     private static final Logger logger = LoggerFactory.getLogger(CookieUtil.class);
 
     /**
@@ -92,18 +97,51 @@ public class CookieUtil {
             cookie.setMaxAge(maxAge);
             cookie.setHttpOnly(true);
             cookie.setSecure(secure);
-            if (StringUtils.hasText(sameSite)) {
-                // Servlet 6 / jakarta 才提供 Cookie.setAttribute(String, String)，旧版 javax 通过反射调用，
-                // 找不到方法时静默跳过（保持 JDK 8 / Servlet 3.1 兼容）
-                trySetCookieAttribute(cookie, "SameSite", sameSite);
-            }
             try {
                 cookie.setValue(URLEncoder.encode(value, "utf-8"));
             } catch (UnsupportedEncodingException e) {
                 logger.error("CookieUtil setCookie url encode failed!", e);
             }
-            response.addCookie(cookie);
+            if (StringUtils.hasText(sameSite)) {
+                // Servlet 3.1 的 Cookie 没有 setAttribute，SameSite 通过 Set-Cookie 头下发
+                addCookieWithSameSite(response, cookie, sameSite);
+            } else {
+                response.addCookie(cookie);
+            }
         }
+    }
+
+    /**
+     * 写出一个带 SameSite 属性的 Cookie。
+     *
+     * <p>Servlet 3.1（javax）的 {@code Cookie} 没有 {@code setAttribute}，无法直接设置 SameSite；
+     * 而 SameSite 若缺失，Chrome/Edge 会默认按 Lax 处理，导致跨站场景下 Cookie 不被发送。
+     * 因此这里手工拼装 {@code Set-Cookie} 头。
+     *
+     * @param response 响应对象
+     * @param cookie   已配置好属性（path/maxAge/httpOnly/secure/value）的 Cookie
+     * @param sameSite SameSite 取值（Strict / Lax / None）
+     */
+    private static void addCookieWithSameSite(HttpServletResponse response, Cookie cookie, String sameSite) {
+        StringBuilder header = new StringBuilder();
+        header.append(cookie.getName()).append('=');
+        if (cookie.getValue() != null) {
+            header.append(cookie.getValue());
+        }
+        if (cookie.getPath() != null) {
+            header.append("; Path=").append(cookie.getPath());
+        }
+        if (cookie.getMaxAge() >= 0) {
+            header.append("; Max-Age=").append(cookie.getMaxAge());
+        }
+        if (cookie.isHttpOnly()) {
+            header.append("; HttpOnly");
+        }
+        if (cookie.getSecure()) {
+            header.append("; Secure");
+        }
+        header.append("; SameSite=").append(sameSite);
+        response.addHeader("Set-Cookie", header.toString());
     }
 
     /**
@@ -113,7 +151,7 @@ public class CookieUtil {
      * @param name     名称
      */
     public static void removeCookie(HttpServletResponse response, String name) {
-        removeCookie(response, name, "/");
+        removeCookie(response, name, "/", false, null);
     }
 
     /**
@@ -124,6 +162,28 @@ public class CookieUtil {
      * @param path     上下文路径
      */
     public static void removeCookie(HttpServletResponse response, String name, String path) {
+        removeCookie(response, name, path, false, null);
+    }
+
+    /**
+     * 删除指定名称的 Cookie，并带上与写入时一致的安全属性。
+     *
+     * <p><b>为什么必须带属性</b>：删除 Cookie 的本质是"写回一个同名 Cookie 并令其 maxAge=0"，
+     * 浏览器只有在该 Cookie 的 {@code path}/{@code domain} 与**安全属性**都与原 Cookie 匹配时才认这条删除指令。
+     * 尤其是 {@code SameSite=None} 的 Cookie，规范要求它必须同时带 {@code Secure}，
+     * 删除指令若不带这两个属性会被浏览器**直接忽略** —— 表现为"点了登出，但仍是登录态"。
+     *
+     * <p>因此这里的 {@code secure} 与 {@code sameSite} 必须与
+     * {@link #setCookie(HttpServletResponse, String, String, String, int, boolean, String)} 写入时传入的一致。
+     *
+     * @param response 响应对象（为 null 时说明当前线程未绑定 Web 请求，直接跳过删除）
+     * @param name     名称
+     * @param path     上下文路径
+     * @param secure   是否仅通过 HTTPS 传输（必须与写入时一致）
+     * @param sameSite SameSite 属性（必须与写入时一致；为 null 时不设置）
+     */
+    public static void removeCookie(HttpServletResponse response, String name, String path,
+                                    boolean secure, String sameSite) {
         if (response == null || !StringUtils.hasText(name)) {
             return;
         }
@@ -131,7 +191,13 @@ public class CookieUtil {
         cookie.setPath(path);
         cookie.setMaxAge(0);
         cookie.setHttpOnly(true);
-        response.addCookie(cookie);
+        cookie.setSecure(secure);
+        if (StringUtils.hasText(sameSite)) {
+            // 与写入时使用同一套属性拼装，确保浏览器认可这条删除指令
+            addCookieWithSameSite(response, cookie, sameSite);
+        } else {
+            response.addCookie(cookie);
+        }
     }
 
     /**
@@ -214,21 +280,6 @@ public class CookieUtil {
             }
         }
         return value;
-    }
-
-    /**
-     * 通过反射尝试调用 Cookie.setAttribute(name, value)（Servlet 6 / jakarta 新增）。
-     * 找不到方法时静默跳过——保持对旧版 javax.servlet（Servlet 3.1，JDK 8 / Spring Boot 2.x）的编译与运行兼容。
-     */
-    private static void trySetCookieAttribute(Cookie cookie, String name, String value) {
-        try {
-            Method method = Cookie.class.getMethod("setAttribute", String.class, String.class);
-            method.invoke(cookie, name, value);
-        } catch (NoSuchMethodException e) {
-            logger.debug("CookieUtil trySetCookieAttribute skipped: Cookie#setAttribute not supported by current Servlet API.");
-        } catch (Exception e) {
-            logger.debug("CookieUtil trySetCookieAttribute failed: name={}, value={}", name, value, e);
-        }
     }
 
 }

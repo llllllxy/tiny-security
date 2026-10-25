@@ -8,15 +8,17 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.AuthProperties;
+import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
+import org.tinycloud.security.exception.UnAuthorizedException;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.session.SingleSessionRepository;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * AuthProvider#getCredentialsByLoginId 门面方法测试。
@@ -97,9 +99,64 @@ class AuthProviderCredentialsTest {
                 () -> providerWithCustomRepo.getCredentialsByLoginId(10003L));
     }
 
+    /**
+     * 凭证为**空白字符**的 token 必须得到 401，不得抛 {@link IllegalArgumentException}（→ 500）。
+     *
+     * <p>可达性（已实测确认，非推测）：token 形态是 {@code credentials.signature}，凭证即分隔符
+     * 左侧内容。{@code TokenSignUtil.sign} 用 {@code Assert.hasText} 拦住空凭证，但**用同一 secret
+     * 自行计算 HMAC 即可绕过**（同密钥的其他用途、或密钥泄露场景）。实测
+     * {@code " " + "." + base64url(HMAC-SHA256(" ", secret))} 这种 token 会被
+     * {@code verifyAndExtract} 原样返回为 {@code " "}。
+     *
+     * <p>此时 {@code checkLogin} 把 {@code " "} 交给会话仓储，命中内置仓储里
+     * {@code Assert.hasText(credentials, ...)} 抛出的 {@code IllegalArgumentException}；它不是
+     * {@link org.tinycloud.security.exception.TinySecurityException}，异常解析器返回 null，
+     * 最终交给 Spring 默认处理 → **HTTP 500**，而非应有的 401。
+     *
+     * <p>对照 {@link AuthProvider#isLogin}：那里已 catch {@code Exception} 返回 false，是正确写法。
+     */
+    @Test
+    void shouldRejectBlankCredentialsTokenWithUnauthorizedInsteadOf500() {
+        request.addHeader("token", AuthConsts.TOKEN_PREFIX
+                + signedToken("test-token-secret-for-credentials-lookup", " "));
+
+        assertThrows(UnAuthorizedException.class,
+                () -> authProvider.checkLogin(),
+                "空白凭证必须按未登录处理（401），不能抛 IllegalArgumentException 导致 500");
+    }
+
+    /**
+     * 同一缺陷的第二种表现：{@code isLogin} 与 {@code checkLogin} 对空白凭证的行为必须一致
+     * （前者返回 false，后者抛 401），不能一个容错、一个 500。
+     */
+    @Test
+    void blankCredentialsShouldBehaveConsistentlyBetweenIsLoginAndCheckLogin() {
+        request.addHeader("token", AuthConsts.TOKEN_PREFIX
+                + signedToken("test-token-secret-for-credentials-lookup", " "));
+
+        assertFalse(authProvider.isLogin(), "isLogin 对空白凭证应返回 false");
+        assertThrows(UnAuthorizedException.class, () -> authProvider.checkLogin());
+    }
+
+    /**
+     * 构造「凭证.签名」形态的 token：用于生成 {@code sign} 拒绝产出的畸形 token（空白凭证）。
+     */
+    private static String signedToken(String secret, String credentials) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(
+                    secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String signature = Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(mac.doFinal(credentials.getBytes(StandardCharsets.UTF_8)));
+            return credentials + "." + signature;
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private AuthProperties properties() {
         AuthProperties properties = new AuthProperties();
-        properties.setJwtSecret("test-jwt-secret-for-credentials-lookup");
+        properties.setTokenSecret("test-token-secret-for-credentials-lookup");
         return properties;
     }
 

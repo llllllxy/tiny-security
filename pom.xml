@@ -41,7 +41,6 @@
         <!-- 依赖版本 -->
         <springboot.version>2.7.18</springboot.version>
         <servlet.version>3.1.0</servlet.version>
-        <jwt.version>3.19.4</jwt.version>
     </properties>
 
     <developers>
@@ -90,12 +89,6 @@
                 <groupId>javax.servlet</groupId>
                 <artifactId>javax.servlet-api</artifactId>
                 <version>${servlet.version}</version>
-            </dependency>
-            <!-- jwt -->
-            <dependency>
-                <groupId>com.auth0</groupId>
-                <artifactId>java-jwt</artifactId>
-                <version>${jwt.version}</version>
             </dependency>
             <dependency>
                 <groupId>top.lxyccc</groupId>

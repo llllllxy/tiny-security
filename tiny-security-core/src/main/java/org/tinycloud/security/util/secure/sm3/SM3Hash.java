@@ -1,15 +1,11 @@
 package org.tinycloud.security.util.secure.sm3;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.tinycloud.security.util.secure.HexUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 public class SM3Hash {
-
-    private static final Logger log = LoggerFactory.getLogger(SM3Hash.class);
 
     /**
      * 原始值
@@ -73,19 +69,25 @@ public class SM3Hash {
     /**
      * 返回小写SM3 hash串
      *
+     * <p>1.5.0 起 {@code salt} 为 {@code null} 时按空串处理。此前是直接拼 {@code (source + salt)}，
+     * {@code null} 会被拼成字面量 {@code "null"}，导致 {@code salt=null} 与 {@code salt="null"}
+     * 产生<b>完全相同的哈希</b>（真碰撞）。归一化后 {@code null} 与 {@code ""} 等价，语义与
+     * {@code SimpleHash} 的 JDK 分支（{@code salt == null} 视为不加盐）保持一致。
+     *
+     * <p>此处不再吞异常：原实现在失败时返回预分配的全 0 数组，调用方无法区分"算错了"和"算完了"。
+     *
      * @param source 原始值字符串
+     * @param salt   盐值，{@code null} 等价于空串
      * @return hash后的字节数组
      */
     private byte[] SM3Encode(String source, String salt) {
+        String normalizedSalt = salt == null ? "" : salt;
+        byte[] msgBytes = (source + normalizedSalt).getBytes(StandardCharsets.UTF_8);
+
         byte[] hashedBytes = new byte[32];
-        try {
-            byte[] msgBytes = (source + salt).getBytes(StandardCharsets.UTF_8);
-            SM3Digest sm3Digest = new SM3Digest();
-            sm3Digest.update(msgBytes, 0, msgBytes.length);
-            sm3Digest.doFinal(hashedBytes, 0);
-        } catch (Exception e) {
-            log.error("SM3Hash SM3Encode failed", e);
-        }
+        SM3Digest sm3Digest = new SM3Digest();
+        sm3Digest.update(msgBytes, 0, msgBytes.length);
+        sm3Digest.doFinal(hashedBytes, 0);
         return hashedBytes;
     }
 
@@ -93,18 +95,16 @@ public class SM3Hash {
     /**
      * 返回小写SM3 hash串
      *
+     * <p>此处不再吞异常：原实现在失败时返回预分配的全 0 数组，调用方无法区分"算错了"和"算完了"。
+     *
      * @param msgBytes 原始值-字节数组
      * @return hash后的字节数组
      */
     private byte[] SM3Encode(byte[] msgBytes) {
         byte[] hashedBytes = new byte[32];
-        try {
-            SM3Digest sm3Digest = new SM3Digest();
-            sm3Digest.update(msgBytes, 0, msgBytes.length);
-            sm3Digest.doFinal(hashedBytes, 0);
-        } catch (Exception e) {
-            log.error("SM3Hash SM3Encode failed", e);
-        }
+        SM3Digest sm3Digest = new SM3Digest();
+        sm3Digest.update(msgBytes, 0, msgBytes.length);
+        sm3Digest.doFinal(hashedBytes, 0);
         return hashedBytes;
     }
 

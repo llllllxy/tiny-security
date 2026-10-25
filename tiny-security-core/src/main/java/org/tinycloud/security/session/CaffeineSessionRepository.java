@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 基于 Caffeine 本地缓存的会话仓储实现。
@@ -27,7 +26,7 @@ import java.util.concurrent.TimeUnit;
  *     <li>成熟的惰性过期驱逐 + 缓存统计</li>
  * </ul>
  *
- * <p>过期语义：每个凭证的存活时间取自 {@link LoginSubject#getLoginExpireTime()}（与 Single/JDBC/Redis
+ * <p>过期语义：每个凭证的存活时间取自 {@link LoginSubject#getLoginExpireTime}（与 Single/JDBC/Redis
  * 一致，由框架会话 timeout 驱动）；续期（refresh）时重新 put 会重置过期时间。
  *
  * <p><b>可选依赖</b>：caffeine 以 provided 提供，使用 {@code store-type=caffeine} 时需自行引入：
@@ -93,9 +92,15 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
 
     /**
      * 计算距离会话过期剩余纳秒数；已过期返回 0（立即驱逐）。
+     *
+     * <p>{@code loginExpireTime} 为空说明仓储拿到的登录主体不完整（自定义 SessionRepository
+     * 或反序列化缺字段），按"已过期"处理，与内核的判定口径保持一致，避免拆箱抛 NPE。
      */
     private static long nanosUntilExpire(LoginSubject subject) {
-        long expireTime = subject.getLoginExpireTime();
+        Long expireTime = subject.getLoginExpireTime();
+        if (expireTime == null) {
+            return 0L;
+        }
         long remainingMillis = expireTime - System.currentTimeMillis();
         return Math.max(0L, remainingMillis) * 1_000_000L;
     }
@@ -115,8 +120,21 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
             }
             // 无论是否启用并发限制，登录时都清理该账号在线索引中的失效凭证，否则索引随登录次数无限累积（内存泄漏）
             this.countValidOnlineSessions(subject.getLoginId());
-            this.cache.put(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject);
-            this.addToOnlineList(subject.getLoginId(), subject.getCredentials());
+            // 凭证是随机生成的会话唯一钥匙，理论上不会重复。一旦重复，说明随机源异常或有人在构造会话固定攻击，
+            // 此时必须明确失败，绝不能静默覆盖掉另一个用户的会话
+            LoginSubject existing = this.cache.asMap()
+                    .putIfAbsent(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials(), subject);
+            if (existing != null) {
+                log.error("CaffeineSessionRepository save failed: credentials collision detected, the generated token already exists!");
+                return false;
+            }
+            // 先写会话、再原子占名额，顺序不能颠倒：若先占名额，并发的清理逻辑会因为凭证还不存在
+            // 而把刚加入的凭证误判为"失效"并移除
+            if (!this.addToOnlineListIfLimitNotExceeded(subject.getLoginId(), subject.getCredentials(), maxConcurrentLogins)) {
+                // 并发竞争下没抢到名额：必须回滚刚写入的会话，否则会留下一个绕过并发上限的可用会话
+                this.cache.invalidate(AuthConsts.AUTH_CREDENTIALS_KEY + subject.getCredentials());
+                throw new ConcurrentLoginOverLimitException("Maximum concurrent logins (" + maxConcurrentLogins + ") reached for the account; further logins are prohibited!");
+            }
             return true;
         } catch (ConcurrentLoginOverLimitException ex) {
             throw ex;
@@ -142,12 +160,17 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
 
     /**
      * 根据凭证读取登录主体。
+     *
+     * <p>返回**副本**：本仓储把对象引用存在缓存里，若直接返回缓存实例，调用方修改它（如
+     * {@code setLoginExpireTime(...)}）会污染缓存并在后续请求中生效，而 redis/jdbc 仓储每次
+     * 反序列化出新对象、不受影响 —— 同一份代码在四种仓储下语义会不一致。
      */
     @Override
     public LoginSubject getSubject(String credentials) {
         Assert.hasText(credentials, "The credentials cannot be empty!");
         try {
-            return this.cache.getIfPresent(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            LoginSubject cached = this.cache.getIfPresent(AuthConsts.AUTH_CREDENTIALS_KEY + credentials);
+            return cached == null ? null : cached.copy();
         } catch (Exception e) {
             log.error("CaffeineSessionRepository getSubject failed, Exception：", e);
             return null;
@@ -269,12 +292,25 @@ public class CaffeineSessionRepository implements SessionRepository, DisposableB
     }
 
     /**
-     * 将凭证加入账号在线列表。
+     * 原子地判断并发上限并把凭证加入账号在线列表。
+     *
+     * <p>"判断上限"与"入列"必须在**同一把锁**内完成，否则并发登录会得到两种错误结果：
+     * 都通过上限判断后各自入列 → 实际在线数突破上限；或都入列后各自发现超额、各自摘掉自己 →
+     * 即使还有空位也双双登录失败（已在真实 Redis 上复现同类缺陷）。
+     *
+     * @param loginId              账号ID
+     * @param credentials          会话凭证
+     * @param maxConcurrentLogins  最大并发登录数（&lt;=0 表示不限制）
+     * @return true 已入列；false 已达并发上限，此时**未**入列
      */
-    private void addToOnlineList(Object loginId, String credentials) {
+    private boolean addToOnlineListIfLimitNotExceeded(Object loginId, String credentials, int maxConcurrentLogins) {
         String loginIdStr = String.valueOf(loginId);
         synchronized (onlineLock) {
+            if (maxConcurrentLogins > 0 && this.countValidOnlineSessions(loginId) >= maxConcurrentLogins) {
+                return false;
+            }
             this.loginIdToCredentialsMap.computeIfAbsent(loginIdStr, k -> new CopyOnWriteArrayList<>()).add(credentials);
+            return true;
         }
     }
 

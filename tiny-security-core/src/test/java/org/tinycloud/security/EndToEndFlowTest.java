@@ -6,24 +6,22 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.context.SecurityContext;
 import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
-import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
 import org.tinycloud.security.event.AuthorizationFailureEvent;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.SecurityEventPublisher;
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.provider.AuthProvider;
 import org.tinycloud.security.session.SessionRepository;
 import org.tinycloud.security.util.AuthUtil;
 
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,8 +31,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 端到端流程测试：验证 GlobalConfig 改造后完整链路是否跑通。
  *
- * <p>测试链路：AuthProvider.login() → SessionRepository 存储 →
- *           SecurityContextRepository 加载 → AuthUtil.getLoginId() / hasRole()
+ * <p>测试链路：AuthProvider.login → SessionRepository 存储 →
+ *           SecurityContextRepository 加载 → AuthUtil.getLoginId / hasRole
  *
  * @author liuxingyu01
  * @since 2026-08-08
@@ -54,24 +52,21 @@ class EndToEndFlowTest {
         properties.setBanner(false);
         properties.setTokenName("token");
         properties.setTimeout(1800);
-        properties.setCredentialsStyle("uuid");
         properties.setMaxConcurrentLogins(0);
-        properties.setJwtSecret("test-secret-key-for-e2e");
-        properties.setJwtSubject("tiny-security-test");
+        properties.setTokenSecret("test-secret-key-for-e2e");
 
-        authProvider = new AuthProvider(sessionRepository, properties, new NoopEventPublisher());
+        // 1.5.0：AuthProvider 是唯一的实例门面——既管 token/会话，也管上下文与授权判定，
+        // 因此这里把安全上下文仓储和角色权限数据源一并交给它
+        authProvider = new AuthProvider(sessionRepository, properties, new NoopEventPublisher(),
+                securityContextRepository, new StubAuthorizationInfoGet());
 
-        // 注册 Facade，让 AuthUtil 能工作
-        AuthUtil.setFacade(new TinySecurityFacade(securityContextRepository));
-
-        // 绑定请求上下文（模拟 HTTP 请求环境）
-        bindRequest();
+        // 绑定请求上下文（模拟 HTTP 请求环境），并把 AuthProvider 装进容器——AuthUtil 由此解析门面
+        AuthTestSupport.bindRequestWithAuthProvider(authProvider);
     }
 
     @AfterEach
     void tearDown() {
         ThreadLocalSecurityContextRepository.clearContext();
-        AuthUtil.setFacade(null);
         RequestContextHolder.resetRequestAttributes();
         sessionRepository.clear();
     }
@@ -136,7 +131,7 @@ class EndToEndFlowTest {
         String credentials = authProvider.getCredentialsByToken(token);
         assertTrue(sessionRepository.checkByCredentials(credentials));
 
-        // 将 token 放入请求头，模拟前端传递，logout() 才能从请求中取到 token
+        // 将 token 放入请求头，模拟前端传递，logout 才能从请求中取到 token
         MockHttpServletRequest req = (MockHttpServletRequest) currentRequest();
         req.addHeader("token", token);
 
@@ -161,7 +156,9 @@ class EndToEndFlowTest {
     }
 
     /**
-     * 权限校验流程：设置角色/权限 → AuthUtil.hasRole/hasPermission 返回正确结果
+     * 权限校验流程（回归）：只把登录主体放进上下文，**不手工塞角色/权限集合**，
+     * 让 AuthUtil.hasRole/hasPermission 走真实的「上下文未加载 → 向 AuthorizationInfoGet 懒加载」链路。
+     * 修复前这里会全部返回 false（旧用例手工 setRoleSet/setPermissionSet，绕过了真实链路，因此照不出来）。
      */
     @Test
     void shouldCheckRoleAndPermissionViaAuthUtil() {
@@ -171,13 +168,6 @@ class EndToEndFlowTest {
 
         SecurityContext context = new SecurityContext();
         context.setLoginSubject(subject);
-        Set<String> roles = new HashSet<>();
-        roles.add("admin");
-        Set<String> permissions = new HashSet<>();
-        permissions.add("user:read");
-        permissions.add("user:write");
-        context.setRoleSet(roles);
-        context.setPermissionSet(permissions);
         securityContextRepository.saveContext(context, currentRequest(), currentResponse());
 
         assertTrue(AuthUtil.hasRole("admin"));
@@ -190,6 +180,11 @@ class EndToEndFlowTest {
         assertFalse(AuthUtil.hasPermission("user:delete"));
         assertTrue(AuthUtil.hasAnyPermission("user:read", "user:delete"));
         assertTrue(AuthUtil.hasAllPermission("user:read", "user:write"));
+
+        // 懒加载结果必须缓存回本次请求的上下文，后续调用不再回查数据源
+        SecurityContext loaded = securityContextRepository.loadContext(currentRequest());
+        assertTrue(loaded.isRoleSetLoaded());
+        assertTrue(loaded.isPermissionSetLoaded());
     }
 
     /**
@@ -208,12 +203,6 @@ class EndToEndFlowTest {
     @Test
     void shouldReturnFalseForIsLoginWhenNoValidCredentials() {
         assertFalse(authProvider.isLogin());
-    }
-
-    private void bindRequest() {
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
     }
 
     private HttpServletRequest currentRequest() {
@@ -284,5 +273,20 @@ class EndToEndFlowTest {
         public void publishLoginFailure(LoginFailureEvent event) {}
         @Override
         public void publishAuthorizationFailure(AuthorizationFailureEvent event) {}
+    }
+
+    /**
+     * 测试用角色权限数据源：admin 角色 + user:read / user:write 权限。
+     */
+    static class StubAuthorizationInfoGet implements AuthorizationInfoGet {
+        @Override
+        public Set<String> getPermissionSet(LoginSubject subject) {
+            return Set.of("user:read", "user:write");
+        }
+
+        @Override
+        public Set<String> getRoleSet(LoginSubject subject) {
+            return Set.of("admin");
+        }
     }
 }

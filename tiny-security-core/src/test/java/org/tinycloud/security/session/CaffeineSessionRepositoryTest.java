@@ -7,13 +7,11 @@ import org.tinycloud.security.context.LoginSubject;
 import org.tinycloud.security.exception.ConcurrentLoginOverLimitException;
 
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Caffeine 本地缓存会话仓储测试。
@@ -44,6 +42,37 @@ class CaffeineSessionRepositoryTest {
         assertNotNull(loaded);
         assertEquals("cred-1", loaded.getCredentials());
         assertEquals(1, repository.countValidOnlineSessions(10001L));
+    }
+
+    /**
+     * 登录主体缺 {@code loginExpireTime} 时按"已过期"处理，不得拆箱抛 NPE。
+     *
+     * <p>内核（`DefaultAuthenticationManager`）对同一输入的处理口径也是"视为已失效 → 401"，
+     * 这里保持仓储侧与内核一致：写入即视为已过期，不会留下一个既能查到、内核又拒绝的"僵尸会话"。
+     */
+    @Test
+    void sessionWithoutExpireTimeShouldBeTreatedAsExpired() {
+        LoginSubject subject = buildSubject(10001L, "cred-null-expire");
+        subject.setLoginExpireTime(null);
+
+        assertTrue(repository.save(subject, 60, 0));
+        assertFalse(repository.checkByCredentials("cred-null-expire"), "缺过期时间的会话不得被视为有效");
+    }
+
+    /**
+     * 凭证碰撞必须明确失败：不能静默覆盖已有会话（否则两个用户会共用同一条会话记录）。
+     */
+    @Test
+    void saveShouldFailWhenCredentialsCollide() {
+        assertTrue(repository.save(buildSubject(10001L, "cred-dup"), 60, 0));
+
+        // 后一个用户拿到了完全相同的凭证
+        assertFalse(repository.save(buildSubject(10002L, "cred-dup"), 60, 0));
+
+        // 原会话必须完好无损，不能被后一个用户覆盖
+        LoginSubject kept = repository.getSubject("cred-dup");
+        assertNotNull(kept);
+        assertEquals(10001L, kept.getLoginId());
     }
 
     /**
@@ -158,6 +187,49 @@ class CaffeineSessionRepositoryTest {
 
         assertEquals(1, credentials.size());
         assertTrue(credentials.contains("cred-new"));
+    }
+
+    /**
+     * 并发登录上限必须**原子**生效，与 single / redis 仓储同口径。
+     *
+     * <p>修复前"判断上限"与"入列"是两步、各自内部才加锁，于是并发登录会出现两种错误结果：
+     * 都通过上限判断后各自入列（实际在线数突破上限），或都入列后各自发现超额、各自摘掉自己
+     * （即使还有空位也双双失败 —— 该现象已在真实 Redis 上复现：上限 1 时 4 个并发登录全部被拒）。
+     */
+    @Test
+    void concurrentLoginsShouldNotExceedLimit() throws Exception {
+        int maxConcurrentLogins = 3;
+        int threads = 16;
+        CyclicBarrier barrier = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger succeeded = new AtomicInteger();
+        AtomicInteger rejected = new AtomicInteger();
+        AtomicReference<Throwable> unexpected = new AtomicReference<>();
+        CountDownLatch finished = new CountDownLatch(threads);
+        for (int i = 0; i < threads; i++) {
+            final int index = i;
+            pool.submit(() -> {
+                try {
+                    barrier.await();
+                    if (repository.save(buildSubject(10020L, "cred-concurrent-" + index), 60, maxConcurrentLogins)) {
+                        succeeded.incrementAndGet();
+                    }
+                } catch (ConcurrentLoginOverLimitException e) {
+                    rejected.incrementAndGet();
+                } catch (Throwable t) {
+                    unexpected.set(t);
+                } finally {
+                    finished.countDown();
+                }
+            });
+        }
+        assertTrue(finished.await(30, TimeUnit.SECONDS), "并发登录未在超时时间内完成");
+        pool.shutdownNow();
+
+        assertNull(unexpected.get(), "并发登录过程中出现非预期异常");
+        assertEquals(maxConcurrentLogins, succeeded.get(), "成功登录数必须恰好等于并发上限");
+        assertEquals(threads - maxConcurrentLogins, rejected.get(), "其余请求必须被明确拒绝，不能静默超额");
+        assertEquals(maxConcurrentLogins, repository.countValidOnlineSessions(10020L));
     }
 
     /**

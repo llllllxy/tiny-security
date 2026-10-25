@@ -8,46 +8,78 @@ import org.springframework.util.StringUtils;
 import org.tinycloud.security.config.AuthProperties;
 import org.tinycloud.security.consts.AuthConsts;
 import org.tinycloud.security.context.LoginSubject;
-import org.tinycloud.security.context.SecurityContext;
+import org.tinycloud.security.context.SecurityContextRepository;
+import org.tinycloud.security.context.ThreadLocalSecurityContextRepository;
+import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.event.LoginFailureEvent;
 import org.tinycloud.security.event.LoginSuccessEvent;
 import org.tinycloud.security.event.NoopSecurityEventPublisher;
 import org.tinycloud.security.event.SecurityEventPublisher;
-import org.tinycloud.security.enums.CookieSameSite;
 import org.tinycloud.security.exception.TinySecurityException;
 import org.tinycloud.security.exception.UnAuthorizedException;
+import org.tinycloud.security.interfaces.AuthorizationInfoGet;
 import org.tinycloud.security.session.SessionRepository;
-import org.tinycloud.security.util.AuthUtil;
+import org.tinycloud.security.util.CommonUtil;
 import org.tinycloud.security.util.CookieUtil;
-import org.tinycloud.security.util.CredentialsGenUtil;
-import org.tinycloud.security.util.JwtUtil;
+import org.tinycloud.security.util.JsonUtil;
+import org.tinycloud.security.util.TokenSignUtil;
 import org.tinycloud.security.web.WebRequestUtils;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 操作 token 和会话的兼容外观类（Facade）
  *
+ * <p><b>1.5.0 起本类是框架唯一的实例门面</b>：既负责 token 与会话读写，也负责当前请求的
+ * 上下文与授权判定 —— 后者继承自内部基类 {@code TinySecurityFacade}，因此
+ * {@code getLoginId / getRoleSet / hasRole} 等方法在本类上直接可用，
+ * 且不再需要任何静态全局变量来定位实现。
+ *
  * @author liuxingyu01
  * @since 2026-04-28
  */
-public class AuthProvider {
+public class AuthProvider extends TinySecurityFacade {
     private static final Logger log = LoggerFactory.getLogger(AuthProvider.class);
 
+    /**
+     * 会话主体序列化后的最大字符数。
+     *
+     * <p>对应 {@code t_auth_storage.login_subject} 的 {@code varchar(5000)}（字符数，非字节数）。
+     * 只有 jdbc 仓储受此限制，但校验统一放在登录入口做：否则用户要等到切到 jdbc 才发现超长，
+     * 而且体现为一条不直观的 SQL 截断/插入失败。
+     */
+    private static final int MAX_LOGIN_SUBJECT_LENGTH = 5000;
+
+    /**
+     * 会话仓储：token 只是凭证的签名信封，真正的登录主体与有效期存在这里
+     * （对应 tiny-security.store-type 的 single / caffeine / redis / jdbc 四种实现）
+     */
     private final SessionRepository sessionRepository;
+
+    /**
+     * 框架配置（tiny-security.*）：token 名、会话有效期、Cookie 策略、并发登录上限等
+     */
     private final AuthProperties properties;
+
+    /**
+     * 安全事件发布器：登录成功/失败等事件的出口；为 null 时降级为空实现，即只记日志不发布事件
+     */
     private final SecurityEventPublisher securityEventPublisher;
 
     /**
-     * 实际生效的 JWT 密钥：优先取配置值；未配置时生成随机密钥（重启后所有会话失效）
+     * 实际生效的 token 签名密钥：优先取配置值；未配置时生成随机密钥
+     * （重启后所有会话失效，多实例部署下各实例互不认可）
      */
-    private final String jwtSecret;
+    private final String tokenSecret;
 
     /**
-     * 构造 AuthProvider 外观。
+     * 构造 AuthProvider 外观（不含授权数据源，使用默认的 ThreadLocal 上下文仓储）。
+     *
+     * <p>该重载保持 1.5.0 之前的行为不变，适用于手工 {@code new} 的场景；此时
+     * {@code getRoleSet / getPermissionSet} 只读取上下文中已有的数据，不做按需懒加载。
      *
      * @param sessionRepository       会话仓储
      * @param properties              配置属性
@@ -56,49 +88,141 @@ public class AuthProvider {
     public AuthProvider(SessionRepository sessionRepository,
                         AuthProperties properties,
                         SecurityEventPublisher securityEventPublisher) {
+        this(sessionRepository, properties, securityEventPublisher,
+                new ThreadLocalSecurityContextRepository(), null);
+    }
+
+    /**
+     * 构造 AuthProvider 外观（完整形态）。
+     *
+     * <p>这里必须把 {@link AuthorizationInfoGet} 一并注入：接口上没有权限注解时授权管理器不会主动查
+     * 角色/权限（性能设计），此时 {@code hasRole/hasPermission} 依赖按需懒加载。
+     *
+     * @param sessionRepository         会话仓储
+     * @param properties                配置属性
+     * @param securityEventPublisher    安全事件发布器
+     * @param securityContextRepository 安全上下文仓储
+     * @param authorizationInfoGet      角色权限数据提供者，可为 null
+     */
+    public AuthProvider(SessionRepository sessionRepository,
+                        AuthProperties properties,
+                        SecurityEventPublisher securityEventPublisher,
+                        SecurityContextRepository securityContextRepository,
+                        AuthorizationInfoGet authorizationInfoGet) {
+        super(securityContextRepository, authorizationInfoGet);
         Assert.notNull(sessionRepository, "SessionRepository cannot be null!");
         Assert.notNull(properties, "The properties cannot be null!");
         this.sessionRepository = sessionRepository;
         this.properties = properties;
         this.securityEventPublisher = securityEventPublisher;
-        this.jwtSecret = resolveJwtSecret(properties.getJwtSecret());
+        this.tokenSecret = resolveTokenSecret(properties.getTokenSecret());
+        Integer timeout = properties.getTimeout();
+        Assert.isTrue(timeout == null || timeout > 0,
+                "Invalid tiny-security.timeout: " + timeout + ". It must be a positive number of seconds.");
+        // 弱密钥告警（不阻止启动，避免破坏存量部署）
+        warnIfTokenSecretTooShort(properties.getTokenSecret());
+        // SameSite=None 必须配合 Secure，否则浏览器会直接丢弃 Cookie
+        warnIfCookieSameSiteNoneWithoutSecure();
     }
 
     /**
-     * 从指定请求中提取并解析 token（去除 Bearer 前缀）。
+     * token 签名密钥长度告警。
+     *
+     * <p>HMAC-SHA256 的密钥短于摘要长度（32 字节）会削弱抗暴力破解强度。这里**只告警不报错** ——
+     * 强制最小长度会让存量配置（如 {@code token-secret: 123}）升级后直接启动失败，属破坏性变更。
+     * 未配置时走随机密钥路径（{@link #resolveTokenSecret()}），随机串为 128 位，不受本告警影响。
+     */
+    private void warnIfTokenSecretTooShort(String configuredSecret) {
+        if (!StringUtils.hasText(configuredSecret)) {
+            return;
+        }
+        int length = configuredSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        if (length < 32) {
+            log.warn("tiny-security: tiny-security.token-secret is too short ({} bytes, recommended >= 32 bytes). "
+                            + "A short key weakens HMAC-SHA256 resistance to brute force. "
+                            + "Please use a long random secret, e.g. openssl rand -base64 48.",
+                    length);
+        }
+    }
+
+    /**
+     * 检测 {@code cookie-same-site: NONE} 与 {@code cookie-secure: false} 的非法组合。
+     *
+     * <p>{@code SameSite=None} 的 Cookie 规范要求必须伴随 {@code Secure}，否则浏览器会**直接丢弃**
+     * 该 Cookie —— 表现为「登录成功但下一个请求又是未登录」。这里只告警，不擅自改写用户的
+     * 配置值（框架替用户猜配置会引入歧义）。
+     */
+    private void warnIfCookieSameSiteNoneWithoutSecure() {
+        if (this.resolveEnableCookie()
+                && this.properties.getCookieSameSite() == CookieSameSite.NONE
+                && !this.resolveCookieSecure()) {
+            log.warn("tiny-security: tiny-security.cookie-same-site is NONE but tiny-security.cookie-secure is false. "
+                    + "Browsers reject SameSite=None cookies without the Secure attribute, so the login cookie will be dropped. "
+                    + "Please set tiny-security.cookie-secure=true (requires HTTPS), or use cookie-same-site=LAX.");
+        }
+    }
+
+    /**
+     * 从指定请求中提取 token（**带 {@code Bearer } 前缀**）。
+     *
+     * <p>返回值与 {@link #login()} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
+     * 需要不带前缀的裸值请用 {@link #getRawToken(HttpServletRequest)}。
+     *
+     * @param request HTTP 请求
+     * @return 带前缀的 token
+     */
+    public String getToken(HttpServletRequest request) {
+        String token = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
+        if (!StringUtils.hasText(token) || !token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            throw new UnAuthorizedException();
+        }
+        return token;
+    }
+
+    /**
+     * 从当前请求上下文提取 token（**带 {@code Bearer } 前缀**）。
+     *
+     * <p>返回值与 {@link #login()} 的返回值形态一致，可直接放回 {@code Authorization} 头使用。
+     * 需要不带前缀的裸值请用 {@link #getRawToken()}。
+     *
+     * @return 带前缀的 token
+     */
+    public String getToken() {
+        String token = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
+        if (!StringUtils.hasText(token) || !token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            throw new UnAuthorizedException();
+        }
+        return token;
+    }
+
+    /**
+     * 从指定请求中提取 token 并**去掉 {@code Bearer } 前缀**（裸凭证信封）。
+     *
+     * <p>内部鉴权链路使用该方法；对外请优先用 {@link #getToken(HttpServletRequest)}。
      *
      * @param request HTTP 请求
      * @return 去前缀后的 token
      */
-    public String getToken(HttpServletRequest request) {
-        String jwtToken = WebRequestUtils.getToken(request, this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
-        if (!StringUtils.hasText(jwtToken)) {
-            throw new UnAuthorizedException();
-        }
-        if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            return jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
-        }
-        throw new UnAuthorizedException();
+    public String getRawToken(HttpServletRequest request) {
+        return this.getToken(request).substring(AuthConsts.TOKEN_PREFIX.length());
     }
 
     /**
-     * 从当前请求上下文提取并解析 token（去除 Bearer 前缀）。
+     * 从当前请求上下文提取 token 并**去掉 {@code Bearer } 前缀**（裸凭证信封）。
+     *
+     * <p>内部鉴权链路使用该方法；对外请优先用 {@link #getToken()}。
      *
      * @return 去前缀后的 token
      */
-    public String getToken() {
-        String jwtToken = WebRequestUtils.getToken(this.properties.getTokenName(), resolveEnableCookie(), resolveEnableUrlToken());
-        if (!StringUtils.hasText(jwtToken)) {
-            throw new UnAuthorizedException();
-        }
-        if (jwtToken.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            return jwtToken.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
-        }
-        throw new UnAuthorizedException();
+    public String getRawToken() {
+        return this.getToken().substring(AuthConsts.TOKEN_PREFIX.length());
     }
 
     /**
      * 根据 token 解析会话凭证 credentials。
+     *
+     * <p>先用签名密钥校验 token 完整性（防伪造），通过后再取出其中的 credentials；
+     * credentials 是否对应一个有效会话，由会话仓储在后续 {@code checkByCredentials} 中判定。
      *
      * @param token token 字符串（可包含 Bearer 前缀）
      * @return 会话凭证
@@ -107,14 +231,14 @@ public class AuthProvider {
         if (!StringUtils.hasText(token)) {
             throw new UnAuthorizedException();
         }
-        if (token.startsWith(AuthConsts.JWT_TOKEN_PREFIX)) {
-            token = token.substring(AuthConsts.JWT_TOKEN_PREFIX.length());
+        if (token.startsWith(AuthConsts.TOKEN_PREFIX)) {
+            token = token.substring(AuthConsts.TOKEN_PREFIX.length());
         }
-        Map<String, String> claims = JwtUtil.getClaims(this.jwtSecret, token);
-        if (Objects.isNull(claims)) {
+        String credentials = TokenSignUtil.verifyAndExtract(this.tokenSecret, token);
+        if (Objects.isNull(credentials)) {
             throw new UnAuthorizedException();
         }
-        return claims.get("credentials");
+        return credentials;
     }
 
     /**
@@ -148,12 +272,9 @@ public class AuthProvider {
         Assert.isTrue(loginId instanceof Number || loginId instanceof String,
                 "loginId must be of type Number (Long, Integer, etc.) or String, but got: " + loginId.getClass().getName());
 
-        String credentials = CredentialsGenUtil.generate(this.properties.getCredentialsStyle());
-        Map<String, String> payload = new HashMap<>();
-        payload.put("credentials", credentials);
-        // JWT 有效期取 jwt-timeout 与会话 timeout 的较大值，避免 token 先于会话过期
-        long jwtExpireSeconds = Math.max(this.properties.getJwtTimeout(), this.resolveTimeout());
-        String jwtToken = JwtUtil.sign(this.jwtSecret, this.properties.getJwtSubject(), payload, jwtExpireSeconds);
+        // 凭证是会话的唯一钥匙，必须不可预测：固定用 UUID（内部走 SecureRandom，122 bit 随机性）再去掉横线。
+        // 不再提供 credentials-style 配置项——可选的凭证风格只会带来"用户选到弱随机源"的风险，没有收益
+        String credentials = UUID.randomUUID().toString().replace("-", "");
 
         long currentTime = System.currentTimeMillis();
         int timeout = this.resolveTimeout();
@@ -164,22 +285,59 @@ public class AuthProvider {
         subject.setLoginTime(currentTime);
         subject.setLoginExpireTime(currentTime + timeout * 1000L);
 
+        // extraInfo 会被序列化进整个会话主体，与其它字段共享 login_subject 的长度上限。
+        // 检查放在 save 之前：让用户在登录时就看到明确原因，而不是等 jdbc 仓储插入时
+        // 得到一条不直观的 SQL 错误（或其它仓储静默存下超长内容、切库后才炸）
+        this.checkLoginSubjectLength(subject, extraInfo);
+
         boolean success = this.sessionRepository.save(subject, timeout, this.resolveMaxConcurrentLogins());
         if (!success) {
             throw new TinySecurityException("Failed to create auth. Please retry!");
         }
-        return AuthConsts.JWT_TOKEN_PREFIX + jwtToken;
+        return AuthConsts.TOKEN_PREFIX + TokenSignUtil.sign(this.tokenSecret, credentials);
+    }
+
+    /**
+     * 校验会话主体序列化后的长度不超过存储上限。
+     *
+     * @param subject   待保存的登录主体
+     * @param extraInfo 扩展信息（仅用于报错提示定位）
+     * @throws TinySecurityException 超长时抛出，消息中给出实际长度与上限
+     */
+    private void checkLoginSubjectLength(LoginSubject subject, Map<String, Object> extraInfo) {
+        int length = JsonUtil.writeValueAsString(subject).length();
+        if (length > MAX_LOGIN_SUBJECT_LENGTH) {
+            throw new TinySecurityException("The extraInfo is too large: the serialized login subject is "
+                    + length + " characters, which exceeds the limit of " + MAX_LOGIN_SUBJECT_LENGTH
+                    + " (t_auth_storage.login_subject is varchar(" + MAX_LOGIN_SUBJECT_LENGTH + ")). "
+                    + "Please reduce the size of extraInfo.");
+        }
     }
 
     /**
      * 刷新指定凭证对应会话。
      *
+     * <p><b>过期口径必须与存储层 TTL 一致</b>：本方法在延长存储层 TTL 的同时，会把
+     * {@code subject.loginExpireTime} 一并推进到 {@code now + timeout}。
+     * 内核的「绝对过期校验」判定的正是这个时间戳，若只延长 TTL 而不推进它，
+     * 就会出现「存储里还有会话、用户却已经 401」的分叉——
+     * 表现为续期看起来没生效。此处与 {@code DefaultAuthenticationManager}
+     * 自己的滑动续期路径（先 set 再 refresh）保持同一口径。
+     *
+     * <p>注意本方法会**改写传入的 subject**（写入新的过期时间戳）。
+     *
      * @param credentials 会话凭证
-     * @param subject     登录主体
+     * @param subject     登录主体（可为 null，此时退化为纯 TTL 延长）
      * @return 是否刷新成功
      */
     public boolean refreshByCredentials(String credentials, LoginSubject subject) {
-        return this.sessionRepository.refreshByCredentials(credentials, subject, resolveTimeout());
+        int timeout = resolveTimeout();
+        // 先推进时间戳再落库：四种仓储都会把 subject 存下（内存版存引用、redis/jdbc 序列化），
+        // 因此这一步同时修正「存储层 TTL」与「绝对过期时间戳」两套口径。
+        if (subject != null) {
+            subject.setLoginExpireTime(System.currentTimeMillis() + timeout * 1000L);
+        }
+        return this.sessionRepository.refreshByCredentials(credentials, subject, timeout);
     }
 
     /**
@@ -285,12 +443,19 @@ public class AuthProvider {
                         "/", this.resolveTimeout(), this.resolveCookieSecure(), this.resolveCookieSameSite());
             }
         } catch (RuntimeException ex) {
-            this.resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
-                    loginId,
-                    extraInfo,
-                    ex.getMessage(),
-                    System.currentTimeMillis()
-            ));
+            // 失败事件的发布必须与原始异常隔离：监听器自身抛异常时，
+            // 若放任其传播会顶掉这里的原始异常，调用方与异常翻译器
+            // 将看不到真实的登录失败原因（与下方成功路径的处理保持一致）。
+            try {
+                this.resolveSecurityEventPublisher().publishLoginFailure(new LoginFailureEvent(
+                        loginId,
+                        extraInfo,
+                        ex.getMessage(),
+                        System.currentTimeMillis()
+                ));
+            } catch (Exception publishEx) {
+                log.warn("AuthProvider publishLoginFailure failed, Exception：", publishEx);
+            }
             throw ex;
         }
         // 成功事件发布移出 try 块：会话已创建成功，监听器抛异常不应被误判为登录失败，
@@ -308,7 +473,10 @@ public class AuthProvider {
      */
     public void logout() {
         if (resolveEnableCookie()) {
-            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName());
+            // 删除指令必须带上与写入时一致的安全属性：SameSite=None 的 Cookie 若删除时不带
+            // SameSite+Secure，浏览器会忽略该删除指令，表现为"登出后仍是登录态"
+            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName(),
+                    "/", this.resolveCookieSecure(), this.resolveCookieSameSite());
         }
         this.deleteByCredentials(this.getCredentials());
     }
@@ -320,7 +488,8 @@ public class AuthProvider {
      */
     public void logout(HttpServletRequest request) {
         if (resolveEnableCookie()) {
-            CookieUtil.removeCookie(WebRequestUtils.getResponse(), this.properties.getTokenName());
+            CookieUtil.removeCookie(WebRequestUtils.getResponse(request), this.properties.getTokenName(),
+                    "/", this.resolveCookieSecure(), this.resolveCookieSameSite());
         }
         this.deleteByCredentials(this.getCredentials(request));
     }
@@ -385,20 +554,6 @@ public class AuthProvider {
     }
 
     /**
-     * 获取当前请求安全上下文。
-     *
-     * @return 安全上下文
-     */
-    public SecurityContext getSecurityContext() {
-        // 优先复用拦截器阶段已建立的上下文，避免重复构建
-        SecurityContext context = AuthUtil.getSecurityContext();
-        if (context != null && context.getLoginSubject() != null) {
-            return context;
-        }
-        throw new UnAuthorizedException();
-    }
-
-    /**
      * 判断当前请求是否处于登录状态。
      *
      * @return true-已登录，false-未登录
@@ -416,10 +571,26 @@ public class AuthProvider {
     /**
      * 校验当前请求是否已登录，未登录则抛异常。
      *
+     * <p>与 {@link #isLogin()} 的区别只在失败时「抛异常」还是「返回 false」，
+     * 两者对**异常输入**的容错必须一致：token 缺失、验签失败、以及凭证为空白字符等情况
+     * 都应归结为「未登录 → 401」，而不是把仓储参数的非法断言（{@code IllegalArgumentException}）
+     * 透出去变成 HTTP 500。后者既误导调用方（以为是服务端错误），也污染错误监控。
+     *
      * @return true-已登录
      */
     public boolean checkLogin() {
-        boolean success = this.checkByCredentials(this.getCredentials());
+        boolean success;
+        try {
+            success = this.checkByCredentials(this.getCredentials());
+        } catch (UnAuthorizedException e) {
+            // token 缺失 / 未带前缀 / 验签失败 / 凭证为空白：语义上就是「未登录」，直接抛 401
+            throw e;
+        } catch (Exception e) {
+            // 其余异常（如凭证为空导致仓储断言失败）同样按「未登录」处理，
+            // 避免把 IllegalArgumentException 透成 500
+            log.debug("AuthProvider checkLogin failed, Exception：", e);
+            success = false;
+        }
         if (!success) {
             throw new UnAuthorizedException();
         }
@@ -447,19 +618,20 @@ public class AuthProvider {
     }
 
     /**
-     * 解析 JWT 密钥：已配置则使用配置值；未配置则生成随机密钥并给出警告
-     * （随机密钥重启后会变化，导致历史会话全部失效，生产环境必须配置固定密钥）。
+     * 解析 token 签名密钥：已配置则使用配置值；未配置则生成随机密钥并给出警告
+     * （随机密钥重启后会变化，导致历史会话全部失效，且多实例之间互不认可，生产环境必须配置固定密钥）。
      *
      * @param configuredSecret 配置的密钥
      * @return 实际生效的密钥
      */
-    private String resolveJwtSecret(String configuredSecret) {
+    private String resolveTokenSecret(String configuredSecret) {
         if (StringUtils.hasText(configuredSecret)) {
             return configuredSecret;
         }
-        log.warn("tiny-security: tiny-security.jwt-secret is not configured, a temporary random secret has been generated. " +
-                "All sessions will be invalid after restart! Please configure a fixed secret for production environments.");
-        return CredentialsGenUtil.generate("random128");
+        log.warn("tiny-security: tiny-security.token-secret is not configured, a temporary random secret has been generated. " +
+                "All sessions will be invalid after restart, and in a multi-instance deployment each instance will reject tokens issued by the others! " +
+                "Please configure a fixed secret for production environments.");
+        return CommonUtil.getRandomString(128);
     }
 
     /**

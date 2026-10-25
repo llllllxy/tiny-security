@@ -17,10 +17,7 @@ import org.tinycloud.security.session.SessionRepository;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthProviderEventTest {
 
@@ -54,7 +51,7 @@ class AuthProviderEventTest {
     }
 
     /**
-     * 1.3.3：成功事件监听器抛异常时，会话已创建成功，login() 必须仍返回 token、
+     * 1.3.3：成功事件监听器抛异常时，会话已创建成功，login 必须仍返回 token、
      * 且不得误发 LoginFailureEvent（仅内部记录 WARN）。
      */
     @Test
@@ -72,6 +69,52 @@ class AuthProviderEventTest {
         assertEquals(0, publisher.loginFailureCount.get());
     }
 
+    /**
+     * 失败路径的监听器抛异常时，不得顶掉原始异常。
+     *
+     * <p>修复前 {@code publishLoginFailure} 直接写在 catch 块里、没有单独保护，
+     * 监听器抛出的异常会替换掉登录失败的原始异常，调用方（与异常翻译器）
+     * 看到的是监听器的异常而非真实失败原因。
+     */
+    @Test
+    void shouldKeepOriginalExceptionWhenFailureListenerThrows() {
+        CapturingSecurityEventPublisher publisher = new CapturingSecurityEventPublisher();
+        publisher.throwOnFailure = true;
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(true), defaultProperties(), publisher);
+        bindRequestContext();
+
+        TinySecurityException thrown = assertThrows(TinySecurityException.class,
+                () -> authProvider.login("user-1", null));
+
+        assertEquals("create auth failed", thrown.getMessage(),
+                "监听器异常顶掉了原始异常，调用方看不到真实失败原因");
+        assertEquals(1, publisher.loginFailureCount.get(), "失败事件仍应被发出");
+        assertEquals(0, publisher.loginSuccessCount.get());
+    }
+
+    /**
+     * 凭证格式回归：credentials 固定为「UUID 去横线」（32 位小写十六进制，内部走 SecureRandom），
+     * 不再有 credentials-style 配置项可切换——避免用户选到弱随机源。
+     *
+     * <p>同时锁定 token 形态：{@code Bearer <credentials>.<base64url(HMAC-SHA256)>}。
+     */
+    @Test
+    void shouldAlwaysUseUuidCredentialsWithoutDashes() {
+        AuthProvider authProvider = new AuthProvider(new FakeSessionRepository(false), defaultProperties(), new CapturingSecurityEventPublisher());
+        bindRequestContext();
+
+        String token = authProvider.login("user-1", null);
+
+        assertNotNull(token);
+        assertTrue(token.startsWith("Bearer "), token);
+        String signedToken = token.substring("Bearer ".length());
+        int separatorIndex = signedToken.lastIndexOf('.');
+        assertTrue(separatorIndex > 0, "token 应形如 credentials.signature，实际为: " + token);
+
+        String credentials = signedToken.substring(0, separatorIndex);
+        assertTrue(credentials.matches("[0-9a-f]{32}"), "credentials 应为 32 位小写十六进制 UUID，实际为: " + credentials);
+    }
+
     private void bindRequestContext() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -83,10 +126,8 @@ class AuthProviderEventTest {
         properties.setBanner(false);
         properties.setTokenName("token");
         properties.setTimeout(1800);
-        properties.setCredentialsStyle("uuid");
         properties.setMaxConcurrentLogins(0);
-        properties.setJwtSecret("test-secret");
-        properties.setJwtSubject("test-subject");
+        properties.setTokenSecret("test-secret");
         return properties;
     }
 
@@ -94,6 +135,7 @@ class AuthProviderEventTest {
         private final AtomicInteger loginSuccessCount = new AtomicInteger(0);
         private final AtomicInteger loginFailureCount = new AtomicInteger(0);
         private volatile boolean throwOnSuccess;
+        private volatile boolean throwOnFailure;
 
         @Override
         public void publishLoginSuccess(LoginSuccessEvent event) {
@@ -106,6 +148,9 @@ class AuthProviderEventTest {
         @Override
         public void publishLoginFailure(LoginFailureEvent event) {
             loginFailureCount.incrementAndGet();
+            if (throwOnFailure) {
+                throw new RuntimeException("failure listener exploded");
+            }
         }
 
         @Override
