@@ -70,7 +70,6 @@ public class DefaultExceptionTranslator implements ExceptionTranslator {
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("success", false);
-        payload.put("status", code);
         payload.put("code", code);
         payload.put("message", message);
         payload.put("msg", message);
