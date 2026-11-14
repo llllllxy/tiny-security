@@ -69,8 +69,11 @@ public class DefaultExceptionTranslator implements ExceptionTranslator {
         String message = resolveMessage(ex, status);
 
         Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("success", false);
+        payload.put("status", code);
         payload.put("code", code);
         payload.put("message", message);
+        payload.put("msg", message);
         payload.put("path", request == null ? null : request.getRequestURI());
         payload.put("timestamp", System.currentTimeMillis());
 
