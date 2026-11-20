@@ -40,11 +40,18 @@ public class OnlineSession implements Serializable {
     private Long loginExpireTime;
 
     /**
-     * 登录时存入的扩展信息。
+     * 登录时存入的扩展信息（<b>只读视图</b>，修改会抛 {@link UnsupportedOperationException}）。
      *
      * <p>这是<b>业务自己写进去的</b>（{@code login(loginId, extraInfo)}），框架原样返回。
      * 常见用法是存 IP、浏览器、操作系统、userId 等。
      * 注意全量列表会把每个会话的 extraInfo 一起带出去，<b>请勿在其中存放敏感信息</b>。
+     *
+     * <p><b>为什么是只读的</b>：内存版仓储（single / caffeine）的 {@code getSubject} 返回
+     * 浅拷贝 —— 视图背后的 Map 与缓存内那个会话<b>共享同一个引用</b>，调用方 {@code put/clear}
+     * 会直接改掉缓存并在后续请求中生效（跨请求的内存污染）；而 redis / jdbc 仓储每次反序列化
+     * 生成新 Map，改了也只改一个即将丢弃的副本。只读包装让两种存储下行为一致：
+     * 想"改扩展信息"请走正式通道（重新 {@code login} 或 {@code refreshByCredentials}），
+     * 而不是改查询结果。
      */
     private Map<String, Object> extraInfo;
 

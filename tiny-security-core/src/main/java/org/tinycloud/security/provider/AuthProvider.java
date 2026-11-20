@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -589,7 +590,15 @@ public class AuthProvider extends TinySecurityFacade {
         session.setLoginId(subject.getLoginId());
         session.setLoginTime(subject.getLoginTime());
         session.setLoginExpireTime(subject.getLoginExpireTime());
-        session.setExtraInfo(subject.getExtraInfo());
+        // extraInfo 必须包成只读视图，原因见 OnlineSession#setExtraInfo 的说明：
+        // 内存版仓储（single / caffeine）的 getSubject 返回浅拷贝，这里的 Map 与缓存内的
+        // 会话共享同一个引用，调用方 put/clear 会直接污染缓存并在后续请求中生效；
+        // redis / jdbc 每次反序列化都是新 Map、改了也只是改一个即将丢弃的副本。
+        // 只读包装把"改列表里的 extraInfo"在四种仓储下统一为抛 UnsupportedOperationException，
+        // 消除这一处仓储间行为不一致。null 不包装（保持无扩展信息的语义）；
+        // Jackson 序列化只读 Map 不受影响。
+        session.setExtraInfo(subject.getExtraInfo() == null
+                ? null : Collections.unmodifiableMap(subject.getExtraInfo()));
         session.setSessionId(this.getSessionIdByCredentials(credentials));
         return session;
     }
