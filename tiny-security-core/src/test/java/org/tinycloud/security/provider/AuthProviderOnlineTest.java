@@ -142,6 +142,47 @@ class AuthProviderOnlineTest {
     }
 
     /**
+     * 【回归：内存污染】在线列表里的 extraInfo 必须是只读视图。
+     *
+     * <p>缺陷机理：{@code LoginSubject.copy()} 是浅拷贝，single / caffeine 仓储的
+     * {@code getSubject} 返回的副本与缓存内的会话<b>共享同一个 extraInfo Map</b>。
+     * 修复前 {@code toOnlineSession} 直接把这个引用塞进视图 —— 调用方 {@code put}
+     * 一下就改掉缓存，且在后续请求中生效（跨请求污染）；redis / jdbc 每次反序列化
+     * 生成新 Map 则无此问题，同一份业务代码在四种仓储下行为不一致。
+     *
+     * <p>这里<b>必须用可变的 HashMap 登录</b>：若用 {@code Map.of(...)} 登录，put 本身就会抛
+     * UnsupportedOperationException，用例将无法区分"包装拦截"与"入参本来就不可变"——
+     * 那是假的红绿区分。
+     */
+    @Test
+    void onlineSessionsExtraInfoMustBeReadOnlyView() {
+        Map<String, Object> extraInfo = new java.util.HashMap<>();
+        extraInfo.put("ip", "192.168.1.10");
+        authProvider.login(10001L, extraInfo);
+
+        OnlineSession session = authProvider.getOnlineSessions().get(0);
+        assertThrows(UnsupportedOperationException.class,
+                () -> session.getExtraInfo().put("evil", "x"),
+                "列表返回的 extraInfo 必须是只读视图，修改应抛 UnsupportedOperationException");
+
+        // 缓存未被污染：再次查询仍是原值（若包装缺失，上一步的 put 已改掉缓存内的 Map）
+        OnlineSession again = authProvider.getOnlineSessions().get(0);
+        assertEquals("192.168.1.10", again.getExtraInfo().get("ip"));
+        assertFalse(again.getExtraInfo().containsKey("evil"), "缓存内的 extraInfo 不得被列表调用方污染");
+    }
+
+    /**
+     * 未携带扩展信息的会话：extraInfo 保持 null 语义，不因只读包装引入 NPE。
+     */
+    @Test
+    void onlineSessionsShouldTolerateNullExtraInfo() {
+        authProvider.login(10001L, null);
+
+        OnlineSession session = authProvider.getOnlineSessions().get(0);
+        assertNull(session.getExtraInfo(), "无扩展信息时应保持 null，而不是空 Map 或抛异常");
+    }
+
+    /**
      * 当前请求会话的标识，应当能在在线列表里对上自己那一条。
      */
     @Test

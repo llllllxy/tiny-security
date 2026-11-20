@@ -2,8 +2,29 @@
 
 > 分支：`springboot3`（Spring Boot 3.x / JDK 17+）
 > 数据来源：基于 `springboot3` 分支 first-parent 主线，按版本发布提交逐段切分
-> 版本区间：`1.2.0`（2025-05-14）→ `1.5.0`（待发版）
+> 版本区间：`1.2.0`（2025-05-14）→ `1.6.0`（待发版）
 > 更早基线：`1.1.0 全新版本发布`（2024-09-06，springboot3 重生起点）
+
+---
+
+## 1.6.0
+
+### 🐛 缺陷修复
+
+- **修复 `getOnlineSessions()` 返回的 `OnlineSession.extraInfo` 是缓存内共享引用（内存污染）**：
+  `LoginSubject.copy()` 是浅拷贝，`single` / `caffeine` 仓储下，列表里的
+  `extraInfo` Map 与**缓存内那个会话共享同一个引用** —— 调用方拿到列表后
+  `put/clear` 会直接改掉缓存，并在后续请求中生效（跨请求污染）；而 `redis` / `jdbc`
+  每次反序列化生成新 Map，修改只是改了个即将丢弃的副本 —— 同一份代码在四种仓储下
+  行为不一致。现 `toOnlineSession` 统一包 `Collections.unmodifiableMap()`，
+  修改 extraInfo 在四种仓储下**一致地抛 `UnsupportedOperationException`**；
+  null 不包装（保持"无扩展信息"语义），Jackson 序列化不受影响。
+  - **行为变更**：依赖"修改在线列表里的 extraInfo 能持久生效"的代码（本就不该存在）
+    升级后抛异常；需要变更扩展信息请走正式通道（重新 `login(...)` 或
+    `refreshByCredentials(...)` 写入新 subject）。
+  - 修复带反向验证：变异掉只读包装后，回归用例
+    `onlineSessionsExtraInfoMustBeReadOnlyView` 变红（"Expected
+    UnsupportedOperationException to be thrown, but nothing was thrown"）。
 
 ---
 
