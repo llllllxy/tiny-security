@@ -44,6 +44,18 @@ public class AuthProperties {
 
     private Integer maxConcurrentLogins = 0;
 
+    /**
+     * 是否启用框架的全局异常翻译（注册 {@code TinySecurityHandlerExceptionResolver}），默认 {@code true}。
+     *
+     * <p>开启时框架接管安全异常（{@code UnAuthorizedException} / {@code NoPermissionException} /
+     * {@code ConcurrentLoginOverLimitException} 等）的响应输出，统一转为 JSON；
+     * 关闭后不再注册该解析器，异常交由业务侧的 {@code @ControllerAdvice} 或自定义
+     * {@code HandlerExceptionResolver} 处理。
+     *
+     * <p><b>本开关只控制异常解析器是否注册，不影响 {@code ExceptionTranslator} Bean 的创建。</b>
+     * 该 Bean 仍会以默认实现注册（除非用户自定义），业务代码可正常注入并复用其翻译逻辑——
+     * 关闭自动接管并不等于把翻译器从容器中移除。
+     */
     private Boolean exceptionTranslationEnabled = true;
 
     private Boolean forceHttpStatus200 = false;
